@@ -283,7 +283,10 @@
 parking-status-sensor/
 ├── README.md                  # 本設計書
 ├── docs/
-│   ├── hardware.md            # BOM・部品選定・配線
+│   ├── hardware.md            # 部品選定・設計経緯
+│   ├── bom.md                 # 詳細BOM（試作1台）
+│   ├── schematic.md           # 回路図（単線・複線・回路）
+│   ├── wiring.md              # 組み立て手順・実物確認
 │   └── data-model.md          # NGSIv2 エンティティ設計
 ├── firmware/                  # （未作成）ESP32ファームウェア（PlatformIO）
 │   ├── src/
