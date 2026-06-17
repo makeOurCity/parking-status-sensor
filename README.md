@@ -264,22 +264,17 @@
 
 ---
 
-## 9. 次のステップ
-
-- [ ] ESP32 + TCS34725 の赤緑判定 + MQTT送信サンプルコード作成（Arduino / PlatformIO）
-- [ ] MQTT → NGSIv2 ブリッジの最小実装
-- [ ] 候補現場2〜3か所の満空灯タイプ棚卸し（発光式か / 色切替か / 文字枠寸法）
-- [ ] 遮光フードの試作（寸法・素材）
-- [ ] 実機での生値分離テスト（昼・夜）
-- [ ] （事業化検討時）特許FTO確認
-
----
-
-## 10. データモデル
+## 9. データモデル
 
 取得したセンサデータは NGSIv2 エンティティ `ParkingStatusSensor` として FIWARE Orion に登録する。センサ1台 = エンティティ1件の 1:1 構成で、駐車場の集約や台数管理は行わない。将来的に `OffStreetParking`（FIWARE Smart Data Models）へマッピングする想定だが、PoC段階では `ParkingStatusSensor` 単体で完結させる。
 
 詳細は [docs/data-model.md](docs/data-model.md) を参照。
+
+---
+
+## 10. 次のステップ
+
+タスクは GitHub Issues で管理しています。
 
 ---
 
