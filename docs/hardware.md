@@ -2,6 +2,8 @@
 
 Issue #1 での検討結果をまとめたドキュメント。
 
+**試作1台（Wi-Fi 第1弾・Issue #11）**: [bom.md](bom.md) / [schematic.md](schematic.md) / [wiring.md](wiring.md)
+
 ---
 
 ## 確定BOM（試作1台分）
