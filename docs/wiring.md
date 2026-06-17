@@ -20,9 +20,9 @@ Issue #11。試作1台の実装配線。部品リストは [bom.md](bom.md) を�
       │ I2C 延長ケーブル（4P・80cm）
       ▼
 [Seeed XIAO ESP32S3]  ← 本体ユニット
-      │ Wi-Fi（内蔵アンテナ）
+      │ Wi-Fi（内蔵アンテナ）/ MQTT
       ▼
-[MQTT ブローカー] → [ブリッジ] → FIWARE Orion
+[AWS IoT Core] → [Lambda ブリッジ] → FIWARE Orion
 
 [LiPo 3.7V] ──JST-PH──→ [XIAO BAT パッド]
 ```
@@ -44,7 +44,7 @@ flowchart LR
   end
 
   TCS <-->|I2C 4線 80cm| XIAO
-  XIAO -->|Wi-Fi| MQTT[MQTT]
+  XIAO -->|Wi-Fi MQTT| MQTT[AWS IoT Core]
 ```
 
 ---

@@ -23,7 +23,7 @@
 | `docs/hardware.md` | BOM・部品選定 |
 | `docs/data-model.md` | NGSIv2 エンティティ設計 |
 | `firmware/` | ESP32 ファームウェア（未作成） |
-| `bridge/` | MQTT → NGSIv2 ブリッジ（未作成） |
+| `bridge/` | AWS Lambda ブリッジ（IoT Core → NGSIv2 → Orion、未作成） |
 
 ## 作業時の注意
 

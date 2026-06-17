@@ -109,6 +109,8 @@
 
 ### 4.1 信号の流れ
 
+PoC 第1弾（Wi-Fi）の構成:
+
 ```
 [満空灯の発光面] 赤=満 / 緑=空
       │ 光
@@ -116,17 +118,22 @@
 [カラーセンサ + 遮光フード]  TCS34725
       │ I2C
       ▼
-[ESPマイコン]  赤か緑か判定・送信        ← 電源（PoCはLiPo電池）
-      │ MQTT
+[ESPマイコン]  赤か緑か判定・MQTT送信   ← 電源（PoCはLiPo電池）
+      │ Wi-Fi / MQTT
       ▼
-[通信]  LTE-M（本命）/ Wi-Fi（サブ）
+[AWS IoT Core]  マネージド MQTT 受け口
+      │ ルールでトリガー
+      ▼
+[AWS Lambda]  ブリッジ（ペイロード変換 → NGSIv2 upsert）
       │
       ▼
-[ブリッジ → FIWARE Orion]  NGSIv2で満空を登録
+[FIWARE Orion]  満空を登録
       │
       ▼
-[STH-Comet 履歴]  読み取り精度の検証に使用
+[STH-Comet]  履歴蓄積・読み取り精度の検証
 ```
+
+端末は Orion に直接書き込まない。MQTT ペイロードの変換と NGSIv2 への upsert は Lambda（ブリッジ）が担う。接続基盤の詳細は Issue #4 を参照。
 
 ### 4.2 判定の持たせ方（端末／サーバ両対応）
 
@@ -136,9 +143,15 @@
 
 ### 4.3 通信方式
 
-- **LTE-M（本命）**: M5Stack SIM7080G CAT-M Unit（UART接続）＋ SORACOM IoT SIM（plan-D）。現場のWi-Fi状況に依存しない。
-- **Wi-Fi（サブ）**: ESP32内蔵Wi-Fiで送信。現場でWi-Fiが利用できる場合の追加オプション。
-- 送信データは判定結果＋生値のみで極小。LTE-Mの細い回線・低消費電力と両立する。
+PoC は段階的に進める。
+
+- **第1弾（現在）: Wi-Fi + AWS**
+  - ESP32 内蔵 Wi-Fi で MQTT publish。受け口は AWS IoT Core、ブリッジは AWS Lambda（Issue #4）。
+  - 試作1台の部品・配線は [docs/bom.md](docs/bom.md)・[docs/wiring.md](docs/wiring.md) を参照（LTE-M モジュールは対象外）。
+- **将来: LTE-M**
+  - M5Stack SIM7080G CAT-M Unit（UART接続）＋ SORACOM IoT SIM（plan-D）等。現場の Wi-Fi 状況に依存しない。
+  - 接続基盤（SORACOM Beam / IoT Core 連携等）は LTE-M 導入時に再検討する。
+- 送信データは判定結果＋生値のみで極小。LTE-M の細い回線・低消費電力とも両立する設計とする。
 
 ### 4.4 FIWARE連携
 
@@ -265,7 +278,7 @@
 
 ## 9. データモデル
 
-取得したセンサデータは NGSIv2 エンティティ `ParkingStatusSensor` として FIWARE Orion に登録する。センサ1台 = エンティティ1件の 1:1 構成で、駐車場の集約や台数管理は行わない。端末の MQTT ペイロード（`raw`・`timestamp` 等）と NGSIv2 属性名（`rawSensor`・`dateObserved` 等）は異なるため、ブリッジ層で変換する。将来的に `OffStreetParking`（FIWARE Smart Data Models）へマッピングする想定だが、PoC段階では `ParkingStatusSensor` 単体で完結させる。
+取得したセンサデータは NGSIv2 エンティティ `ParkingStatusSensor` として FIWARE Orion に登録する。センサ1台 = エンティティ1件の 1:1 構成で、駐車場の集約や台数管理は行わない。端末の MQTT ペイロード（`raw`・`timestamp` 等）と NGSIv2 属性名（`rawSensor`・`dateObserved` 等）は異なるため、AWS Lambda（ブリッジ）で変換する。将来的に `OffStreetParking`（FIWARE Smart Data Models）へマッピングする想定だが、PoC段階では `ParkingStatusSensor` 単体で完結させる。
 
 詳細は [docs/data-model.md](docs/data-model.md) を参照。
 
@@ -291,5 +304,5 @@ parking-status-sensor/
 ├── firmware/                  # （未作成）ESP32ファームウェア（PlatformIO）
 │   ├── src/
 │   └── platformio.ini
-└── bridge/                    # （未作成）MQTT → NGSIv2 ブリッジ
+└── bridge/                    # （未作成）Lambda ブリッジ（IoT Core → NGSIv2 → Orion）
 ```
