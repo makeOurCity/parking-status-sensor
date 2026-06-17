@@ -27,3 +27,4 @@ alwaysApply: true
 - コミットはユーザーが明示的に依頼したときのみ作成する
 - GitHub 操作（Issue / PR / CI 確認）は `gh` コマンドを使う
 - 設計・タスクの正は README・`docs/`・GitHub Issues。実装前にドキュメントとの整合を確認する
+- 調査・棚卸しメモ（`site-inventory.md` 等）の更新頻度・未完のままのマージ可否は [AGENTS.md](../../AGENTS.md) の「ドキュメント運用」を参照
