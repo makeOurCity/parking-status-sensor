@@ -275,6 +275,14 @@
 
 ---
 
+## 10. データモデル
+
+取得したセンサデータは NGSIv2 エンティティ `ParkingStatusSensor` として FIWARE Orion に登録する。センサ1台 = エンティティ1件の 1:1 構成で、駐車場の集約や台数管理は行わない。将来的に `OffStreetParking`（FIWARE Smart Data Models）へマッピングする想定だが、PoC段階では `ParkingStatusSensor` 単体で完結させる。
+
+詳細は [docs/data-model.md](docs/data-model.md) を参照。
+
+---
+
 ## 付録: 想定リポジトリ構成（将来のGitHub管理用）
 
 ```
