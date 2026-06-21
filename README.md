@@ -180,7 +180,8 @@ PoC は段階的に進める。
 
 ### 5.2 部品選定の要点
 
-- **マイコン**: カメラ不要なため無印XIAO ESP32S3で十分（Sense版は不要）。14μAスリープとLiPo充電管理が1枚に載る。
+- **マイコン（PoC 実証機）**: カメラ不要なため無印XIAO ESP32S3で十分（Sense版は不要）。14μAスリープとLiPo充電管理が1枚に載る。
+- **開発ベンチ**: ESP32 DevKit を先行利用し、センサ読み取り・判定・MQTT を机上で検証する。ファームウェアは XIAO 実証機と共通コード（PlatformIO マルチ環境）。詳細は [firmware/README.md](firmware/README.md)。
 - **センサ**: TCS34725を採用。色センシング専用設計・IRカットフィルタ内蔵で、APDS-9960等の汎用センサより赤緑判別精度が高い。秋月電子では販売終了のためストロベリーリナックスから調達。
 - **バッテリー**: LiPo電池（XIAO ESP32S3のBATピンに直結）を採用。モバイルバッテリーはオートパワーオフおよびパススルー時の瞬断が問題になるため不採用。LiPo 4,400mAhで15分間隔LTE-M送信なら約100日稼働。
 
@@ -301,8 +302,10 @@ parking-status-sensor/
 │   ├── schematic.md           # 回路図（単線・複線・回路）
 │   ├── wiring.md              # 組み立て手順・実物確認
 │   └── data-model.md          # NGSIv2 エンティティ設計
-├── firmware/                  # （未作成）ESP32ファームウェア（PlatformIO）
+├── firmware/                  # ESP32ファームウェア（PlatformIO・マルチ環境）
+│   ├── README.md              # ボード役割・DevKit ベンチ配線
+│   ├── include/               # board_devkit.h / board_xiao.h
 │   ├── src/
-│   └── platformio.ini
+│   └── platformio.ini         # env: devkit / xiao-s3
 └── bridge/                    # （未作成）Lambda ブリッジ（IoT Core → NGSIv2 → Orion）
 ```
