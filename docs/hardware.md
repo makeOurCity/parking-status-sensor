@@ -8,7 +8,7 @@ Issue #1 での検討結果をまとめたドキュメント。
 
 | 用途 | ボード | ドキュメント |
 |---|---|---|
-| 開発ベンチ（センサ・MQTT の先行検証） | ESP32 DevKit | [firmware/README.md](../firmware/README.md) |
+| 開発ベンチ（センサ・MQTT の先行検証） | ESP32 DevKit | [firmware/devkit-bench.md](../firmware/devkit-bench.md) |
 | PoC 実証機（現場設置） | Seeed XIAO ESP32S3 | 本ドキュメント・bom / wiring / schematic |
 
 ファームウェアは PlatformIO のマルチ環境（`devkit` / `xiao-s3`）で 1 ツリー管理する。BOM・配線図の**正**は XIAO 実証機向けのままとし、DevKit 用の詳細配線は firmware README に限定する。

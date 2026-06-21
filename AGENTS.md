@@ -23,7 +23,7 @@
 | `docs/hardware.md` | BOM・部品選定 |
 | `docs/data-model.md` | NGSIv2 エンティティ設計 |
 | `docs/site-inventory.md` | 現場棚卸し（Issue 作業記録・暫定） |
-| `firmware/` | ESP32 ファームウェア（PlatformIO）。DevKit=開発ベンチ、XIAO=PoC 実証機。詳細は `firmware/README.md` |
+| `firmware/` | ESP32 ファームウェア（PlatformIO）。DevKit=開発ベンチ、XIAO=PoC 実証機。配線は `firmware/devkit-bench.md`、概要は `firmware/README.md` |
 | `bridge/` | AWS Lambda ブリッジ（IoT Core → NGSIv2 → Orion、未作成） |
 
 ## 作業時の注意
