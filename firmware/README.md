@@ -11,7 +11,7 @@ ESP32 向けファームウェア（PlatformIO）。TCS34725 から満空灯の�
 
 - アプリロジック（センサ・判定・MQTT ペイロード）は共通の `src/` を共有する。
 - ピン定義・電源まわりだけボード別ヘッダ（`include/board_*.h`）で切り替える。
-- **設計ドキュメントの正**（BOM・配線・回路図）は XIAO 実証機向け。DevKit は本 README のベンチ配線のみ参照。
+- **設計ドキュメントの正**（BOM・配線・回路図）は XIAO 実証機向け。DevKit ベンチの配線は [devkit-bench.md](devkit-bench.md) を参照。
 
 ### DevKit で検証できない項目（XIAO 到着後に実施）
 
@@ -20,44 +20,50 @@ ESP32 向けファームウェア（PlatformIO）。TCS34725 から満空灯の�
 - 470µF による電源安定化の実機効果
 - 延長ケーブル・防水筐体での現場運用
 
-## ディレクトリ構成（予定）
+## ディレクトリ構成
 
 ```
 firmware/
 ├── platformio.ini       # [env:devkit] / [env:xiao-s3]
 ├── include/
+│   ├── board.h          # ボード別ヘッダの切り替え
 │   ├── board_devkit.h   # DevKit 用ピン定義
 │   └── board_xiao.h     # XIAO 用ピン定義（docs/wiring.md に準拠）
 ├── src/
-│   ├── main.cpp
-│   ├── sensor/          # TCS34725
-│   ├── color_detect/    # 満/空/不明 判定
-│   └── mqtt/            # Wi-Fi + AWS IoT Core
+│   └── main.cpp         # Issue #5: TCS34725 読み取り（シリアル出力）
 └── README.md            # 本ファイル
 ```
 
 ## 開発ベンチ配線（ESP32 DevKit）
 
-USB 給電前提。TCS34725 モジュールをブレッドボード上に直結する。
+**詳細は [devkit-bench.md](devkit-bench.md)**（TCS34725 8 ピン配置・RGB LED 共陰極・GPIO 一覧・確認手順）。
 
-| 信号 | DevKit 接続先 | TCS34725 |
+### 接続の要約
+
+| 信号 | DevKit | TCS34725（1〜4 番） |
 |---|---|---|
-| VCC | 3V3 | VCC |
-| GND | GND | GND |
-| SDA | GPIO21（I2C デフォルト） | SDA |
-| SCL | GPIO22（I2C デフォルト） | SCL |
+| GND | GND | 1 GND |
+| SDA | GPIO21 | 2 SDA |
+| SCL | GPIO22 | 3 SCL |
+| VCC | 3V3 | 4 VDD |
 
-- TCS34725 の I2C アドレス: `0x29`
-- 搭載白色 LED は消灯運用（表示灯の光のみ読む）
-- DevKit の具体型番によって利用可能 GPIO が異なる場合がある。上記は ESP32-DevKitC 系の一般的な配線
+| RGB LED（共陰極） | DevKit |
+|---|---|
+| Cathode | GND |
+| Red / Green / Blue | GPIO25 / 26 / 27（各 220Ω） |
+
+- I2C アドレス: `0x29`
+- RGB LED は `env:devkit` のみ有効（色の視覚確認用。実証機には非搭載）
 
 ### XIAO 実証機の配線
 
 [docs/wiring.md](../docs/wiring.md) §2・§3 を参照（D4=SDA, D5=SCL, 3V3 給電）。
 
-## ビルド・書き込み（PlatformIO セットアップ後）
+## ビルド・書き込み
 
 ```bash
+cd firmware
+
 # DevKit（開発ベンチ）
 pio run -e devkit -t upload
 pio device monitor -e devkit
