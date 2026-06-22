@@ -6,3 +6,5 @@
 #define I2C_SCL 6  // D5
 
 #define RGB_LED_ENABLED 0
+
+#define OLED_ENABLED 0

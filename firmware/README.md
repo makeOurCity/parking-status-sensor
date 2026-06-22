@@ -52,8 +52,15 @@ firmware/
 | Cathode | GND |
 | Red / Green / Blue | GPIO25 / 26 / 27（各 220Ω） |
 
-- I2C アドレス: `0x29`
-- RGB LED は `env:devkit` のみ有効（色の視覚確認用。実証機には非搭載）
+| SSD1306 OLED | DevKit（TCS34725 とバス共有） |
+|---|---|
+| SDA | GPIO21 |
+| SCL | GPIO22 |
+| VCC | 3V3 |
+| GND | GND |
+
+- I2C: TCS34725 `0x29`、SSD1306 `0x3C`
+- RGB LED / OLED は `env:devkit` のみ有効（実証機には非搭載）
 
 ### XIAO 実証機の配線
 

@@ -8,6 +8,15 @@
 #define RGB_LED_ENABLED 0
 #endif
 
+#ifndef OLED_ENABLED
+#define OLED_ENABLED 0
+#endif
+
+#if OLED_ENABLED
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+#endif
+
 namespace {
 
 constexpr uint32_t kSerialWaitMs = 3000;
@@ -31,6 +40,64 @@ bool initSensor() {
   tcs.setInterrupt(true);
   return true;
 }
+
+#if OLED_ENABLED
+
+constexpr uint8_t kOledWidth = 128;
+constexpr uint8_t kOledHeight = 64;
+constexpr int8_t kOledResetPin = -1;
+
+Adafruit_SSD1306 display(kOledWidth, kOledHeight, &Wire, kOledResetPin);
+bool oledReady = false;
+
+bool initOled() {
+  if (!display.begin(SSD1306_SWITCHCAPVCC, OLED_I2C_ADDR)) {
+    return false;
+  }
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+  display.setCursor(0, 0);
+  display.println(F("TCS34725"));
+  display.display();
+  return true;
+}
+
+void showOledText(const char* line1, const char* line2 = nullptr) {
+  if (!oledReady) {
+    return;
+  }
+  display.clearDisplay();
+  display.setCursor(0, 0);
+  display.println(line1);
+  if (line2 != nullptr) {
+    display.println(line2);
+  }
+  display.display();
+}
+
+void updateOled(uint16_t red, uint16_t green, uint16_t blue, uint16_t clear,
+                int rgDiff) {
+  if (!oledReady) {
+    return;
+  }
+  display.clearDisplay();
+  display.setCursor(0, 0);
+  display.println(F("TCS34725"));
+  display.print(F("R: "));
+  display.println(red);
+  display.print(F("G: "));
+  display.println(green);
+  display.print(F("B: "));
+  display.println(blue);
+  display.print(F("C: "));
+  display.println(clear);
+  display.print(F("R-G: "));
+  display.println(rgDiff);
+  display.display();
+}
+
+#endif  // OLED_ENABLED
 
 #if RGB_LED_ENABLED
 
@@ -96,6 +163,9 @@ uint8_t applyLedGamma(uint32_t channel) {
 
 void calibrateAmbientBaseline() {
   Serial.println("Calibrating ambient baseline (2s) - leave sensor unobstructed");
+#if OLED_ENABLED
+  showOledText("Calibrating...", "leave unobstructed");
+#endif
 
   uint32_t sumR = 0;
   uint32_t sumG = 0;
@@ -264,10 +334,23 @@ void setup() {
 
   if (!initSensor()) {
     Serial.println("ERROR: TCS34725 not found at 0x29");
+#if OLED_ENABLED
+    showOledText("ERROR", "TCS34725 not found");
+#endif
     while (true) {
       delay(1000);
     }
   }
+
+#if OLED_ENABLED
+  oledReady = initOled();
+  if (!oledReady) {
+    Serial.printf("WARN: SSD1306 not found at 0x%02x\n", OLED_I2C_ADDR);
+  } else {
+    Serial.printf("oled=i2c addr=0x%02x sda=%d scl=%d (shared bus)\n",
+                  OLED_I2C_ADDR, I2C_SDA, I2C_SCL);
+  }
+#endif
 
   Serial.println("TCS34725 ready");
 #if RGB_LED_ENABLED
@@ -297,8 +380,12 @@ void loop() {
   Serial.printf("%u %u %u %u %d  %ld %ld %ld  %u %u %u\n", red, green, blue,
                 clear, rgDiff, chromaR, chromaG, chromaB, led.red, led.green,
                 led.blue);
+  updateOled(red, green, blue, clear, rgDiff);
 #else
   Serial.printf("%u %u %u %u %d\n", red, green, blue, clear, rgDiff);
+#if OLED_ENABLED
+  updateOled(red, green, blue, clear, rgDiff);
+#endif
 #endif
 
   delay(kSampleIntervalMs);
