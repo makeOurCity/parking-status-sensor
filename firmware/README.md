@@ -15,10 +15,10 @@ ESP32 向けファームウェア（PlatformIO）。TCS34725 から満空灯の�
 
 ### DevKit で検証できない項目（XIAO 到着後に実施）
 
-- LiPo 給電・内蔵充電（BAT ピン）
+- LiPo 給電・Grove Shield 経由の充電（BAT パッド）
 - Deep Sleep 消費電流（14µA 級）
 - 470µF による電源安定化の実機効果
-- 延長ケーブル・防水筐体での現場運用
+- Grove 延長ケーブル・防水筐体での現場運用
 
 ## ディレクトリ構成
 
@@ -57,7 +57,7 @@ firmware/
 
 ### XIAO 実証機の配線
 
-[docs/wiring.md](../docs/wiring.md) §2・§3 を参照（D4=SDA, D5=SCL, 3V3 給電）。
+[docs/wiring.md](../docs/wiring.md) を参照。XIAO + **Grove Shield for XIAO**、I2C は Shield の Grove ポート経由（D4=SDA, D5=SCL）。LiPo は Shield の BAT パッドへ JST 接続。
 
 ## ビルド・書き込み
 
