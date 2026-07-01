@@ -17,10 +17,10 @@
 | `type` | String | `ParkingStatusSensor` |
 | `status` | Text | 満空判定結果。値は下表参照 |
 | `status.metadata.label` | Text | ステータスの日本語ラベル |
-| `rawSensor.red` | Number | TCS34725 赤チャンネル生値 |
-| `rawSensor.green` | Number | TCS34725 緑チャンネル生値 |
-| `rawSensor.blue` | Number | TCS34725 青チャンネル生値 |
-| `rawSensor.clear` | Number | TCS34725 クリアチャンネル（輝度）生値 |
+| `rawSensor.red` | Number | カラーセンサ赤チャンネル生値（VEML6040 R） |
+| `rawSensor.green` | Number | カラーセンサ緑チャンネル生値（VEML6040 G） |
+| `rawSensor.blue` | Number | カラーセンサ青チャンネル生値（VEML6040 B） |
+| `rawSensor.clear` | Number | 輝度相当の生値（VEML6040 White。MQTT ペイロードの `raw.clear` に対応） |
 | `determinedBy` | Text | 判定主体: `device` または `server` |
 | `threshold` | Number | 判定に使用した R-G 差の閾値 |
 | `deviceId` | Text | ESP32 デバイス識別子 |

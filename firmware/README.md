@@ -1,6 +1,6 @@
 # ファームウェア
 
-ESP32 向けファームウェア（PlatformIO）。TCS34725 から満空灯の色を読み取り、AWS IoT Core へ MQTT 送信する。
+ESP32 向けファームウェア（PlatformIO）。Grove - I2C Color Sensor V3.0（VEML6040）から満空灯の色を読み取り、AWS IoT Core へ MQTT 送信する。
 
 ## ボードと役割
 
@@ -20,6 +20,12 @@ ESP32 向けファームウェア（PlatformIO）。TCS34725 から満空灯の�
 - 470µF による電源安定化の実機効果
 - Grove 延長ケーブル・防水筐体での現場運用
 
+### センサモジュール
+
+試作機・DevKit ベンチとも **Grove - I2C Color Sensor V3.0**（VEML6040、I2C `0x10`）を使用する。配線は [devkit-bench.md](devkit-bench.md)（DevKit）・[docs/wiring.md](../docs/wiring.md)（XIAO）を参照。
+
+> **ファームウェア移行中**: 現行 `main.cpp` は Adafruit TCS34725 ライブラリを使用している。ハードウェア変更に合わせ、VEML6040 ドライバ（Seeed ライブラリ等）への移行が必要（Issue #5）。
+
 ## ディレクトリ構成
 
 ```
@@ -30,29 +36,31 @@ firmware/
 │   ├── board_devkit.h   # DevKit 用ピン定義
 │   └── board_xiao.h     # XIAO 用ピン定義（docs/wiring.md に準拠）
 ├── src/
-│   └── main.cpp         # Issue #5: TCS34725 読み取り（シリアル出力）
+│   └── main.cpp         # Issue #5: センサ読み取り（シリアル出力。VEML6040 移行予定）
 └── README.md            # 本ファイル
 ```
 
 ## 開発ベンチ配線（ESP32 DevKit）
 
-**詳細は [devkit-bench.md](devkit-bench.md)**（TCS34725 8 ピン配置・RGB LED 共陰極・GPIO 一覧・確認手順）。
+**詳細は [devkit-bench.md](devkit-bench.md)**（Grove Color Sensor V3.0・RGB LED 共陰極・GPIO 一覧・確認手順）。
 
 ### 接続の要約
 
-| 信号 | DevKit | TCS34725（1〜4 番） |
+| 信号 | DevKit | Grove Color Sensor V3.0 |
 |---|---|---|
-| GND | GND | 1 GND |
-| SDA | GPIO21 | 2 SDA |
-| SCL | GPIO22 | 3 SCL |
-| VCC | 3V3 | 4 VDD |
+| GND | GND | 黒 |
+| SDA | GPIO21 | 白 |
+| SCL | GPIO22 | 黄 |
+| VCC | 3V3 | 赤 |
+
+Grove 変換ケーブル（Grove 4 pin → オスデュポン）で接続する。
 
 | RGB LED（共陰極） | DevKit |
 |---|---|
 | Cathode | GND |
 | Red / Green / Blue | GPIO25 / 26 / 27（各 220Ω） |
 
-- I2C アドレス: `0x29`
+- I2C アドレス: `0x10`（VEML6040。現行コードは `0x29` の TCS34725 用のまま）
 - RGB LED は `env:devkit` のみ有効（色の視覚確認用。実証機には非搭載）
 
 ### XIAO 実証機の配線
@@ -77,7 +85,7 @@ pio device monitor -e xiao-s3
 
 | Issue | 内容 | 想定ボード |
 |---|---|---|
-| #5 | TCS34725 センサ読み取り確認 | 第1段階: DevKit → 第2段階: XIAO |
+| #5 | カラーセンサ読み取り確認 | 第1段階: DevKit → 第2段階: XIAO |
 | #6 | 判定ロジック + MQTT 送信 | 第1段階: DevKit → 第2段階: XIAO（Deep Sleep は XIAO で検証） |
 | #16 | 試作1台の組み立て・通電確認 | XIAO のみ |
 

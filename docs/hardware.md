@@ -21,8 +21,7 @@ Issue #1 での検討結果をまとめたドキュメント。
 |---|---|---|---|
 | マイコン | Seeed XIAO ESP32S3（無印） | [秋月電子](https://akizukidenshi.com/catalog/g/gM-18078/) | ¥1,480 |
 | Grove Shield | Grove Shield for XIAO（103020312） | [Seeed JP](https://jp.seeedstudio.com/Grove-Shield-for-Seeeduino-XIAO-p-4621.html) 等 | 約¥700 |
-| カラーセンサ | TCS34725 モジュール | [ストロベリーリナックス](https://strawberry-linux.com/catalog/items?code=13472) | ¥924 |
-| Grove L字コネクタ | 2mm ピッチ 4ピン | Seeed / Amazon 等 | 約¥100〜200 |
+| カラーセンサ | Grove - I2C Color Sensor V3.0（101021133） | [Seeed Studio](https://www.seeedstudio.com/Grove-Color-Sensor-V3-0-p-5993.html) 等 | 約¥600 |
 | Grove 4芯ケーブル | 50〜100cm（現場ごとに選択） | Seeed / Amazon 等 | 約¥200〜400 |
 | LTE-Mモジュール | M5Stack SIM7080G CAT-M Unit（M5STACK-U128） | [スイッチサイエンス](https://www.switch-science.com/products/11052) | ¥6,908 |
 | SIM | SORACOM IoT SIM plan-D / plan-KM1 | [SORACOMストア](https://soracom.jp/store/13380/) | ¥990初期 + ¥192/月〜 |
@@ -38,29 +37,36 @@ Issue #1 での検討結果をまとめたドキュメント。
 
 ## 部品選定の経緯
 
-### カラーセンサ：TCS34725 を採用
+### カラーセンサ：Grove - I2C Color Sensor V3.0 を採用
 
-**検討した代替品：**
+**採用品：**
 
-| センサ | 価格 | 秋月在庫 | 評価 |
-|---|---|---|---|
-| TCS34725 | ¥924 | 販売終了 | 採用 |
-| APDS-9960 | ¥600 | 669個 | 不採用 |
-| S13683-03DT | ¥350 | 1,345個 | 不採用（チップ単品） |
-| AS7341 | ¥3,350 | 94個 | オーバースペック |
+| 項目 | 内容 |
+|---|---|
+| 製品名 | Grove - I2C Color Sensor V3.0 |
+| SKU | 101021133 |
+| 搭載 IC | Vishay VEML6040（RGBW） |
+| I2C アドレス | `0x10`（7-bit） |
+| 入手先 | [Seeed Studio](https://www.seeedstudio.com/Grove-Color-Sensor-V3-0-p-5993.html) 等 |
 
-**TCS34725を選んだ理由：**
-PoCの核心は「赤と緑を現場の光条件で安定して判別できるか」の検証。センサ起因の不確実性をPoC前に排除するため、汎用センサではなく色センシング専用設計の TCS34725 を採用する。
+**採用理由：**
 
-- **IRカットフィルタ内蔵**: LED満空灯が発するIR成分を除去し、RGBチャンネルの測定精度を確保
-- **色判別に最適化された分光特性**: APDS-9960（ジェスチャー/近接センサが主機能）より赤緑の分離が良い
-- **自発光対象への適合**: 白色LEDは消灯、表示灯の光をそのまま読む運用が設計どおり
+- **Grove 統一接続**: 試作機（XIAO + Grove Shield）も開発ベンチ（DevKit）も、同一 Grove モジュールをケーブル1本で接続できる
+- **組み立て簡素化**: Grove コネクタ内蔵のため、基板への L字コネクタはんだ付けやケーブルピン入替が不要
+- **PoC の検証目的に適合**: R/G/B/W の4チャンネル出力で、赤緑の相対強度比較による満空判定が可能
+- **エコシステム整合**: XIAO・Grove Shield・将来の LTE-M（Grove UART）と同一規格で拡張しやすい
 
-**APDS-9960を採用しなかった理由：**
-入手性（秋月在庫669個）とライブラリ成熟度は優れるが、ジェスチャー/近接センサが主機能の複合チップであり、RGBチャンネルは画面輝度調整向けに設計されている。RとGの応答が重複しやすく、判別できなかった場合に「センサの問題か現場光条件の問題か」が切り分けられなくなるリスクがある。
+**初期検討からの変更：**
 
-**調達先について：**
-秋月電子では販売終了。ストロベリーリナックスでのみ即納確認済み（¥924、2026年6月17日時点）。
+当初はストロベリーリナックス製 TCS34725 基板＋Grove L字コネクタ＋ピン入替を想定していた。試作機全体を Grove 接続に統一する方針に合わせ、Seeed 製 Grove モジュールへ変更した。搭載 IC は TCS34725 から **VEML6040** に変わるため、ファームウェアのセンサドライバ移行が必要（Issue #5）。
+
+**過去に検討した代替品（参考）：**
+
+| センサ | 評価 |
+|---|---|
+| TCS34725 基板（#13472） | 初期案。色判別性能は高いが Grove 化に追加作業が必要 |
+| APDS-9960 | 不採用。ジェスチャー/近接が主機能で赤緑分離に不向き |
+| Grove I2C Color Sensor V2.0（TCS3472） | V3.0 の前身。V3.0（VEML6040）を採用 |
 
 ---
 
@@ -68,20 +74,14 @@ PoCの核心は「赤と緑を現場の光条件で安定して判別できる�
 
 ジャンパ線・デュポン延長ケーブルではなく、**Grove 規格でセンサ〜本体を接続**する。
 
-**構成**
+**構成（XIAO 実証機）**
 
-1. TCS34725 基板に **Grove L字コネクタ**（2mm ピッチ 4ピン）をはんだ付け
-2. **Grove 4芯ケーブル**（50〜100cm、現場ごとに長さ選択）の TCS34725 側コネクタのみ **ピン入替**
-3. **Grove Shield for XIAO** の I2C ポートにそのまま挿す（Shield 側は変更不要）
+1. **Grove - I2C Color Sensor V3.0** をセンサパッチに固定
+2. **Grove 4芯ケーブル**（50〜100cm）で Grove Shield の I2C ポートへ接続（**ピン入替不要**）
 
-**TCS34725 側のピン入替**（コネクタハウジングからピンを抜いて差し替え。工具不要・ハンダ不要）:
+**構成（DevKit 開発ベンチ）**
 
-| Grove ケーブル標準 | 信号 | TCS34725 基板ピン |
-|---|---|---|
-| ピン1: 黄 | SCL | 3: SCL |
-| ピン2: 白 | SDA | 2: SDA |
-| ピン3: 赤 | VCC | 4: VDD |
-| ピン4: 黒 | GND | 1: GND |
+同一 Grove センサモジュールを **Grove 変換ケーブル**（Grove 4 pin → オスデュポン）経由で DevKit の GPIO21/22 に接続。詳細は [firmware/devkit-bench.md](../firmware/devkit-bench.md)。
 
 詳細手順は [wiring.md](wiring.md) を参照。
 
