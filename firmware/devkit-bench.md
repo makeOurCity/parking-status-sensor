@@ -1,5 +1,7 @@
 # 開発ベンチ配線（ESP32 DevKit）
 
+> **アーカイブ（2026-07）**: DevKit による検証は完了。PoC 試作は XIAO ESP32S3 のみで進める。配線の正は [docs/wiring.md](../docs/wiring.md)。ロードマップは Issue #22。
+
 Issue #5 第1段階向け。机上で Grove Color Sensor V3.0 の読み取りと色判定の先行検証を行う構成。
 
 - **対象**: ESP32 DevKit（ESP-WROOM-32 系）+ **Grove - I2C Color Sensor V3.0** + RGB LED（オプション）

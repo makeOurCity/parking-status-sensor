@@ -8,10 +8,10 @@ Issue #1 での検討結果をまとめたドキュメント。
 
 | 用途 | ボード | ドキュメント |
 |---|---|---|
-| 開発ベンチ（センサ・MQTT の先行検証） | ESP32 DevKit | [firmware/devkit-bench.md](../firmware/devkit-bench.md) |
-| PoC 実証機（現場設置） | Seeed XIAO ESP32S3 + Grove Shield | 本ドキュメント・bom / wiring / schematic |
+| **PoC 試作機（現場設置）** | Seeed XIAO ESP32S3 + Grove Shield | 本ドキュメント・bom / wiring / schematic |
+| 開発ベンチ（完了・アーカイブ） | ESP32 DevKit | [firmware/devkit-bench.md](../firmware/devkit-bench.md) |
 
-ファームウェアは PlatformIO のマルチ環境（`devkit` / `xiao-s3`）で 1 ツリー管理する。BOM・配線図の**正**は XIAO 実証機向けのままとし、DevKit 用の詳細配線は firmware README に限定する。
+ファームウェアは PlatformIO の `xiao-s3` 環境で開発する。ロードマップは [Issue #22](https://github.com/makeOurCity/parking-status-sensor/issues/22)。
 
 ---
 
@@ -51,7 +51,7 @@ Issue #1 での検討結果をまとめたドキュメント。
 
 **採用理由：**
 
-- **Grove 統一接続**: 試作機（XIAO + Grove Shield）も開発ベンチ（DevKit）も、同一 Grove モジュールをケーブル1本で接続できる
+- **Grove 統一接続**: XIAO + Grove Shield と Grove Color Sensor V3.0 をケーブル1本で接続
 - **組み立て簡素化**: Grove コネクタ内蔵のため、基板への L字コネクタはんだ付けやケーブルピン入替が不要
 - **PoC の検証目的に適合**: R/G/B/W の4チャンネル出力で、赤緑の相対強度比較による満空判定が可能
 - **エコシステム整合**: XIAO・Grove Shield・将来の LTE-M（Grove UART）と同一規格で拡張しやすい
@@ -78,10 +78,6 @@ Issue #1 での検討結果をまとめたドキュメント。
 
 1. **Grove - I2C Color Sensor V3.0** をセンサパッチに固定
 2. **Grove 4芯ケーブル**（50〜100cm）で Grove Shield の I2C ポートへ接続（**ピン入替不要**）
-
-**構成（DevKit 開発ベンチ）**
-
-同一 Grove センサモジュールを **Grove 変換ケーブル**（Grove 4 pin → オスデュポン）経由で DevKit の GPIO21/22 に接続。詳細は [firmware/devkit-bench.md](../firmware/devkit-bench.md)。
 
 詳細手順は [wiring.md](wiring.md) を参照。
 
