@@ -6,8 +6,8 @@ Issue #5 第1段階向け。机上で Grove Color Sensor V3.0 の読み取りと
 
 - **対象**: ESP32 DevKit（ESP-WROOM-32 系）+ **Grove - I2C Color Sensor V3.0** + RGB LED（オプション）
 - **対象外**: XIAO 実証機・LiPo・防水筐体（→ [docs/wiring.md](../docs/wiring.md)）
-- **PlatformIO 環境**: `devkit`（[platformio.ini](platformio.ini)）
-- **ピン定義の正**: [include/board_devkit.h](include/board_devkit.h)
+- **PlatformIO 環境**: `devkit`（当時の [platformio.ini](platformio.ini)。2026-07 以降は削除済み）
+- **ピン定義の正**: 当時の `include/board_devkit.h`（削除済み）
 
 試作機（XIAO）と**同一の Grove センサモジュール**を使う。DevKit には Grove 変換ケーブルで接続する。
 
