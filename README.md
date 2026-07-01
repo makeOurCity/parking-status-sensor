@@ -200,8 +200,8 @@ PoC は段階的に進める。
 ### 5.2 部品選定の要点
 
 - **マイコン（PoC 実証機）**: カメラ不要なため無印XIAO ESP32S3で十分（Sense版は不要）。14μAスリープとLiPo充電管理が1枚に載る。
-- **開発ベンチ**: ESP32 DevKit を先行利用し、センサ読み取り・判定・MQTT を机上で検証する。配線は [firmware/devkit-bench.md](firmware/devkit-bench.md)、ファームは XIAO 実証機と共通コード（PlatformIO マルチ環境）。
-- **センサ**: **Grove - I2C Color Sensor V3.0**（VEML6040 搭載）を採用。試作機・DevKit ベンチで同一モジュールを使い、Grove ケーブルで接続する。
+- **開発方針（2026-07）**: PoC 試作は **XIAO ESP32S3** のみ。DevKit による先行検証は完了済み
+- **センサ**: **Grove - I2C Color Sensor V3.0**（VEML6040 搭載）。Grove ケーブルで接続
 - **接続方式**: センサ〜本体間は **Grove 統一接続**。Grove Shield for XIAO の I2C ポートへケーブル1本（ピン入替・センサ基板へのはんだ不要）。
 - **バッテリー**: LiPo 電池を **Grove Shield の BAT パッド**に JST で接続（XIAO 本体には JST コネクタ非搭載）。モバイルバッテリーはオートパワーオフおよびパススルー時の瞬断が問題になるため不採用。
 
@@ -307,7 +307,15 @@ PoC は段階的に進める。
 
 ## 10. 次のステップ
 
-タスクは GitHub Issues で管理しています。
+タスクは GitHub Issues で管理しています。**全体ロードマップは [Issue #22](https://github.com/makeOurCity/parking-status-sensor/issues/22)** を参照。
+
+| Milestone | 内容 |
+|---|---|
+| [M1: 試作1台 通電](https://github.com/makeOurCity/parking-status-sensor/milestone/1) | #16 組み立て → #5 センサ読み取り |
+| [M2: クラウド E2E](https://github.com/makeOurCity/parking-status-sensor/milestone/2) | #6 判定+MQTT → #4 IoT Core → #7 Lambda |
+| [M3: 現場 PoC](https://github.com/makeOurCity/parking-status-sensor/milestone/3) | #8 実機検証、#2 棚卸し |
+
+PoC 試作は **XIAO ESP32S3 のみ**で進める（DevKit 検証は 2026-07 完了）。
 
 ---
 
