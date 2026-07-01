@@ -5,7 +5,7 @@ Issue #11。試作1台の実装配線。部品リストは [bom.md](bom.md) を�
 **単線図・複線図・回路図**: [schematic.md](schematic.md)  
 本文は組み立て手順・実物確認向けの補足。
 
-- **対象**: XIAO ESP32S3 + Grove Shield + TCS34725 + LiPo（Wi-Fi のみ）
+- **対象**: XIAO ESP32S3 + Grove Shield + Grove I2C Color Sensor V3.0 + LiPo（Wi-Fi のみ）
 - **対象外**: LTE-M モジュール、防水ケース内レイアウト（#14）
 
 ---
@@ -16,7 +16,7 @@ Issue #11。試作1台の実装配線。部品リストは [bom.md](bom.md) を�
 [満空灯発光面]
       │ 光
       ▼
-[黒シート + TCS34725 + Grove L字]  ← センサパッチ（テープ固定・取り外し可）
+[黒シート + Grove Color Sensor V3.0]  ← センサパッチ（テープ固定・取り外し可）
       │ Grove 4芯ケーブル（50〜100cm）
       ▼
 [XIAO ESP32S3 + Grove Shield]  ← 本体ユニット
@@ -31,8 +31,8 @@ Issue #11。試作1台の実装配線。部品リストは [bom.md](bom.md) を�
 flowchart LR
   subgraph sensor_patch [センサパッチ]
     Sheet[黒カッティングシート]
-    TCS[TCS34725 + Grove L字]
-    Sheet --> TCS
+    Sensor[Grove I2C Color Sensor V3.0]
+    Sheet --> Sensor
   end
 
   subgraph main_unit [本体ユニット]
@@ -45,7 +45,7 @@ flowchart LR
     CAP --- Shield
   end
 
-  TCS <-->|Grove I2C| Shield
+  Sensor <-->|Grove I2C| Shield
   Shield -->|Wi-Fi MQTT| MQTT[AWS IoT Core]
 ```
 
@@ -63,7 +63,7 @@ flowchart LR
 
 | 接続先 | 用途 | 備考 |
 |---|---|---|
-| Grove I2C ポート（いずれか1つ） | TCS34725 | 標準 Grove ピン配置のまま |
+| Grove I2C ポート（いずれか1つ） | Grove I2C Color Sensor V3.0 | 標準 Grove ピン配置。ピン入替不要 |
 | BAT+ / BAT− パッド | LiPo | JST-PH メスをはんだ付け |
 | 3V3 / GND（Shield 上のパッドまたはピン） | 470µF | Wi-Fi 時の電圧降下対策 |
 
@@ -103,58 +103,45 @@ I2C は Shield 経由で XIAO の **D4（GPIO5 / SDA）**・**D5（GPIO6 / SCL�
 
 ---
 
-## 3. TCS34725 Grove 接続
+## 3. Grove I2C Color Sensor V3.0 接続
 
 ### 3.1 センサ仕様
 
 | 項目 | 値 |
 |---|---|
-| インターフェース | I2C |
-| I2C アドレス | `0x29` |
-| 動作電圧 | 2.7〜3.6 V |
-| 白色 LED | **未接続**（表示灯の光のみ読む） |
+| 製品名 | Grove - I2C Color Sensor V3.0（SKU 101021133） |
+| 搭載 IC | Vishay VEML6040（RGBW） |
+| インターフェース | I2C（Grove コネクタ内蔵） |
+| I2C アドレス | `0x10`（7-bit） |
+| 動作電圧 | 2.5〜3.6 V（モジュールは 3.3 V 系統で使用） |
+| 出力チャンネル | Red / Green / Blue / White |
 
-**5V に接続しないこと。** Grove I2C ポートの 3.3V 系統のみ使用する。
+データモデル上の `rawSensor.clear` には **White チャンネル**を対応させる（[data-model.md](data-model.md)）。
 
-### 3.2 Grove L字コネクタのはんだ付け
+**Grove Shield の I2C ポート（3.3 V）に接続すること。** 5 V 専用ポートは使わない。
 
-TCS34725 基板（ストロベリーリナックス #13472）に **Grove L字コネクタ**（2mm ピッチ 4ピン）をはんだ付けする。基板の GND / SDA / SCL / VDD パッドに合わせて向きを決める。
+### 3.2 接続方法
 
-### 3.3 ケーブルピン入替（TCS34725 側のみ）
+センサモジュールには **Grove コネクタが内蔵**されている。追加のはんだ付けやケーブルピン入替は不要。
 
-Grove 4芯ケーブルは **Shield 側は標準のまま**、**TCS34725 側のコネクタのみ**ピンを入替える。
-
-コネクタハウジングのラッチを押し、ピンを抜いて正しいスロットに差し直す（工具不要・ハンダ不要）。
-
-| Grove ケーブル標準 | 線色 | 信号 | TCS34725 基板ピン |
-|---|---|---|---|
-| ピン1 | 黄 | SCL | 3: SCL |
-| ピン2 | 白 | SDA | 2: SDA |
-| ピン3 | 赤 | VCC | 4: VDD |
-| ピン4 | 黒 | GND | 1: GND |
+1. **Grove 4芯ケーブル**（50〜100 cm）を用意する
+2. 一端を Grove Shield の **I2C ポート**に挿す
+3. もう一端を Grove Color Sensor V3.0 に挿す
 
 ```
-[Grove Shield I2C]     [Grove 4芯ケーブル]        [TCS34725 側]
-  標準ピン配置    ═══════════════════════   ピン入替後コネクタ
-  黄 SCL ─────────────────────────────────→ ピン3 SCL
-  白 SDA ─────────────────────────────────→ ピン2 SDA
-  赤 VCC ─────────────────────────────────→ ピン4 VDD
-  黒 GND ─────────────────────────────────→ ピン1 GND
+[Grove Shield I2C]     [Grove 4芯ケーブル]     [Grove Color Sensor V3.0]
+  標準ピン配置    ═══════════════════════   標準ピン配置（入替不要）
+  黄 SCL ─────────────────────────────────→ 黄 SCL
+  白 SDA ─────────────────────────────────→ 白 SDA
+  赤 VCC ─────────────────────────────────→ 赤 VCC
+  黒 GND ─────────────────────────────────→ 黒 GND
 ```
 
-入替後、テスターで各ピンの導通を確認する（Shield 側 Grove ポートの SCL/SDA/VCC/GND と TCS34725 各パッド）。
+### 3.3 センサパッチへの固定
 
-### 3.4 TCS34725 モジュールのピン並び（参考）
-
-ストロベリーリナックス #13472 の基板ピン順（シルクで要確認）:
-
-| 物理ピン | 信号 |
-|---|---|
-| 1 | GND |
-| 2 | SDA |
-| 3 | SCL |
-| 4 | VDD |
-| LED / INT | **未接続** |
+1. 黒カッティングシートに受光窓を切り抜く
+2. Grove Color Sensor V3.0 の受光部を窓に合わせてシートに貼付（モジュール底面のテープまたは両面テープ）
+3. Grove コネクタ側はケーブルで本体ユニットへ延長
 
 ---
 
@@ -203,11 +190,11 @@ Wi-Fi 送信時の電流スパイクによる電圧降下を抑える。Grove Sh
 |---|---|---|---|
 | LiPo + | Grove Shield BAT+ | JST-PH 2pin | 極性確認必須 |
 | LiPo − | Grove Shield BAT− | JST-PH 2pin | 同上 |
-| Grove Shield I2C | TCS34725（Grove L字） | Grove 4芯ケーブル | TCS 側ピン入替済み |
+| Grove Shield I2C | Grove Color Sensor V3.0 | Grove 4芯ケーブル | 標準配線（ピン入替不要） |
 | Shield 3V3 | 470µF + | 短い線 or 直接はんだ | Shield 近傍 |
 | Shield GND | 470µF − | 短い線 or 直接はんだ | Shield 近傍 |
 
-I2C バスに追加デバイスはない。プルアップ抵抗は TCS34725 モジュール基板側に実装済み。
+I2C バスに追加デバイスはない。プルアップ抵抗は Grove モジュール基板側に実装済み。
 
 ---
 
@@ -216,7 +203,7 @@ I2C バスに追加デバイスはない。プルアップ抵抗は TCS34725 モ
 現場設置時の固定方法。電気配線とは別だが組み立て時に合わせて実施する。
 
 1. 黒カッティングシートに受光窓を切り抜く（推奨位置: LED 配列の **下から2行目・左から2列目** 付近）
-2. TCS34725 の受光部を窓に合わせてシートに貼付
+2. Grove Color Sensor V3.0 の受光部を窓に合わせてシートに貼付
 3. 透明テープで発光面（透明アクリル）全体に固定（落下防止）
 
 詳細は README §3.3・[hardware.md](hardware.md) を参照。
@@ -230,11 +217,10 @@ I2C バスに追加デバイスはない。プルアップ抵抗は TCS34725 モ
 1. **棚卸し**: Raspberry Pi センサーキットがあれば重複部品を確認
 2. **XIAO**: ピンヘッダー 14ピン分をはんだ → Grove Shield に装着
 3. **電源**: Shield BAT パッドに JST-PH メスをはんだ（極性確認）→ LiPo 接続・起動確認
-4. **センサパッチ**: TCS34725 に Grove L字をはんだ → 黒シートに受光窓を切って貼付
-5. **Grove ケーブル**: TCS34725 側ピンを入替え → 導通確認
-6. **470µF**: Shield 3V3-GND 間に接続
-7. **結線**: Grove ケーブルで Shield I2C ↔ センサパッチを接続
-8. **動作確認**: USB 接続でシリアル出力・I2C スキャン（#5）
+4. **センサパッチ**: 黒シートに受光窓を切り、Grove Color Sensor V3.0 を貼付
+5. **470µF**: Shield 3V3-GND 間に接続
+6. **結線**: Grove ケーブルで Shield I2C ↔ センサパッチを接続
+7. **動作確認**: USB 接続でシリアル出力・I2C スキャン（#5）
 
 ---
 
@@ -242,16 +228,16 @@ I2C バスに追加デバイスはない。プルアップ抵抗は TCS34725 モ
 
 ### I2C スキャン
 
-アドレス `0x29` が見えれば配線成功の目安。
+アドレス `0x10`（VEML6040）が見えれば配線成功の目安。
 
 ### よくあるミス
 
 | 症状 | 確認点 |
 |---|---|
-| I2C デバイスが見えない | TCS34725 側のピン入替ミス、SDA/SCL 取り違え、VCC/GND 逆 |
+| I2C デバイスが見えない | SDA/SCL 取り違え、Grove ケーブル接触不良、VCC/GND 逆 |
 | 値が不安定 | GND 共通が取れていない、Grove ケーブル接触不良 |
 | 起動しない | LiPo JST 極性逆、Shield BAT はんだの虚焊 |
-| センサが飽和・異常 | 5V を VCC に入れていないか確認 |
+| センサが飽和・異常 | 5 V ポートに接続していないか、受光窓の位置・遮光を確認 |
 
 ---
 

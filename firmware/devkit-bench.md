@@ -1,11 +1,13 @@
 # 開発ベンチ配線（ESP32 DevKit）
 
-Issue #5 第1段階向け。机上で TCS34725 の読み取りと色判定の先行検証を行う構成。
+Issue #5 第1段階向け。机上で Grove Color Sensor V3.0 の読み取りと色判定の先行検証を行う構成。
 
-- **対象**: ESP32 DevKit（ESP-WROOM-32 系）+ TCS34725 + RGB LED（オプション）
-- **対象外**: XIAO 実証機・LiPo・延長ケーブル・防水筐体（→ [docs/wiring.md](../docs/wiring.md)）
+- **対象**: ESP32 DevKit（ESP-WROOM-32 系）+ **Grove - I2C Color Sensor V3.0** + RGB LED（オプション）
+- **対象外**: XIAO 実証機・LiPo・防水筐体（→ [docs/wiring.md](../docs/wiring.md)）
 - **PlatformIO 環境**: `devkit`（[platformio.ini](platformio.ini)）
 - **ピン定義の正**: [include/board_devkit.h](include/board_devkit.h)
+
+試作機（XIAO）と**同一の Grove センサモジュール**を使う。DevKit には Grove 変換ケーブルで接続する。
 
 ---
 
@@ -14,7 +16,8 @@ Issue #5 第1段階向け。机上で TCS34725 の読み取りと色判定の先
 ```
 [USB 5V] ──→ [ESP32 DevKit]
                  │
-                 ├── I2C ──→ [TCS34725]  ← 満空灯・テスト光源の光を読む
+                 ├── I2C ──→ [Grove Color Sensor V3.0]  ← 満空灯・テスト光源の光を読む
+                 │              （Grove 変換ケーブル経由）
                  │
                  └── PWM ──→ [RGB LED]   ← センサが見ている色を視覚表示（開発用）
 ```
@@ -22,56 +25,50 @@ Issue #5 第1段階向け。机上で TCS34725 の読み取りと色判定の先
 | 部品 | 備考 |
 |---|---|
 | ESP32 DevKit | USB シリアル（CP2102 等）付き。USB 給電 |
-| TCS34725 モジュール | ストロベリーリナックス #13472 等。I2C `0x29` |
+| Grove - I2C Color Sensor V3.0 | SKU 101021133。VEML6040 搭載。I2C `0x10` |
+| Grove 4 pin Female Jumper to Grove 4 pin 変換ケーブル | DevKit の GPIO21/22 へ接続（[bom.md](../docs/bom.md) #9） |
 | RGB LED | **共陰極**（Cathode → GND）。開発ベンチでの色確認用 |
 | 抵抗 220Ω ×3 | RGB の R/G/B 各線（LED 内蔵抵抗付きモジュールなら不要な場合あり） |
-| ジャンパ線・ブレッドボード | オス-メス、オス-オス |
+| ジャンパ線・ブレッドボード | RGB LED 用。センサは Grove ケーブルで接続 |
 
 ---
 
-## 2. TCS34725 モジュール
+## 2. Grove Color Sensor V3.0
 
-### 2.1 ピン配置（実機確認済み・#13472 系）
+### 2.1 センサ仕様
 
-モジュールによって並びは異なる。**シルクを必ず確認**すること。本リポジトリで手元確認した 8 ピン配置:
+| 項目 | 値 |
+|---|---|
+| 製品名 | Grove - I2C Color Sensor V3.0 |
+| 搭載 IC | Vishay VEML6040（RGBW） |
+| インターフェース | I2C（Grove コネクタ内蔵） |
+| I2C アドレス | `0x10`（7-bit） |
+| 動作電圧 | 3.3 V（DevKit の 3V3 ピンから供給） |
 
-| 番号 | 信号 | DevKit 接続 | 備考 |
-|---|---|---|---|
-| **1** | GND | GND | 必須 |
-| **2** | SDA | GPIO21 | I2C データ |
-| **3** | SCL | GPIO22 | I2C クロック |
-| **4** | VDD | **3V3** | 必須。**5V 禁止**（動作 2.7〜3.6V） |
-| 5 | LEDC | 未接続 | 搭載 LED カソード。ファームで消灯 |
-| 6 | NC | 未接続 | — |
-| 7 | INT | 未接続 | 割り込み出力 |
-| 8 | LEDA | 未接続 | 搭載 LED アノード |
+XIAO 実証機と同一モジュール。詳細は [docs/wiring.md](../docs/wiring.md) §3。
 
-- 開発ベンチでは **1〜4 番にオスピンヘッダ**（1×4 または 1×8 の未使用側は配線しない）をはんだ付けして使用。
-- 同梱のピンヘッダは未はんだのことが多い。はんだ付け後に配線する。
+### 2.2 DevKit ↔ Grove センサ接続
 
-### 2.2 DevKit ↔ TCS34725 接続一覧
+**Grove 変換ケーブル**（Grove 4 pin → オスデュポン）を使用する。
 
-| TCS34725（番号） | 信号 | ESP32 DevKit |
-|---|---|---|
-| 1 | GND | GND |
-| 2 | SDA | **GPIO21** |
-| 3 | SCL | **GPIO22** |
-| 4 | VDD | **3V3** |
+| Grove 信号（線色） | ESP32 DevKit |
+|---|---|
+| 黄 SCL | **GPIO22** |
+| 白 SDA | **GPIO21** |
+| 赤 VCC | **3V3** |
+| 黒 GND | **GND** |
 
 ```
-TCS34725          ESP32 DevKit
-────────          ────────────
-1 GND      ───→   GND
-2 SDA      ───→   GPIO21
-3 SCL      ───→   GPIO22
-4 VDD      ───→   3V3
+Grove Color Sensor V3.0    変換ケーブル    ESP32 DevKit
+──────────────────────    ────────────    ────────────
+Grove コネクタ ─────────→  オスデュポン ──→  GPIO21/22, 3V3, GND
 ```
 
 ### 2.3 注意
 
-- **5V ピンに VDD を接続しない**
-- I2C アドレス: `0x29`
-- 白色 LED はファーム側で消灯（`setInterrupt(true)`）。表示灯・テスト光源の光のみ読む
+- **5V ピンに VCC を接続しない**（3.3 V 系統を使用）
+- I2C アドレス: `0x10`（VEML6040）
+- 現行ファームウェア（`main.cpp`）は **TCS34725 用ライブラリのまま**。VEML6040 ドライバへの移行は Issue #5 で実施予定
 
 ---
 
@@ -116,10 +113,10 @@ TCS34725          ESP32 DevKit
 
 | GPIO | 用途 | 接続先 |
 |---|---|---|
-| 3V3 | 電源出力 | TCS34725 VDD（4 番） |
-| GND | グランド | TCS34725 GND（1 番）、RGB LED Cathode |
-| **21** | I2C SDA | TCS34725 SDA（2 番） |
-| **22** | I2C SCL | TCS34725 SCL（3 番） |
+| 3V3 | 電源出力 | Grove センサ VCC（赤） |
+| GND | グランド | Grove センサ GND（黒）、RGB LED Cathode |
+| **21** | I2C SDA | Grove センサ SDA（白） |
+| **22** | I2C SCL | Grove センサ SCL（黄） |
 | **25** | PWM | RGB LED Red |
 | **26** | PWM | RGB LED Green |
 | **27** | PWM | RGB LED Blue |
@@ -145,6 +142,8 @@ pio device monitor -e devkit --port /dev/cu.usbserial-0001
 
 ### 5.1 起動ログの例
 
+> **注**: 現行ファームは TCS34725 用。VEML6040 ドライバ移行後はログ文言・アドレスが変わる。
+
 ```
 board=devkit i2c_sda=21 i2c_scl=22
 rgb_led=r:25 g:26 b:27 (common cathode)
@@ -156,9 +155,9 @@ R G B C R-G  dR dG dB  ledR ledG ledB
 
 | 列 | 意味 |
 |---|---|
-| R G B C | センサ生値 |
+| R G B C | センサ生値（移行後は R G B W） |
 | R-G | 赤−緑（Issue #5 の分離確認用） |
-| dR dG dB | Clear 正規化比率のベースライン差分 |
+| dR dG dB | Clear 正規化比率のベースライン差分（RGB LED デバッグ用） |
 | ledR ledG ledB | RGB LED への PWM 出力（0〜255） |
 
 ### 5.2 Issue #5 の確認目安
@@ -179,17 +178,16 @@ R G B C R-G  dR dG dB  ledR ledG ledB
 | 項目 | DevKit ベンチ | XIAO 実証機 |
 |---|---|---|
 | ドキュメント | 本ファイル | [docs/wiring.md](../docs/wiring.md) |
+| センサモジュール | **同一**（Grove Color Sensor V3.0） | 同一 |
+| センサ接続 | Grove 変換ケーブル → GPIO21/22 | Grove 4芯ケーブル → Grove Shield I2C |
 | I2C ピン | GPIO21 / 22 | D4(5) / D5(6) |
 | 電源 | USB 3V3 | LiPo + 3V3 |
 | RGB LED | あり（開発用） | なし |
-| TCS34725 ピン順 | 本ファイル §2.1（8 ピン・GND 先頭） | 延長ケーブルは [wiring.md §3.2](../docs/wiring.md) の信号順に合わせる |
-
-XIAO 用延長ケーブルのピン 1〜4（3V3, GND, SDA, SCL）と、本モジュールの 1〜4（GND, SDA, SCL, VDD）は**並びが異なる**。XIAO 組立時は信号名で対応させること。
 
 ---
 
 ## 関連
 
 - [firmware/README.md](README.md) — ファームウェア全体・PlatformIO 環境
-- Issue #5 — TCS34725 センサ読み取り確認（第1段階: DevKit）
+- Issue #5 — カラーセンサ読み取り確認（第1段階: DevKit）
 - Issue #6 — 判定ロジック + MQTT（DevKit で先行可能）

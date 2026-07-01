@@ -74,7 +74,7 @@
 
 ### 3.3 貼り付けの構造
 
-センサ部は数mm角のチップだが、現場設置では **TCS34725 基板＋Grove コネクタ** を含む小型パッチユニットを、**透明テープと黒カッティングシートの積層**で発光面に固定する。
+センサ部は数mm角のチップだが、現場設置では **Grove - I2C Color Sensor V3.0** を含む小型パッチユニットを、**透明テープと黒カッティングシートの積層**で発光面に固定する。
 
 **対象満空灯の構造（PoC 初回現場）**
 
@@ -92,8 +92,8 @@
   ┌──────────────▼──────────────┐  ← 透明テープで全面固定
   │ 黒カッティングシート（遮光）  │
   │   ┌─────────────┐           │
-  │   │ TCS34725    │ ← 受光部  │
-  │   │ + Grove L字 │           │
+  │   │ Grove Color │ ← 受光部  │
+  │   │ Sensor V3.0 │           │
   │   └──────┬──────┘           │
   └──────────┼──────────────────┘
              │ Grove 4芯ケーブル
@@ -103,7 +103,7 @@
 **受光位置**
 
 - 画像分析の結果、LED 配列上では **下から2行目・左から2列目** 付近が推奨。
-- 黒シートにセンサ受光窓を切り抜き、TCS34725 の受光部を窓に合わせる。
+- 黒シートにセンサ受光窓を切り抜き、Grove Color Sensor V3.0 の受光部を窓に合わせる。
 
 **運用上の留意**
 
@@ -129,7 +129,7 @@ PoC 第1弾（Wi-Fi）の構成:
 [満空灯の発光面] 赤=満 / 緑=空
       │ 光
       ▼
-[センサパッチ]  TCS34725 + 黒シート積層固定
+[センサパッチ]  Grove Color Sensor V3.0 + 黒シート積層固定
       │ Grove I2C ケーブル
       ▼
 [XIAO ESP32S3 + Grove Shield]  赤か緑か判定・MQTT送信   ← 電源（PoCはLiPo電池）
@@ -187,8 +187,8 @@ PoC は段階的に進める。
 |---|---|---|---|---|
 | マイコン | Seeed XIAO ESP32S3（無印） | 秋月電子 | ¥1,480 | 技適取得済(217-230892)。14μA Deep Sleep。BAT はパッドのみ（JST 非搭載） |
 | Grove Shield | Grove Shield for XIAO（103020312） | Seeed JP 等 | 約¥700 | 8×Grove（I2C×2・UART×1）。BAT パッド・充電管理付き |
-| カラーセンサ | TCS34725 モジュール | ストロベリーリナックス | ¥924 | I2C(0x29)。Grove L字コネクタをはんだ付け |
-| センサ接続 | Grove 4芯ケーブル 50〜100cm | Seeed / Amazon 等 | 約¥200〜400 | TCS34725 側のみピン入替（[wiring.md](docs/wiring.md)） |
+| カラーセンサ | Grove - I2C Color Sensor V3.0（101021133） | Seeed Studio 等 | 約¥600 | VEML6040 搭載。I2C `0x10`。Grove コネクタ内蔵 |
+| センサ接続 | Grove 4芯ケーブル 50〜100cm | Seeed / Amazon 等 | 約¥200〜400 | 標準配線（ピン入替不要。[wiring.md](docs/wiring.md)） |
 | LTE-Mモジュール | M5Stack SIM7080G CAT-M Unit（M5STACK-U128） | スイッチサイエンス | ¥6,908 | PoC 第1弾対象外。Grove UART 接続 |
 | SIM | SORACOM IoT SIM plan-D / plan-KM1 | SORACOMストア | ¥990（初期）+ ¥192/月〜 | ドコモ / KDDI 回線。LTE-M 導入時 |
 | バッテリー | LiPo 3.7V 4,400mAh 保護回路内蔵 JST-PH | ストロベリーリナックス | ¥550 | Grove Shield の BAT パッドへ JST で接続 |
@@ -201,8 +201,8 @@ PoC は段階的に進める。
 
 - **マイコン（PoC 実証機）**: カメラ不要なため無印XIAO ESP32S3で十分（Sense版は不要）。14μAスリープとLiPo充電管理が1枚に載る。
 - **開発ベンチ**: ESP32 DevKit を先行利用し、センサ読み取り・判定・MQTT を机上で検証する。配線は [firmware/devkit-bench.md](firmware/devkit-bench.md)、ファームは XIAO 実証機と共通コード（PlatformIO マルチ環境）。
-- **センサ**: TCS34725を採用。色センシング専用設計・IRカットフィルタ内蔵で、APDS-9960等の汎用センサより赤緑判別精度が高い。秋月電子では販売終了のためストロベリーリナックスから調達。
-- **接続方式**: センサ〜本体間は **Grove 統一接続**。TCS34725 基板に Grove L字コネクタをはんだ付けし、Grove Shield for XIAO の I2C ポートへケーブル1本。TCS34725 側のケーブルピンは入替が必要（工具不要・ハンダ不要）。
+- **センサ**: **Grove - I2C Color Sensor V3.0**（VEML6040 搭載）を採用。試作機・DevKit ベンチで同一モジュールを使い、Grove ケーブルで接続する。
+- **接続方式**: センサ〜本体間は **Grove 統一接続**。Grove Shield for XIAO の I2C ポートへケーブル1本（ピン入替・センサ基板へのはんだ不要）。
 - **バッテリー**: LiPo 電池を **Grove Shield の BAT パッド**に JST で接続（XIAO 本体には JST コネクタ非搭載）。モバイルバッテリーはオートパワーオフおよびパススルー時の瞬断が問題になるため不採用。
 
 ---
@@ -217,7 +217,7 @@ PoC は段階的に進める。
 
 ### 6.2 消費電力・連続稼働の試算
 
-消費電流の目安（ESP32-S3 + TCS34725 + SIM7080G）:
+消費電流の目安（ESP32-S3 + Grove Color Sensor V3.0 + SIM7080G）:
 
 | 状態 | 消費電流の目安 | 継続時間 |
 |---|---|---|
@@ -275,7 +275,7 @@ PoC は段階的に進める。
 
 ### 8.1 PoCで潰す検証項目（優先順）
 
-1. **生値の分離**: TCS34725の生RGB値が、満（赤）と空（緑）で十分なマージンを持って分離するか。透明カバー越し・拡散材ありの実機で確認。
+1. **生値の分離**: Grove Color Sensor V3.0（VEML6040）の R/G/B/W 生値が、満（赤）と空（緑）で十分なマージンを持って分離するか。透明カバー越し・拡散材ありの実機で確認。
 2. **2状態以外の表示**: 消灯・点滅・整備中・深夜消灯等が現場にあるか棚卸しし、判定テーブルに「不明」状態を持たせる。
 3. **電源運用**: LiPo 単体運用時の実消費電流・連続稼働時間の実測（§6.2 試算との比較）。LTE-M モジュールへの 5V 給電が LiPo のみで成立するかの確認（要昇圧回路の有無）。
 
@@ -324,7 +324,7 @@ parking-status-sensor/
 │   └── data-model.md          # NGSIv2 エンティティ設計
 ├── firmware/                  # ESP32ファームウェア（PlatformIO・マルチ環境）
 │   ├── README.md              # ボード役割・ビルド手順
-│   ├── devkit-bench.md        # DevKit ベンチ配線（TCS34725 + RGB LED）
+│   ├── devkit-bench.md        # DevKit ベンチ配線（Grove Color Sensor + RGB LED）
 │   ├── include/               # board_devkit.h / board_xiao.h
 │   ├── src/
 │   └── platformio.ini         # env: devkit / xiao-s3

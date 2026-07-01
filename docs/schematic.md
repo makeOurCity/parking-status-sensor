@@ -3,7 +3,7 @@
 Issue #11。試作1台の電気回路。部品表は [bom.md](bom.md)、組み立て手順は [wiring.md](wiring.md)。
 
 - **図面種別**: 単線図 / 複線図 / 回路図
-- **対象**: XIAO ESP32S3 + Grove Shield + TCS34725 + LiPo
+- **対象**: XIAO ESP32S3 + Grove Shield + Grove I2C Color Sensor V3.0 + LiPo
 - **対象外**: LTE-M（Wi-Fi 不可現場で追加）、筐体（#14）
 - **電圧**: DC 3.7 V（LiPo）→ Shield / XIAO 内蔵レギュレータ → DC 3.3 V 系統
 
@@ -16,14 +16,13 @@ Issue #11。試作1台の電気回路。部品表は [bom.md](bom.md)、組み�
 | BT1 | 二次電池（LiPo） | 3.7 V / 4,400 mAh、保護回路内蔵 |
 | J1 | コネクタ | JST-PH 2.0（2極）、Grove Shield BAT 用 |
 | J2 | コネクタ | Grove 4芯（Shield I2C ポート） |
-| J3 | コネクタ | Grove 4芯（TCS34725 側・ピン入替済み） |
-| J4 | コネクタ | Grove L字 4ピン（TCS34725 基板にはんだ） |
+| J3 | コネクタ | Grove 4芯（Grove Color Sensor V3.0 内蔵） |
 | U0 | 拡張シールド | Grove Shield for XIAO（103020312） |
 | U1 | マイコンモジュール | Seeed XIAO ESP32S3（U0 に装着） |
-| U2 | カラーセンサモジュール | TCS34725（I2C `0x29`） |
+| U2 | カラーセンサモジュール | Grove I2C Color Sensor V3.0（VEML6040、I2C `0x10`） |
 | C1 | 電解コンデンサ | 470 µF / 16 V |
 
-端子名は XIAO・Shield・モジュール実装のラベルに合わせる。TCS34725 基板のピン物理順序は実物シルクで要確認（[wiring.md §3.4](wiring.md)）。Grove ケーブル TCS 側のピン入替は [wiring.md §3.3](wiring.md)。
+端子名は XIAO・Shield・Grove モジュール実装のラベルに合拠する。Grove ケーブルは標準ピン配置のまま接続する（[wiring.md §3](wiring.md)）。
 
 ---
 
@@ -55,35 +54,35 @@ Issue #11。試作1台の電気回路。部品表は [bom.md](bom.md)、組み�
 |---|---|---|
 | 主電源 | DC 3.7 V | BT1 → J1 → U0 BAT → U1 |
 | 制御電源 | DC 3.3 V | U0/U1 LDO → 3V3 系統 → U2 |
-| 通信（センサ） | I2C（Grove） | U0 I2C ↔ J2—J3—J4 ↔ U2 |
+| 通信（センサ） | I2C（Grove） | U0 I2C ↔ J2—J3 ↔ U2 |
 | 通信（外部） | Wi-Fi 2.4 GHz | U1 内蔵アンテナ |
 
 ---
 
 ## 2. 複線図
 
-全配線を線番で示す。Grove ケーブル内の線色は Seeed 標準（Shield 側）。
+全配線を線番で示す。Grove ケーブル内の線色は Seeed 標準（両端とも標準配置）。
 
 | 線番 | 色 | 起点端子 | 終点端子 | 備考 |
 |---|---|---|---|---|
 | W1 | 赤 | BT1 (+) | J1-1 → U0 BAT+ | 極性確認必須 |
 | W2 | 黒 | BT1 (−) | J1-2 → U0 BAT− | 同上 |
-| W3 | 黄 | U0 I2C SCL | J2 → J3 → J4 → U2 SCL | Grove 標準 |
-| W4 | 白 | U0 I2C SDA | J2 → J3 → J4 → U2 SDA | Grove 標準 |
-| W5 | 赤 | U0 I2C VCC | J2 → J3 → J4 → U2 VDD | Grove 標準 |
-| W6 | 黒 | U0 I2C GND | J2 → J3 → J4 → U2 GND | Grove 標準 |
+| W3 | 黄 | U0 I2C SCL | J2 → J3 → U2 SCL | Grove 標準 |
+| W4 | 白 | U0 I2C SDA | J2 → J3 → U2 SDA | Grove 標準 |
+| W5 | 赤 | U0 I2C VCC | J2 → J3 → U2 VCC | Grove 標準 |
+| W6 | 黒 | U0 I2C GND | J2 → J3 → U2 GND | Grove 標準 |
 | W7 | — | U0 3V3 | C1 (+) | Shield 近傍 |
 | W8 | — | U0 GND | C1 (−) | 電解コンデンサ極性に注意 |
 
 ```
-  BT1              J1          U0 (Shield)        J2    Groveケーブル    J3    J4      U2
-  ┌─┐            ┌─┴─┐    ┌─────────────┐       ┌─┴─┐   ═══════════   ┌─┴─┐  ┌─┴─┐  ┌────────┐
-  │+├─ W1 赤 ────┤ 1 ├────┤ BAT+        │       │黄 ├─ W3 SCL ────────┤黄 ├─ W3─┤3 ├────┤ SCL    │
-  │-├─ W2 黒 ────┤ 2 ├────┤ BAT-        │       │白 ├─ W4 SDA ────────┤白 ├─ W4─┤2 ├────┤ SDA    │
-  └─┘            └───┘    │ I2C Grove   │       │赤 ├─ W5 VCC ────────┤赤 ├─ W5─┤4 ├────┤ VDD    │
-                            │  ┌─ U1 ─┐  │       │黒 ├─ W6 GND ────────┤黒 ├─ W6─┤1 ├────┤ GND    │
-                            │  │XIAO  │  │       └───┘               └───┘  └───┘  └────────┘
-                            │  └──────┘  │
+  BT1              J1          U0 (Shield)        J2    Groveケーブル    J3      U2
+  ┌─┐            ┌─┴─┐    ┌─────────────┐       ┌─┴─┐   ═══════════   ┌─┴─┐  ┌────────────┐
+  │+├─ W1 赤 ────┤ 1 ├────┤ BAT+        │       │黄 ├─ W3 SCL ────────┤黄 ├────┤ Grove SCL  │
+  │-├─ W2 黒 ────┤ 2 ├────┤ BAT-        │       │白 ├─ W4 SDA ────────┤白 ├────┤ Grove SDA  │
+  └─┘            └───┘    │ I2C Grove   │       │赤 ├─ W5 VCC ────────┤赤 ├────┤ Grove VCC  │
+                            │  ┌─ U1 ─┐  │       │黒 ├─ W6 GND ────────┤黒 ├────┤ Grove GND  │
+                            │  │XIAO  │  │       └───┘               └───┘  │ VEML6040   │
+                            │  └──────┘  │                                   └────────────┘
                             │ W7   W8    │
                             └─┬────┬─────┘
                               │    │
@@ -92,7 +91,7 @@ Issue #11。試作1台の電気回路。部品表は [bom.md](bom.md)、組み�
                              │ 470µF│
                              └──────┘
 
-  脱着点: J3 ↔ J4（センサパッチ取り外し）または Grove コネクタ全体
+  脱着点: J2 ↔ J3（Grove コネクタ）またはセンサパッチ全体
 ```
 
 ---
@@ -136,19 +135,16 @@ Issue #11。試作1台の電気回路。部品表は [bom.md](bom.md)、組み�
 ### 3.2 I2C センサ部（U2）
 
 ```
-    3.3V 系統 ──── W5 ────┬── U2 VDD
+    3.3V 系統 ──── W5 ────┬── U2 VCC
                           │
-                         ┌┴┐  （U2 基板内蔵: 0.1µF バイパス、
+                         ┌┴┐  （U2 基板内蔵: バイパス、
                          │ │   I2C プルアップ抵抗）
     GND ──────── W6 ─────┴── U2 GND
 
     U0/U1 SDA (D4) ── W4 ── U2 SDA ──┐
                                       ├── I2C バス
     U0/U1 SCL (D5) ── W3 ── U2 SCL ──┘
-                                      アドレス: 0x29
-
-    U2 LED+ / LED−  …… 未接続（NC）
-    U2 INT          …… 未接続（NC）
+                                      アドレス: 0x10
 ```
 
 ### 3.3 統合回路図
@@ -171,13 +167,10 @@ Issue #11。試作1台の電気回路。部品表は [bom.md](bom.md)、組み�
                         │J2 ├─── W3〜W6 ────────┤J3 ├───┘     │ │
                         └───┘   (50〜100cm)    └─┬─┘         │ │
                                                  │ 脱着      │ │
-                        ┌───┐                    │          │ │
-                        │J4 ├────────────────────┘          │ │
-                        └─┬─┘                                 │ │
-                          ▼                                   ▼
+                                                 ▼           ▼
                         ┌─────────────────────────────────────┴──┐
-                        │  U2  TCS34725 モジュール + Grove L字    │
-                        │  GND  SDA  SCL  VDD                     │
+                        │  U2  Grove I2C Color Sensor V3.0         │
+                        │  (VEML6040, Grove コネクタ内蔵)         │
                         └──────────────────────────────────────────┘
 ```
 
@@ -193,53 +186,31 @@ Issue #11。試作1台の電気回路。部品表は [bom.md](bom.md)、組み�
 | BAT− | J1-2 ← BT1 (−) | W2 |
 | Grove I2C（黄） | SCL → U2 | W3 |
 | Grove I2C（白） | SDA → U2 | W4 |
-| Grove I2C（赤） | 3.3 V → U2 VDD | W5 |
+| Grove I2C（赤） | 3.3 V → U2 VCC | W5 |
 | Grove I2C（黒） | GND → U2 | W6 |
 | 3V3 | C1 (+) | W7 |
 | GND | C1 (−) | W8 |
 
-### U2: TCS34725 モジュール（使用端子）
+### U2: Grove I2C Color Sensor V3.0（使用端子）
 
-| 物理ピン | 信号 | 接続 | 線番 |
+Grove 標準ピン配置（J3 内蔵コネクタ）:
+
+| Grove ピン | 線色 | 信号 | 線番 |
 |---|---|---|---|
-| 1 | GND | J4 黒 | W6 |
-| 2 | SDA | J4 白 | W4 |
-| 3 | SCL | J4 黄 | W3 |
-| 4 | VDD | J4 赤 | W5 |
-
-### J3: TCS34725 側 Grove コネクタ（ピン入替後）
-
-| ハウジング位置 | 信号 | 対応 U2 ピン |
-|---|---|---|
-| 1（黄） | SCL | 3 |
-| 2（白） | SDA | 2 |
-| 3（赤） | VCC | 4 |
-| 4（黒） | GND | 1 |
+| 1 | 黄 | SCL | W3 |
+| 2 | 白 | SDA | W4 |
+| 3 | 赤 | VCC | W5 |
+| 4 | 黒 | GND | W6 |
 
 ---
 
-## 5. 電気的特性メモ
+## 5. 設計メモ
 
-| 項目 | 値 |
+| 項目 | 内容 |
 |---|---|
-| 主電源 | LiPo 3.7 V（満充電 4.2 V） |
-| 制御電源 | 3.3 V（U0/U1 内蔵レギュレータ） |
-| U2 許容電源電圧 | 2.7〜3.6 V |
-| I2C クロック | 標準モード 100 kHz 想定（ファームウェア設定） |
-| 最大消費電流（目安） | Wi-Fi 送信ピーク 100〜180 mA 程度 |
+| I2C アドレス | VEML6040: `0x10`（ファーム・スキャン時の確認値） |
+| センサ出力 | R / G / B / W。MQTT・NGSIv2 の `clear` は W に対応 |
+| Grove 配線 | ピン入替不要（旧 TCS34725 基板＋L字コネクタ構成から簡素化） |
+| ファームウェア | VEML6040 ドライバへ移行予定（現行コードは TCS34725 ライブラリのまま） |
 
----
-
-## 6. 将来拡張（参考・未実装）
-
-LTE-M 追加時は **M5STACK-U128** を Grove Shield の **UART ポート**に接続。PoC 第1弾では未配線。詳細は [hardware.md](hardware.md)。
-
-```
-  U0 Grove UART  ← Grove 4芯ケーブル →  M5STACK-U128
-```
-
----
-
-## 7. CAD 図面について
-
-本ドキュメントは Markdown 上の回路図（試作 PoC 用）。量産・審査用に正式 CAD が必要な場合は KiCad 等で同一ネットリストを起こし、PDF/SVG を `docs/` に追加する。
+詳細は [hardware.md](hardware.md)・[firmware/README.md](../firmware/README.md) を参照。

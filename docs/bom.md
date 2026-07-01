@@ -32,7 +32,7 @@ Issue #11 のドラフト。Wi-Fi 第1弾 PoC 向けの部品リスト。
 | USB-C データケーブル | 書き込み・デバッグ・LiPo 充電 |
 | 熱収縮チューブ・ビニールテープ | 絶縁・JST はんだ箇所の strain relief |
 | テスター | LiPo JST 極性確認、Grove ケーブル導通確認 |
-| はんだごて・はんだ | Grove L字コネクタ・JST・470µF 付け |
+| はんだごて・はんだ | JST・470µF 付け（センサモジュールへのはんだ不要） |
 
 ---
 
@@ -42,7 +42,7 @@ Issue #11 のドラフト。Wi-Fi 第1弾 PoC 向けの部品リスト。
 |---|---|---|---|---|---|---|
 | 1 | マイコン | Seeed XIAO ESP32S3（無印）M-18078 | 1 | [秋月電子](https://akizukidenshi.com/catalog/g/gM-18078/) | ¥1,480 | ピンヘッダー非同梱。BAT はパッドのみ |
 | 2 | Grove Shield | Grove Shield for XIAO 103020312 | 1 | [Seeed JP](https://jp.seeedstudio.com/Grove-Shield-for-Seeeduino-XIAO-p-4621.html) 等 | 約¥700 | I2C×2・UART×1・BAT パッド付き |
-| 3 | カラーセンサ | TCS34725 モジュール #13472 | 1 | [ストロベリーリナックス](https://strawberry-linux.com/catalog/items?code=13472) | ¥924 | 動作電圧 2.7〜3.6V。白色 LED は未接続 |
+| 3 | カラーセンサ | Grove - I2C Color Sensor V3.0（101021133） | 1 | [Seeed Studio](https://www.seeedstudio.com/Grove-Color-Sensor-V3-0-p-5993.html) 等 | 約¥600 | VEML6040 搭載。Grove コネクタ内蔵 |
 | 4 | バッテリー | LiPo 3.7V 4,400mAh JST-PH #15095 | 1 | [ストロベリーリナックス](https://strawberry-linux.com/catalog/items?code=15095) | ¥550 | 保護回路内蔵。接続前に極性確認 |
 | 5 | 電解コンデンサ | 470μF 16V 16WXA470MEFC8X9 | 1 | [秋月電子](https://akizukidenshi.com/catalog/g/g108426/) | ¥10 | Wi-Fi 送信時の電圧降下対策。3V3-GND 間 |
 | 6 | ピンヘッダー 1×40 | PH-1x40SG | 1 | [秋月電子](https://akizukidenshi.com/catalog/g/g100167/) | ¥35 | XIAO 用。14ピン分を切り出してはんだ付け（Shield 装着用） |
@@ -61,33 +61,22 @@ Issue #11 のドラフト。Wi-Fi 第1弾 PoC 向けの部品リスト。
 
 ### 2.1 センサ接続（Grove I2C）
 
-XIAO + Grove Shield とセンサパッチ（TCS34725 + 黒シート積層）を **Grove 4芯ケーブル1本**で接続する。
+XIAO + Grove Shield とセンサパッチ（Grove Color Sensor V3.0 + 黒シート積層）を **Grove 4芯ケーブル1本**で接続する。
 
 | # | 部品 | 型番・品番 | 数量 | 入手先 | 価格 | 備考 |
 |---|---|---|---|---|---|---|
-| 8 | Grove L字コネクタ | 2mm ピッチ 4ピン | 1 | Seeed / Amazon 等 | 約¥100〜200 | TCS34725 基板にはんだ付け |
-| 9 | Grove 4芯ケーブル | 50cm / 100cm 等 | 1 | Seeed / Amazon 等 | 約¥200〜400 | 現場ごとに長さを選択 |
+| 8 | Grove 4芯ケーブル | 50cm / 100cm 等 | 1 | Seeed / Amazon 等 | 約¥200〜400 | 現場ごとに長さを選択。ピン入替不要 |
 
-**Shield 側**: Grove Shield の **I2C ポート**にケーブルをそのまま挿す（変更不要）。
+**Shield 側・センサ側とも** Grove 標準ピン配置のまま接続する（[wiring.md](wiring.md) §3）。
 
-**TCS34725 側**: ケーブルコネクタのピンを入替える（ハウジングから抜いて差し替え。工具不要・ハンダ不要）。
-
-| Grove ケーブル標準 | 信号 | TCS34725 基板ピン |
-|---|---|---|
-| ピン1: 黄 | SCL | 3: SCL |
-| ピン2: 白 | SDA | 2: SDA |
-| ピン3: 赤 | VCC | 4: VDD |
-| ピン4: 黒 | GND | 1: GND |
-
-手順・確認方法は [wiring.md](wiring.md) §3 を参照。
-
-### 2.2 ジャンパ線（DevKit ベンチ・仮接続用）
+### 2.2 DevKit ベンチ用（開発時のみ）
 
 | # | 部品 | 数量 | 入手先 | 価格 | 備考 |
 |---|---|---|---|---|---|
-| 10 | ブレッドボード用ジャンパ線（オス-メス）15cm | 1パック | [秋月 103472](https://akizukidenshi.com/catalog/g/g103472/) | ¥330 | DevKit ベンチ・470µF 仮接続用。Pi キットにあれば不要 |
+| 9 | Grove 4 pin Female Jumper to Grove 4 pin 変換ケーブル | 1 | Seeed 等 | 約¥200 | 同一 Grove センサを DevKit の GPIO21/22 に接続 |
+| 10 | ブレッドボード用ジャンパ線（オス-メス）15cm | 1パック | [秋月 103472](https://akizukidenshi.com/catalog/g/g103472/) | ¥330 | 470µF 仮接続用。Pi キットにあれば不要 |
 
-**本番のセンサ延長にジャンパ線は使わない。** Grove ケーブルで統一する。
+**本番のセンサ延長にジャンパ線は使わない。** 試作機・DevKit ベンチとも Grove センサモジュールを共通利用する。
 
 ---
 
@@ -115,10 +104,9 @@ XIAO + Grove Shield とセンサパッチ（TCS34725 + 黒シート積層）を 
 - [ ] XIAO を Grove Shield に装着
 - [ ] Grove Shield の **BAT パッド**に JST-PH メスをはんだ付け（極性確認済み）
 - [ ] LiPo を JST で接続し、USB 非接続で起動するか確認
-- [ ] TCS34725 に Grove L字コネクタをはんだ付け
-- [ ] Grove ケーブルの TCS34725 側ピンを入替え、導通・ピン順を確認
+- [ ] 黒カッティングシートに受光窓を切り、Grove Color Sensor V3.0 をセンサパッチとして貼付
+- [ ] Grove ケーブルで Shield I2C ↔ センサを接続し、導通を確認
 - [ ] 470µF を 3V3-GND 間に接続（はんだ付け推奨。ジャンパ仮接続でも可）
-- [ ] 黒カッティングシートに受光窓を切り、センサパッチを試作
 
 ---
 
@@ -128,10 +116,10 @@ XIAO + Grove Shield とセンサパッチ（TCS34725 + 黒シート積層）を 
 
 | 区分 | 金額 |
 |---|---|
-| 電子部品（#1〜7） | 約 ¥3,700 |
-| Grove 配線（#8〜9） | 約 ¥400 |
+| 電子部品（#1〜7） | 約 ¥3,400 |
+| Grove 配線（#8〜9） | 約 ¥500 |
 | ジャンパ線（#10・任意） | 約 ¥330 |
-| **試作1台 合計** | **約 ¥4,400** |
+| **試作1台 合計** | **約 ¥4,200** |
 
 ※ LTE-M モジュール・SIM を除く。README の約1.4〜1.5万円は LTE-M 込みの全体設計見積。Pi キットや手持ち部品で賄える分は上記から差し引く。
 
