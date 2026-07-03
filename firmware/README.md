@@ -81,7 +81,7 @@ pio device monitor -e xiao-s3
 
 ## シリアル出力（#5）
 
-起動後、300 ms 間隔で以下を出力する。
+起動後、400 ms 間隔で以下を出力する（積分時間 320 ms + マージン。Seeed Wiki サンプル準拠）。
 
 ```
 board=xiao-s3 i2c_sda=5 i2c_scl=6

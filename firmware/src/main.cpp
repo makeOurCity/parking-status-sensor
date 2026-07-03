@@ -6,7 +6,7 @@
 namespace {
 
 constexpr uint32_t kSerialWaitMs = 3000;
-constexpr uint32_t kSampleIntervalMs = 300;
+constexpr uint32_t kSampleIntervalMs = 400;
 
 void waitForSerial() {
   const uint32_t start = millis();
@@ -26,6 +26,7 @@ void setup() {
 
   if (!initSensor()) {
     Serial.println("ERROR: VEML6040 not found at 0x10");
+    scanI2cBus();
     while (true) {
       delay(1000);
     }

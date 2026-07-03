@@ -11,3 +11,4 @@ struct RawSample {
 
 bool initSensor();
 bool readSensor(RawSample& out);
+void scanI2cBus();
