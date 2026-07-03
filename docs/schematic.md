@@ -211,6 +211,6 @@ Grove 標準ピン配置（J3 内蔵コネクタ）:
 | I2C アドレス | VEML6040: `0x10`（ファーム・スキャン時の確認値） |
 | センサ出力 | R / G / B / W。MQTT・NGSIv2 の `clear` は W に対応 |
 | Grove 配線 | ピン入替不要（旧 TCS34725 基板＋L字コネクタ構成から簡素化） |
-| ファームウェア | VEML6040 ドライバへ移行予定（現行コードは TCS34725 ライブラリのまま） |
+| ファームウェア | VEML6040 ドライバ（`firmware/src/sensor.cpp`、Issue #5） |
 
 詳細は [hardware.md](hardware.md)・[firmware/README.md](../firmware/README.md) を参照。

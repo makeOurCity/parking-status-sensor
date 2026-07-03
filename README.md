@@ -170,6 +170,16 @@ PoC は段階的に進める。
   - 接続基盤（SORACOM Beam / IoT Core 連携等）は LTE-M 導入時に再検討する。
 - 送信データは判定結果＋生値のみで極小。LTE-M の細い回線・低消費電力とも両立する設計とする。
 
+**通信経路の選択（将来）**
+
+端末はプロビジョニング時に接続モジュールを検出し、優先順位に従って経路を決定する。結果は NVS に保存し、Deep Sleep 起床のたびに再判定しない。
+
+1. LoRaWAN モジュールが応答 → LoRaWAN
+2. なければ LTE-M モジュールが応答 → LTE-M
+3. どちらもなければ → Wi-Fi（内蔵）
+
+PoC 第1弾（#6）は Wi-Fi 固定。詳細は [firmware/README.md](firmware/README.md) のモジュール構成を参照。
+
 ### 4.4 FIWARE連携
 
 - 満空フラグをNGSIv2でOrionにupsert。
@@ -333,8 +343,8 @@ parking-status-sensor/
 ├── firmware/                  # ESP32ファームウェア（PlatformIO・マルチ環境）
 │   ├── README.md              # ボード役割・ビルド手順
 │   ├── devkit-bench.md        # DevKit ベンチ配線（Grove Color Sensor + RGB LED）
-│   ├── include/               # board_devkit.h / board_xiao.h
+│   ├── include/               # board_xiao.h / sensor.h
 │   ├── src/
-│   └── platformio.ini         # env: devkit / xiao-s3
+│   └── platformio.ini         # env: xiao-s3
 └── bridge/                    # （未作成）Lambda ブリッジ（IoT Core → NGSIv2 → Orion）
 ```

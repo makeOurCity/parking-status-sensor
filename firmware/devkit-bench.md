@@ -6,8 +6,8 @@ Issue #5 第1段階向け。机上で Grove Color Sensor V3.0 の読み取りと
 
 - **対象**: ESP32 DevKit（ESP-WROOM-32 系）+ **Grove - I2C Color Sensor V3.0** + RGB LED（オプション）
 - **対象外**: XIAO 実証機・LiPo・防水筐体（→ [docs/wiring.md](../docs/wiring.md)）
-- **PlatformIO 環境**: `devkit`（[platformio.ini](platformio.ini)）
-- **ピン定義の正**: [include/board_devkit.h](include/board_devkit.h)
+- **PlatformIO 環境**: `devkit`（当時の [platformio.ini](platformio.ini)。2026-07 以降は削除済み）
+- **ピン定義の正**: 当時の `include/board_devkit.h`（削除済み）
 
 試作機（XIAO）と**同一の Grove センサモジュール**を使う。DevKit には Grove 変換ケーブルで接続する。
 
@@ -70,7 +70,7 @@ Grove コネクタ ─────────→  オスデュポン ──→ 
 
 - **5V ピンに VCC を接続しない**（3.3 V 系統を使用）
 - I2C アドレス: `0x10`（VEML6040）
-- 現行ファームウェア（`main.cpp`）は **TCS34725 用ライブラリのまま**。VEML6040 ドライバへの移行は Issue #5 で実施予定
+- 現行ファームウェアは **VEML6040 ドライバ**（`firmware/src/sensor.cpp`、Issue #5）。本ベンチ用の `devkit` 環境は削除済み
 
 ---
 
@@ -129,22 +129,26 @@ DevKit の型番によってピン位置のラベル表記は異なるが、**GP
 
 ## 5. ビルド・書き込み・確認
 
+> **2026-07 以降**: PlatformIO の `devkit` 環境は削除済み。センサ読み取りは XIAO 実証機（`xiao-s3`）で確認する。手順は [firmware/README.md](README.md) を参照。
+
+以下は DevKit 検証時の手順（アーカイブ）。
+
 ```bash
 cd firmware
 
-# ビルド
-pio run -e devkit
+# ビルド（devkit 環境は削除済み）
+# pio run -e devkit
 
 # 書き込み（ポートは環境に合わせる）
-pio run -e devkit -t upload --upload-port /dev/cu.usbserial-0001
+# pio run -e devkit -t upload --upload-port /dev/cu.usbserial-0001
 
 # シリアルモニタ（115200）
-pio device monitor -e devkit --port /dev/cu.usbserial-0001
+# pio device monitor -e devkit --port /dev/cu.usbserial-0001
 ```
 
 ### 5.1 起動ログの例
 
-> **注**: 現行ファームは TCS34725 用。VEML6040 ドライバ移行後はログ文言・アドレスが変わる。
+> **注**: 以下は 2026-07 DevKit 検証時のログ例（アーカイブ）。現行ファームは XIAO + VEML6040 向け。出力例は [firmware/README.md](README.md) を参照。
 
 ```
 board=devkit i2c_sda=21 i2c_scl=22
@@ -155,9 +159,9 @@ ambient baseline R=... G=... B=... C=... ratio=... ... ...
 R G B C R-G  dR dG dB  ledR ledG ledB
 ```
 
-| 列 | 意味 |
+| 列 | 意味（DevKit 時代） |
 |---|---|
-| R G B C | センサ生値（移行後は R G B W） |
+| R G B C | センサ生値（現行は R G B W） |
 | R-G | 赤−緑（Issue #5 の分離確認用） |
 | dR dG dB | Clear 正規化比率のベースライン差分（RGB LED デバッグ用） |
 | ledR ledG ledB | RGB LED への PWM 出力（0〜255） |
