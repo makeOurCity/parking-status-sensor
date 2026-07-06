@@ -70,7 +70,7 @@ PoC 第1弾（#6）は **Wi-Fi 固定**。モジュール検出・プロビジ�
 | ESP32 | スリープ（〜数十 µA） | 実装済み |
 | Wi-Fi | オフ（`WiFi.mode(OFF)`） | 実装済み |
 | カラーセンサ | Grove 3.3V はオン | **スリープ前に VEML6040 IC シャットダウン**（未実装・#6 で追加） |
-| LTE-M | Grove 5V はオン | **Wi-Fi PoC 中は UART ケーブル抜き**（物理 OFF）。LTE 利用後は `modem.poweroff()` |
+| LTE-M | Grove 5V はオン | **`modem.poweroff()` でソフト停止**（5V は切れない）。スリープ中も青 LED が点滅する場合は完全停止していない疑い — 実測で確認（README §6.2） |
 
 **PoC 第1弾（Wi-Fi + LiPo）の運用ルール**
 
@@ -213,6 +213,70 @@ pio run -e xiao-s3-aws-lte -t upload
 TLS は ESP32 側の `SSLClient` が `TinyGsmClient` をラップして処理する。
 LTE 接続は Wi-Fi より時間がかかるため、`xiao-s3-aws-lte` は active 上限を 120 秒にしている。
 
+#### 実測タイミングと送信間隔（2026-07 実機）
+
+LiPo + Deep Sleep + `xiao-s3-aws-lte` で AWS IoT Core へ送信した際の目安:
+
+| 指標 | 実測 |
+|---|---|
+| `networkConnectMs`（LTE 接続） | 約2.5〜14秒（2回目以降は短いことが多い） |
+| `mqttConnectMs`（TLS + MQTT） | 約34〜35秒 |
+| `activeMsBeforePublish` | 約68〜77秒 |
+| クラウド受信間隔 | 約8分（`PSS_SLEEP_SECONDS=300` 設定時） |
+
+`PSS_SLEEP_SECONDS` は **スリープ時間** であり受信間隔ではない。受信間隔 ≈ active + sleep + モデム切断待ち。
+
+- **約8分間隔** … 満空 PoC としては問題ない（README §6.2.2）
+- **15分推奨** … 主に電池試算（5分→37日 vs 15分→100日）と業務上の即時性不要から（README §6.2）
+- 試算は LTE active 5〜10秒前提のため、TLS 実装後は **電池持ちを実測で再評価** すること（`power.activeMsBeforePublish` 等をログに含む）
+
+関連: README §6.2、#25（低消費電力）、#30（LTE 時刻同期）
+
+#### 一晩通し試験（2026-07-07）
+
+構成: LiPo 給電、`xiao-s3-aws-lte`（Deep Sleep）、SORACOM plan-D、AWS IoT Core（TLS 8883、QoS1）。
+端末: `xiao-e83dc1fb05fc`。検証は CloudWatch（Lambda `parking-status-bridge`）の受信ログ。
+
+| 項目 | 結果 |
+|---|---|
+| 期間 | 初回 LiPo 投入 約 22:32 JST 〜 boot 75 受信 約 08:42 JST（約10時間） |
+| 送信件数 | **75件**（`bootCount` 1〜75、**欠番なし**） |
+| 送信確認 | 全件 `deliveryConfirmed: true`（ログ上） |
+| 起床 | boot 2 以降 `wakeCause: timer` / `resetReason: deep_sleep` |
+| 受信間隔 | おおよそ **7分59秒〜8分21秒**（フェーズ1） |
+| SORACOM 課金 | **385円**（試験期間の利用分） |
+| ローカル Mosquitto（先行） | 24h / 285件 / `bootCount` 欠番 0（#6） |
+
+**フェーズ1（おおよそ boot 2〜42）**
+
+| 指標 | 値 |
+|---|---|
+| `activeMsBeforePublish` | 約 68〜77秒 |
+| `networkConnectMs` | 約 2.5秒 |
+| `mqttConnectMs` | 約 34〜35秒 |
+| `network.transport` | `lte` |
+
+**フェーズ2（boot 43 以降）**
+
+| 項目 | 観測 |
+|---|---|
+| boot 42→43 の受信間隔 | 約 17分（他より長い） |
+| boot 43 の `activeMsBeforePublish` | 185184 ms（約185秒） |
+| boot 44〜75 の `activeMsBeforePublish` | おおよそ 128000〜131000 ms（約128〜131秒） |
+| ペイロード `network` | `transport` / `networkConnectMs` / `mqttConnectMs` が **含まれない** 件がある |
+| 送信 | `deliveryConfirmed: true` は継続 |
+
+**試験終了時の操作（08:50 JST 頃）**
+
+LiPo 残量測定のためバッテリーを抜き差しした。直後のログは `bootCount: 1`, `wakeCause: power_on`, `resetReason: power_on`。
+残量計測の結果、**残量は目立った減少なし**（実測者確認）。
+
+**未解決・フォロー**
+
+- ペイロード `timestamp` が `null`（#30）
+- boot 43 以降の `activeMs` 増加と `network` メトリクス欠落の原因（要調査）
+- 電流計による消費電力の実測（#25 / README §8.1）
+
 ## 関連 Issue
 
 | Issue | 内容 |
@@ -221,6 +285,8 @@ LTE 接続は Wi-Fi より時間がかかるため、`xiao-s3-aws-lte` は activ
 | #16 | 試作1台の組み立て・通電確認 |
 | #5 | カラーセンサ読み取り（VEML6040） |
 | #6 | 判定ロジック + MQTT + Deep Sleep |
+| #25 | 低消費電力運用 |
+| #30 | LTE-M 時刻同期（NTP） |
 
 ## MQTT ペイロード
 
