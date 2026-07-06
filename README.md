@@ -340,7 +340,8 @@ parking-status-sensor/
 │   ├── schematic.md           # 回路図（単線・複線・回路）
 │   ├── wiring.md              # 組み立て手順・実物確認
 │   ├── data-model.md          # NGSIv2 エンティティ設計
-│   └── iot-core.md            # AWS IoT Core 設計（Issue #4）
+│   ├── iot-core.md            # AWS IoT Core 設計（Issue #4）
+│   └── aws-admin-handoff.md   # AWS 管理者向けセットアップ手順
 ├── infra/                     # IoT Core プロビジョニングスクリプト（Issue #4）
 ├── firmware/                  # ESP32ファームウェア（PlatformIO・マルチ環境）
 │   ├── README.md              # ボード役割・ビルド手順
