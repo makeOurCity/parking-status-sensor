@@ -61,6 +61,25 @@ firmware/
 
 PoC 第1弾（#6）は **Wi-Fi 固定**。モジュール検出・プロビジョニング UI は将来フェーズ。
 
+### 電源・周辺モジュール（#6）
+
+`esp_deep_sleep()` が止めるのは **ESP32 本体**（CPU / Wi-Fi）のみ。Grove Shield の Grove ポート電源は PoC 構成では **自動では落ちない**。
+
+| 周辺 | Deep Sleep 中の電源 | #6 での扱い |
+|---|---|---|
+| ESP32 | スリープ（〜数十 µA） | 実装済み |
+| Wi-Fi | オフ（`WiFi.mode(OFF)`） | 実装済み |
+| カラーセンサ | Grove 3.3V はオン | **スリープ前に VEML6040 IC シャットダウン**（未実装・#6 で追加） |
+| LTE-M | Grove 5V はオン | **`modem.poweroff()` でソフト停止**（5V は切れない）。スリープ中も青 LED が点滅する場合は完全停止していない疑い — 実測で確認（README §6.2） |
+
+**PoC 第1弾（Wi-Fi + LiPo）の運用ルール**
+
+- LTE-M（Grove UART）は **未接続のまま** Wi-Fi 検証・数日蓄積を行う（常時給電のアイドル消費を避ける）
+- LTE 単体確認は `xiao-s3-lte-test` で別途実施
+- 5V のハード電源スイッチ・NVS による transport 固定は **#6 スコープ外**（将来）
+
+詳細・経緯: [Issue #6 コメント](https://github.com/makeOurCity/parking-status-sensor/issues/6)
+
 ## 配線（XIAO 実証機）
 
 [docs/wiring.md](../docs/wiring.md) を参照。
@@ -72,6 +91,9 @@ PoC 第1弾（#6）は **Wi-Fi 固定**。モジュール検出・プロビジ�
 
 ## ビルド・書き込み
 
+端末ごとの Wi-Fi / MQTT / LTE-M 設定は `include/secrets.example.h` を
+`include/secrets.h` にコピーして編集する。`secrets.h` は git 管理しない。
+
 ```bash
 cd firmware
 
@@ -79,19 +101,181 @@ pio run -e xiao-s3 -t upload
 pio device monitor -e xiao-s3
 ```
 
-## シリアル出力（#5）
+開発中に Deep Sleep させず、数秒間隔でローカル MQTT へ送信する場合:
 
-起動後、400 ms 間隔で以下を出力する（積分時間 320 ms + マージン。Seeed Wiki サンプル準拠）。
+```bash
+pio run -e xiao-s3-debug -t upload
+pio device monitor -e xiao-s3-debug
+```
+
+LTE-M モジュールだけを動作確認する場合（センサ・MQTT は使わない）:
+
+```bash
+pio run -e xiao-s3-lte-test -t upload
+pio device monitor -e xiao-s3-lte-test
+```
+
+シリアルに `modem init` → `network registration` → `data attach` の 4 段階が出る。
+`RESULT: PASS` なら UART・SIM・電波・APN まで通っている。
+
+- `FAIL: no AT response` … Grove UART ケーブル、モジュール電源、TX/RX
+- `FAIL: not registered` … SIM、アンテナ、電波
+- `FAIL: GPRS attach failed` … APN（SORACOM: `soracom.io` / `sora` / `sora`）
+
+## ローカル Mosquitto 検証（#6）
+
+Mac 上でブローカーを立てる手順は `tools/mosquitto/` を参照。
+
+```bash
+# ターミナル1: ブローカー起動
+tools/mosquitto/start.sh
+
+# ターミナル2: 受信ログ（JSONL に蓄積）
+tools/mosquitto/subscribe.sh 192.168.0.42
+```
+
+`secrets.h` の `PSS_MQTT_HOST` は **Mosquitto を動かす Mac の LAN IP**（例: `192.168.0.42`）。
+`PSS_WIFI_SSID` が空でなければ Wi-Fi を優先する。Wi-Fi が未設定または失敗し、
+`PSS_LTE_ENABLED=1` の場合だけ LTE-M にフォールバックする。
+
+受信例:
 
 ```
-board=xiao-s3 i2c_sda=5 i2c_scl=6
-VEML6040 ready
-R G B W R-G
-1234 567 890 1500 667
+mosquitto_sub -h 192.168.0.42 -t 'parking-status/#' -F '%I %t %p'
 ```
 
 - `W` は VEML6040 の White チャンネル（MQTT ペイロードの `raw.clear` に対応）
 - `R-G` は赤/緑分離の目安（完了基準: 差 ≥ 100）
+- MQTT ペイロードには電流値そのものではなく、`power.activeMsBeforePublish`、
+  `network.networkConnectMs`、`network.mqttConnectMs`、`power.sleepSeconds` を含める。
+  USB 電流計や電源ロガーの実測値と突き合わせて消費電力を評価する。
+
+## AWS IoT Core 切り替え（#6 → #27）
+
+証明書が `firmware/certs/` に作成済みであれば、同じ全件送信ファームを
+AWS IoT Core 向けにビルドできる。
+
+必要な証明書ファイル:
+
+- `certs/AmazonRootCA1.pem`
+- `certs/device.pem.crt`
+- `certs/private.pem.key`
+
+`include/secrets.h` の MQTT 設定を AWS IoT Core 向けに変更する。
+
+```cpp
+#define PSS_MQTT_HOST "xxxxxxxxxxxxxx-ats.iot.ap-northeast-1.amazonaws.com"
+#define PSS_MQTT_PORT 8883
+#define PSS_MQTT_USE_TLS 1
+#define PSS_MQTT_BASIC_INGEST_RULE "parking_status_telemetry"
+#define PSS_MQTT_TOPIC ""
+```
+
+Basic Ingest を使わない場合は、通常トピック
+`parking-status/xiao-e83dc1fb05fc/telemetry` を指定する。
+
+```bash
+cd firmware
+pio run -e xiao-s3-aws -t upload
+pio device monitor -e xiao-s3-aws
+```
+
+AWS 接続も現時点では **全件送信** のまま行う。変化時のみ送信・heartbeat は
+24h ローカル検証後の次ステップとして扱う。
+
+### LTE-M + AWS IoT Core（推奨 PoC 経路）
+
+Grove UART に LTE-M モジュール（SIM7080G）を接続し、SORACOM SIM で AWS IoT Core へ
+MQTT over TLS する。Wi-Fi は使わない。
+
+`secrets.h` 例:
+
+```cpp
+#define PSS_WIFI_SSID ""
+#define PSS_WIFI_PASSWORD ""
+#define PSS_LTE_ENABLED 1
+#define PSS_LTE_ONLY 1
+#define PSS_MQTT_HOST "xxxxxxxxxxxxxx-ats.iot.ap-northeast-1.amazonaws.com"
+#define PSS_MQTT_PORT 8883
+#define PSS_MQTT_BASIC_INGEST_RULE "parking_status_telemetry"
+```
+
+```bash
+cd firmware
+# 開発中（Deep Sleep なし・AT ログあり）
+pio run -e xiao-s3-aws-lte-debug -t upload
+pio device monitor -e xiao-s3-aws-lte-debug
+
+# 本番運用（Deep Sleep あり）
+pio run -e xiao-s3-aws-lte -t upload
+```
+
+TLS は ESP32 側の `SSLClient` が `TinyGsmClient` をラップして処理する。
+LTE 接続は Wi-Fi より時間がかかるため、`xiao-s3-aws-lte` は active 上限を 120 秒にしている。
+
+#### 実測タイミングと送信間隔（2026-07 実機）
+
+LiPo + Deep Sleep + `xiao-s3-aws-lte` で AWS IoT Core へ送信した際の目安:
+
+| 指標 | 実測 |
+|---|---|
+| `networkConnectMs`（LTE 接続） | 約2.5〜14秒（2回目以降は短いことが多い） |
+| `mqttConnectMs`（TLS + MQTT） | 約34〜35秒 |
+| `activeMsBeforePublish` | 約68〜77秒 |
+| クラウド受信間隔 | 約8分（`PSS_SLEEP_SECONDS=300` 設定時） |
+
+`PSS_SLEEP_SECONDS` は **スリープ時間** であり受信間隔ではない。受信間隔 ≈ active + sleep + モデム切断待ち。
+
+- **約8分間隔** … 満空 PoC としては問題ない（README §6.2.2）
+- **15分推奨** … 主に電池試算（5分→37日 vs 15分→100日）と業務上の即時性不要から（README §6.2）
+- 試算は LTE active 5〜10秒前提のため、TLS 実装後は **電池持ちを実測で再評価** すること（`power.activeMsBeforePublish` 等をログに含む）
+
+関連: README §6.2、#25（低消費電力）、#30（LTE 時刻同期）
+
+#### 一晩通し試験（2026-07-07）
+
+構成: LiPo 給電、`xiao-s3-aws-lte`（Deep Sleep）、SORACOM plan-D、AWS IoT Core（TLS 8883、QoS1）。
+端末: `xiao-e83dc1fb05fc`。検証は CloudWatch（Lambda `parking-status-bridge`）の受信ログ。
+
+| 項目 | 結果 |
+|---|---|
+| 期間 | 初回 LiPo 投入 約 22:32 JST 〜 boot 75 受信 約 08:42 JST（約10時間） |
+| 送信件数 | **75件**（`bootCount` 1〜75、**欠番なし**） |
+| 送信確認 | 全件 `deliveryConfirmed: true`（ログ上） |
+| 起床 | boot 2 以降 `wakeCause: timer` / `resetReason: deep_sleep` |
+| 受信間隔 | おおよそ **7分59秒〜8分21秒**（フェーズ1） |
+| SORACOM 課金 | **385円**（試験期間の利用分） |
+| ローカル Mosquitto（先行） | 24h / 285件 / `bootCount` 欠番 0（#6） |
+
+**フェーズ1（おおよそ boot 2〜42）**
+
+| 指標 | 値 |
+|---|---|
+| `activeMsBeforePublish` | 約 68〜77秒 |
+| `networkConnectMs` | 約 2.5秒 |
+| `mqttConnectMs` | 約 34〜35秒 |
+| `network.transport` | `lte` |
+
+**フェーズ2（boot 43 以降）**
+
+| 項目 | 観測 |
+|---|---|
+| boot 42→43 の受信間隔 | 約 17分（他より長い） |
+| boot 43 の `activeMsBeforePublish` | 185184 ms（約185秒） |
+| boot 44〜75 の `activeMsBeforePublish` | おおよそ 128000〜131000 ms（約128〜131秒） |
+| ペイロード `network` | `transport` / `networkConnectMs` / `mqttConnectMs` が **含まれない** 件がある |
+| 送信 | `deliveryConfirmed: true` は継続 |
+
+**試験終了時の操作（08:50 JST 頃）**
+
+LiPo 残量測定のためバッテリーを抜き差しした。直後のログは `bootCount: 1`, `wakeCause: power_on`, `resetReason: power_on`。
+残量計測の結果、**残量は目立った減少なし**（実測者確認）。
+
+**未解決・フォロー**
+
+- ペイロード `timestamp` が `null`（#30）
+- boot 43 以降の `activeMs` 増加と `network` メトリクス欠落の原因（要調査）
+- 電流計による消費電力の実測（#25 / README §8.1）
 
 ## 関連 Issue
 
@@ -101,6 +285,8 @@ R G B W R-G
 | #16 | 試作1台の組み立て・通電確認 |
 | #5 | カラーセンサ読み取り（VEML6040） |
 | #6 | 判定ロジック + MQTT + Deep Sleep |
+| #25 | 低消費電力運用 |
+| #30 | LTE-M 時刻同期（NTP） |
 
 ## MQTT ペイロード
 

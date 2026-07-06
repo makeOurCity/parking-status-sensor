@@ -18,18 +18,24 @@
 // AWS IoT Core (PoC):
 //   PSS_MQTT_HOST = xxx-ats.iot.ap-northeast-1.amazonaws.com
 //   PSS_MQTT_PORT = 8883
-//   PSS_MQTT_TOPIC = $aws/rules/parking_status_telemetry/parking-status/{deviceId}/telemetry
+//   PSS_MQTT_BASIC_INGEST_RULE = parking_status_telemetry
+//   Wi-Fi: build env xiao-s3-aws
+//   LTE-M: build env xiao-s3-aws-lte (+ PSS_LTE_ENABLED=1 PSS_LTE_ONLY=1)
 //   Certs in firmware/certs/ (see infra/provision-device.sh)
-// Empty PSS_MQTT_TOPIC → parking-status/{deviceId}/telemetry (Mosquitto default)
+// Empty PSS_MQTT_TOPIC → parking-status/{deviceId}/telemetry (Mosquitto default).
+// PSS_MQTT_TOPIC can still be set directly if Basic Ingest is not used.
 //
 #define PSS_MQTT_HOST "192.168.1.10"
 #define PSS_MQTT_PORT 1883
+// #define PSS_MQTT_USE_TLS 1
+#define PSS_MQTT_BASIC_INGEST_RULE ""
 #define PSS_MQTT_TOPIC ""
 #define PSS_MQTT_USERNAME ""
 #define PSS_MQTT_PASSWORD ""
 
-// Set to 1 to allow LTE-M fallback when Wi-Fi is not configured or fails.
+// Set to 1 to use LTE-M. Set PSS_LTE_ONLY=1 to skip Wi-Fi (AWS LTE path).
 #define PSS_LTE_ENABLED 0
+// #define PSS_LTE_ONLY 1
 #define PSS_LTE_APN "soracom.io"
 #define PSS_LTE_USER "sora"
 #define PSS_LTE_PASSWORD "sora"
