@@ -2,6 +2,8 @@
 
 [docs/iot-core.md](../docs/iot-core.md) の設計に沿って、IoT Core・Lambda スタブをセットアップするスクリプト群。
 
+**組織 AWS への移行時**: 開発チームが直接作業しない場合は、管理者へ [docs/aws-admin-handoff.md](../docs/aws-admin-handoff.md) を渡してください。
+
 ## 前提
 
 - [AWS CLI v2](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)

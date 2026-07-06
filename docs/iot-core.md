@@ -144,7 +144,7 @@ Orion 連携は #7 に委ねる。#4 では Lambda スタブが受信ペイロ�
 | IoT Core → Lambda | IAM（IoT ルールから `lambda:InvokeFunction`） |
 | Lambda → Orion | #7 で定義（組織 Sandbox の接続仕様に合わせる） |
 
-`infra/config.env` の `AWS_PROFILE` で対象アカウントを指定する。組織アカウントへの移行時は、同スクリプトで別プロファイルに向けて再実行すればよい（Thing / 証明書は再プロビジョニング）。
+`infra/config.env` の `AWS_PROFILE` で対象アカウントを指定する。組織アカウントへの移行時は、管理者が [aws-admin-handoff.md](aws-admin-handoff.md) に沿ってセットアップし、接続情報・証明書を開発チームに引き渡す（Thing / 証明書は再プロビジョニング）。
 
 ## 料金（PoC 規模の目安）
 
