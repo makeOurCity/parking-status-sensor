@@ -339,12 +339,14 @@ parking-status-sensor/
 │   ├── bom.md                 # 詳細BOM（試作1台）
 │   ├── schematic.md           # 回路図（単線・複線・回路）
 │   ├── wiring.md              # 組み立て手順・実物確認
-│   └── data-model.md          # NGSIv2 エンティティ設計
+│   ├── data-model.md          # NGSIv2 エンティティ設計
+│   └── iot-core.md            # AWS IoT Core 設計（Issue #4）
+├── infra/                     # IoT Core プロビジョニングスクリプト（Issue #4）
 ├── firmware/                  # ESP32ファームウェア（PlatformIO・マルチ環境）
 │   ├── README.md              # ボード役割・ビルド手順
 │   ├── devkit-bench.md        # DevKit ベンチ配線（Grove Color Sensor + RGB LED）
 │   ├── include/               # board_xiao.h / sensor.h
 │   ├── src/
 │   └── platformio.ini         # env: xiao-s3
-└── bridge/                    # （未作成）Lambda ブリッジ（IoT Core → NGSIv2 → Orion）
+└── bridge/                    # Lambda ブリッジ（#4 スタブ → #7 本実装）
 ```

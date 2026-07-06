@@ -29,6 +29,11 @@ __pycache__/
 # Environment variables
 .env
 .env.local
+firmware/include/secrets.h
+firmware/certs/*
+!firmware/certs/README.md
+infra/config.env
+bridge/dist/
 
 # Editor settings
 # .vscode/
