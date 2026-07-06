@@ -1,0 +1,18 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": "iot:Connect",
+      "Resource": "arn:aws:iot:*:*:client/${iot:Connection.Thing.ThingName}"
+    },
+    {
+      "Effect": "Allow",
+      "Action": "iot:Publish",
+      "Resource": [
+        "arn:aws:iot:*:*:topic/$aws/rules/parking_status_telemetry/parking-status/${iot:Connection.Thing.ThingName}/telemetry",
+        "arn:aws:iot:*:*:topic/parking-status/${iot:Connection.Thing.ThingName}/telemetry"
+      ]
+    }
+  ]
+}
