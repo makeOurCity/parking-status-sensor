@@ -61,6 +61,25 @@ firmware/
 
 PoC 第1弾（#6）は **Wi-Fi 固定**。モジュール検出・プロビジョニング UI は将来フェーズ。
 
+### 電源・周辺モジュール（#6）
+
+`esp_deep_sleep()` が止めるのは **ESP32 本体**（CPU / Wi-Fi）のみ。Grove Shield の Grove ポート電源は PoC 構成では **自動では落ちない**。
+
+| 周辺 | Deep Sleep 中の電源 | #6 での扱い |
+|---|---|---|
+| ESP32 | スリープ（〜数十 µA） | 実装済み |
+| Wi-Fi | オフ（`WiFi.mode(OFF)`） | 実装済み |
+| カラーセンサ | Grove 3.3V はオン | **スリープ前に VEML6040 IC シャットダウン**（未実装・#6 で追加） |
+| LTE-M | Grove 5V はオン | **Wi-Fi PoC 中は UART ケーブル抜き**（物理 OFF）。LTE 利用後は `modem.poweroff()` |
+
+**PoC 第1弾（Wi-Fi + LiPo）の運用ルール**
+
+- LTE-M（Grove UART）は **未接続のまま** Wi-Fi 検証・数日蓄積を行う（常時給電のアイドル消費を避ける）
+- LTE 単体確認は `xiao-s3-lte-test` で別途実施
+- 5V のハード電源スイッチ・NVS による transport 固定は **#6 スコープ外**（将来）
+
+詳細・経緯: [Issue #6 コメント](https://github.com/makeOurCity/parking-status-sensor/issues/6)
+
 ## 配線（XIAO 実証機）
 
 [docs/wiring.md](../docs/wiring.md) を参照。
@@ -72,6 +91,9 @@ PoC 第1弾（#6）は **Wi-Fi 固定**。モジュール検出・プロビジ�
 
 ## ビルド・書き込み
 
+端末ごとの Wi-Fi / MQTT / LTE-M 設定は `include/secrets.example.h` を
+`include/secrets.h` にコピーして編集する。`secrets.h` は git 管理しない。
+
 ```bash
 cd firmware
 
@@ -79,19 +101,54 @@ pio run -e xiao-s3 -t upload
 pio device monitor -e xiao-s3
 ```
 
-## シリアル出力（#5）
+開発中に Deep Sleep させず、数秒間隔でローカル MQTT へ送信する場合:
 
-起動後、400 ms 間隔で以下を出力する（積分時間 320 ms + マージン。Seeed Wiki サンプル準拠）。
+```bash
+pio run -e xiao-s3-debug -t upload
+pio device monitor -e xiao-s3-debug
+```
+
+LTE-M モジュールだけを動作確認する場合（センサ・MQTT は使わない）:
+
+```bash
+pio run -e xiao-s3-lte-test -t upload
+pio device monitor -e xiao-s3-lte-test
+```
+
+シリアルに `modem init` → `network registration` → `data attach` の 4 段階が出る。
+`RESULT: PASS` なら UART・SIM・電波・APN まで通っている。
+
+- `FAIL: no AT response` … Grove UART ケーブル、モジュール電源、TX/RX
+- `FAIL: not registered` … SIM、アンテナ、電波
+- `FAIL: GPRS attach failed` … APN（SORACOM: `soracom.io` / `sora` / `sora`）
+
+## ローカル Mosquitto 検証（#6）
+
+Mac 上でブローカーを立てる手順は `tools/mosquitto/` を参照。
+
+```bash
+# ターミナル1: ブローカー起動
+tools/mosquitto/start.sh
+
+# ターミナル2: 受信ログ（JSONL に蓄積）
+tools/mosquitto/subscribe.sh 192.168.0.42
+```
+
+`secrets.h` の `PSS_MQTT_HOST` は **Mosquitto を動かす Mac の LAN IP**（例: `192.168.0.42`）。
+`PSS_WIFI_SSID` が空でなければ Wi-Fi を優先する。Wi-Fi が未設定または失敗し、
+`PSS_LTE_ENABLED=1` の場合だけ LTE-M にフォールバックする。
+
+受信例:
 
 ```
-board=xiao-s3 i2c_sda=5 i2c_scl=6
-VEML6040 ready
-R G B W R-G
-1234 567 890 1500 667
+mosquitto_sub -h 192.168.0.42 -t 'parking-status/#' -F '%I %t %p'
 ```
 
 - `W` は VEML6040 の White チャンネル（MQTT ペイロードの `raw.clear` に対応）
 - `R-G` は赤/緑分離の目安（完了基準: 差 ≥ 100）
+- MQTT ペイロードには電流値そのものではなく、`power.activeMsBeforePublish`、
+  `network.networkConnectMs`、`network.mqttConnectMs`、`power.sleepSeconds` を含める。
+  USB 電流計や電源ロガーの実測値と突き合わせて消費電力を評価する。
 
 ## 関連 Issue
 
