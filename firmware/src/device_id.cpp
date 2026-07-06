@@ -9,7 +9,7 @@
 namespace {
 
 char s_deviceId[32];
-char s_mqttTopic[96];
+char s_mqttTopic[128];
 bool s_initialized = false;
 
 void formatMacDeviceId(uint8_t mac[6]) {
@@ -35,6 +35,10 @@ void initDeviceIdentity() {
 
   if (PSS_MQTT_TOPIC[0] != '\0') {
     snprintf(s_mqttTopic, sizeof(s_mqttTopic), "%s", PSS_MQTT_TOPIC);
+  } else if (PSS_MQTT_BASIC_INGEST_RULE[0] != '\0') {
+    snprintf(s_mqttTopic, sizeof(s_mqttTopic),
+             "$aws/rules/%s/parking-status/%s/telemetry",
+             PSS_MQTT_BASIC_INGEST_RULE, s_deviceId);
   } else {
     snprintf(s_mqttTopic, sizeof(s_mqttTopic), "parking-status/%s/telemetry",
              s_deviceId);

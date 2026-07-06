@@ -150,6 +150,69 @@ mosquitto_sub -h 192.168.0.42 -t 'parking-status/#' -F '%I %t %p'
   `network.networkConnectMs`、`network.mqttConnectMs`、`power.sleepSeconds` を含める。
   USB 電流計や電源ロガーの実測値と突き合わせて消費電力を評価する。
 
+## AWS IoT Core 切り替え（#6 → #27）
+
+証明書が `firmware/certs/` に作成済みであれば、同じ全件送信ファームを
+AWS IoT Core 向けにビルドできる。
+
+必要な証明書ファイル:
+
+- `certs/AmazonRootCA1.pem`
+- `certs/device.pem.crt`
+- `certs/private.pem.key`
+
+`include/secrets.h` の MQTT 設定を AWS IoT Core 向けに変更する。
+
+```cpp
+#define PSS_MQTT_HOST "xxxxxxxxxxxxxx-ats.iot.ap-northeast-1.amazonaws.com"
+#define PSS_MQTT_PORT 8883
+#define PSS_MQTT_USE_TLS 1
+#define PSS_MQTT_BASIC_INGEST_RULE "parking_status_telemetry"
+#define PSS_MQTT_TOPIC ""
+```
+
+Basic Ingest を使わない場合は、通常トピック
+`parking-status/xiao-e83dc1fb05fc/telemetry` を指定する。
+
+```bash
+cd firmware
+pio run -e xiao-s3-aws -t upload
+pio device monitor -e xiao-s3-aws
+```
+
+AWS 接続も現時点では **全件送信** のまま行う。変化時のみ送信・heartbeat は
+24h ローカル検証後の次ステップとして扱う。
+
+### LTE-M + AWS IoT Core（推奨 PoC 経路）
+
+Grove UART に LTE-M モジュール（SIM7080G）を接続し、SORACOM SIM で AWS IoT Core へ
+MQTT over TLS する。Wi-Fi は使わない。
+
+`secrets.h` 例:
+
+```cpp
+#define PSS_WIFI_SSID ""
+#define PSS_WIFI_PASSWORD ""
+#define PSS_LTE_ENABLED 1
+#define PSS_LTE_ONLY 1
+#define PSS_MQTT_HOST "xxxxxxxxxxxxxx-ats.iot.ap-northeast-1.amazonaws.com"
+#define PSS_MQTT_PORT 8883
+#define PSS_MQTT_BASIC_INGEST_RULE "parking_status_telemetry"
+```
+
+```bash
+cd firmware
+# 開発中（Deep Sleep なし・AT ログあり）
+pio run -e xiao-s3-aws-lte-debug -t upload
+pio device monitor -e xiao-s3-aws-lte-debug
+
+# 本番運用（Deep Sleep あり）
+pio run -e xiao-s3-aws-lte -t upload
+```
+
+TLS は ESP32 側の `SSLClient` が `TinyGsmClient` をラップして処理する。
+LTE 接続は Wi-Fi より時間がかかるため、`xiao-s3-aws-lte` は active 上限を 120 秒にしている。
+
 ## 関連 Issue
 
 | Issue | 内容 |

@@ -6,6 +6,10 @@
 #include <MQTT.h>
 #include <TinyGsmClient.h>
 #include <WiFi.h>
+#include <WiFiClientSecure.h>
+#if PSS_MQTT_USE_TLS
+#include <SSLClient.h>
+#endif
 #include <esp_system.h>
 #include <string.h>
 #include <time.h>
@@ -14,24 +18,93 @@
 #include "config.h"
 #include "device_id.h"
 
+RTC_DATA_ATTR static bool ltePlanDReady = false;
+
 namespace {
 
 WiFiClient wifiClient;
+WiFiClientSecure wifiSecureClient;
 MQTTClient wifiMqtt(1024);
 
 TinyGsm modem(Serial1);
 TinyGsmClient lteClient(modem);
+#if PSS_MQTT_USE_TLS
+SSLClient lteSecureClient(&lteClient);
+#endif
 MQTTClient lteMqtt(1024);
 
 MQTTClient* activeMqtt = nullptr;
 TransportKind activeTransport = TransportKind::kNone;
 
+#if PSS_MQTT_USE_TLS
+extern const char awsRootCa[] asm("_binary_certs_AmazonRootCA1_pem_start");
+extern const char deviceCert[] asm("_binary_certs_device_pem_crt_start");
+extern const char privateKey[] asm("_binary_certs_private_pem_key_start");
+#endif
+
 bool hasText(const char* value) {
   return value != nullptr && value[0] != '\0';
 }
 
+Client& wifiNetworkClient() {
+#if PSS_MQTT_USE_TLS
+  return wifiSecureClient;
+#else
+  return wifiClient;
+#endif
+}
+
+Client& lteNetworkClient() {
+#if PSS_MQTT_USE_TLS
+  return lteSecureClient;
+#else
+  return lteClient;
+#endif
+}
+
+void resetMqttSession(MQTTClient& mqtt, Client& net) {
+  mqtt.disconnect();
+  net.stop();
+}
+
+void resetWifiMqttLink() {
+  resetMqttSession(wifiMqtt, wifiNetworkClient());
+}
+
+void resetLteMqttLink() {
+  resetMqttSession(lteMqtt, lteNetworkClient());
+}
+
+void configureWifiTlsClient() {
+#if PSS_MQTT_USE_TLS
+  resetWifiMqttLink();
+  wifiSecureClient.setCACert(awsRootCa);
+  wifiSecureClient.setCertificate(deviceCert);
+  wifiSecureClient.setPrivateKey(privateKey);
+  wifiSecureClient.setHandshakeTimeout(30);
+  wifiSecureClient.setTimeout(config::kMqttConnectTimeoutMs / 1000);
+#endif
+}
+
+void configureLteTlsClient() {
+#if PSS_MQTT_USE_TLS
+  resetLteMqttLink();
+  lteSecureClient.setCACert(awsRootCa);
+  lteSecureClient.setCertificate(deviceCert);
+  lteSecureClient.setPrivateKey(privateKey);
+  // SSLClient::setTimeout() expects milliseconds (unlike WiFiClientSecure).
+  lteSecureClient.setTimeout(config::kMqttConnectTimeoutMs);
+  lteSecureClient.setHandshakeTimeout(60);
+#endif
+}
+
 String mqttClientId() {
-  return String(getDeviceId()) + "-" + String(static_cast<uint32_t>(esp_random()), HEX);
+  // AWS IoT policy allows iot:Connect only for client/${iot:Connection.Thing.ThingName}.
+  if (config::kMqttUseTls) {
+    return String(getDeviceId());
+  }
+  return String(getDeviceId()) + "-" +
+         String(static_cast<uint32_t>(esp_random()), HEX);
 }
 
 void logModemAt(const char* cmd) {
@@ -96,9 +169,16 @@ bool beginLteUartAndModem() {
   Serial1.begin(LTE_UART_BAUD, SERIAL_8N1, LTE_UART_RX, LTE_UART_TX);
   delay(1000);
   if (!modem.init()) {
+    ltePlanDReady = false;
     return false;
   }
-  prepareLteForPlanD();
+  if (!ltePlanDReady) {
+    Serial.println("LTE plan-D setup (first boot this power cycle)");
+    if (!prepareLteForPlanD()) {
+      return false;
+    }
+    ltePlanDReady = true;
+  }
   return true;
 }
 
@@ -122,8 +202,11 @@ bool connectMqtt(MQTTClient& mqtt, Client& net, TransportMetrics& metrics) {
   }
 
   metrics.mqttConnectMs = millis() - start;
-  Serial.printf("MQTT connect failed host=%s port=%u\n", config::kMqttHost,
-                config::kMqttPort);
+  Serial.printf("MQTT connect failed host=%s port=%u tls=%s clientId=%s err=%d\n",
+                config::kMqttHost, config::kMqttPort,
+                config::kMqttUseTls ? "yes" : "no", clientId.c_str(),
+                mqtt.lastError());
+  resetMqttSession(mqtt, net);
   return false;
 }
 
@@ -156,11 +239,18 @@ bool connectWifi(TransportMetrics& metrics) {
 
   metrics.transport = TransportKind::kWifi;
   metrics.wifiRssi = WiFi.RSSI();
-  Serial.printf("Wi-Fi connected ip=%s rssi=%ld\n",
+  Serial.printf("Wi-Fi connected ip=%s rssi=%ld mqtt_tls=%s\n",
                 WiFi.localIP().toString().c_str(),
-                static_cast<long>(metrics.wifiRssi));
+                static_cast<long>(metrics.wifiRssi),
+                config::kMqttUseTls ? "yes" : "no");
 
-  if (!connectMqtt(wifiMqtt, wifiClient, metrics)) {
+  if (config::kMqttUseTls) {
+    syncClock(config::kTimeSyncTimeoutMs);
+  }
+
+  configureWifiTlsClient();
+  if (!connectMqtt(wifiMqtt, wifiNetworkClient(), metrics)) {
+    resetWifiMqttLink();
     WiFi.disconnect(true);
     WiFi.mode(WIFI_OFF);
     return false;
@@ -174,6 +264,10 @@ bool connectWifi(TransportMetrics& metrics) {
 bool connectLte(TransportMetrics& metrics) {
   if (!config::kLteEnabled) {
     return false;
+  }
+
+  if (config::kLteOnly) {
+    WiFi.mode(WIFI_OFF);
   }
 
   Serial.println("LTE-M connecting");
@@ -197,10 +291,20 @@ bool connectLte(TransportMetrics& metrics) {
 
   metrics.transport = TransportKind::kLte;
   metrics.networkConnectMs = millis() - start;
-  Serial.printf("LTE-M connected operator=%s\n", modem.getOperator().c_str());
+  Serial.printf("LTE-M connected operator=%s csq=%d\n",
+                modem.getOperator().c_str(), modem.getSignalQuality());
 
-  if (!connectMqtt(lteMqtt, lteClient, metrics)) {
+  if (config::kMqttUseTls) {
+    if (!syncClock(config::kTimeSyncTimeoutMs)) {
+      Serial.println("WARN: time sync failed before TLS; continuing");
+    }
+    configureLteTlsClient();
+  }
+
+  if (!connectMqtt(lteMqtt, lteNetworkClient(), metrics)) {
+    resetLteMqttLink();
     modem.gprsDisconnect();
+    modem.poweroff();
     return false;
   }
 
@@ -216,12 +320,23 @@ bool reconnectTransport(TransportMetrics& metrics) {
       return true;
     }
     Serial.println("MQTT reconnect (Wi-Fi still up)");
-    return connectMqtt(wifiMqtt, wifiClient, metrics);
+    configureWifiTlsClient();
+    return connectMqtt(wifiMqtt, wifiNetworkClient(), metrics);
   }
 
-  if (activeTransport == TransportKind::kLte && activeMqtt == &lteMqtt &&
-      activeMqtt->connected()) {
-    return true;
+  if (activeTransport == TransportKind::kLte && activeMqtt == &lteMqtt) {
+    if (activeMqtt->connected()) {
+      return true;
+    }
+    if (!modem.isGprsConnected()) {
+      disconnectTransport();
+      return connectTransport(metrics);
+    }
+    Serial.println("MQTT reconnect (LTE still up)");
+    if (config::kMqttUseTls) {
+      configureLteTlsClient();
+    }
+    return connectMqtt(lteMqtt, lteNetworkClient(), metrics);
   }
 
   disconnectTransport();
@@ -229,6 +344,10 @@ bool reconnectTransport(TransportMetrics& metrics) {
 }
 
 }  // namespace
+
+void resetLteRadioCache() {
+  ltePlanDReady = false;
+}
 
 bool connectTransport(TransportMetrics& metrics) {
   const uint8_t savedAttempts = metrics.transportAttempts;
@@ -363,6 +482,11 @@ void printLteProbeResult(const LteProbeResult& result) {
 }
 
 bool syncClock(uint32_t timeoutMs) {
+  time_t now = time(nullptr);
+  if (now > 1700000000) {
+    return true;
+  }
+
   configTime(0, 0, config::kNtpServer);
 
   const uint32_t start = millis();
@@ -411,14 +535,16 @@ int activeMqttState() {
 }
 
 void disconnectTransport() {
-  if (activeMqtt != nullptr && activeMqtt->connected()) {
-    activeMqtt->disconnect();
-  }
+  wifiMqtt.disconnect();
+  lteMqtt.disconnect();
 
   if (activeTransport == TransportKind::kWifi) {
+    wifiClient.stop();
+    wifiSecureClient.stop();
     WiFi.disconnect(true);
     WiFi.mode(WIFI_OFF);
   } else if (activeTransport == TransportKind::kLte) {
+    resetLteMqttLink();
     modem.gprsDisconnect();
     modem.poweroff();
   }

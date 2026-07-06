@@ -390,6 +390,7 @@ void setup() {
   } else {
     consecutiveTimerWakes = 0;
     lastSleepEntryUs = 0;
+    resetLteRadioCache();
   }
   computeWakeDiagnostics();
   if (wakeDiag.hasPrevSleep) {

@@ -45,3 +45,4 @@ bool publishTelemetryConfirmed(const char* payload, TransportMetrics& metrics);
 int activeMqttState();
 void disconnectTransport();
 const char* transportName(TransportKind transport);
+void resetLteRadioCache();

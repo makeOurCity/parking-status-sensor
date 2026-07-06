@@ -42,9 +42,19 @@
 #define PSS_MQTT_PORT 1883
 #endif
 
+#ifndef PSS_MQTT_USE_TLS
+#define PSS_MQTT_USE_TLS 0
+#endif
+
 // Empty PSS_MQTT_TOPIC → parking-status/{deviceId}/telemetry
 #ifndef PSS_MQTT_TOPIC
 #define PSS_MQTT_TOPIC ""
+#endif
+
+// Empty by default. If set, firmware builds:
+// $aws/rules/{rule}/parking-status/{deviceId}/telemetry
+#ifndef PSS_MQTT_BASIC_INGEST_RULE
+#define PSS_MQTT_BASIC_INGEST_RULE ""
 #endif
 
 #ifndef PSS_MQTT_USERNAME
@@ -138,6 +148,7 @@ constexpr uint32_t kWifiConnectTimeoutMs = PSS_WIFI_CONNECT_TIMEOUT_MS;
 
 constexpr const char* kMqttHost = PSS_MQTT_HOST;
 constexpr uint16_t kMqttPort = PSS_MQTT_PORT;
+constexpr bool kMqttUseTls = PSS_MQTT_USE_TLS;
 constexpr const char* kMqttUsername = PSS_MQTT_USERNAME;
 constexpr const char* kMqttPassword = PSS_MQTT_PASSWORD;
 constexpr uint32_t kMqttConnectTimeoutMs = PSS_MQTT_CONNECT_TIMEOUT_MS;
