@@ -492,13 +492,14 @@ bool connectTransport(TransportMetrics& metrics) {
   return connectLte(metrics);
 }
 
-bool connectTransportWithRetry(TransportMetrics& metrics, uint32_t cycleStartMs) {
+bool connectTransportWithRetry(TransportMetrics& metrics, uint32_t cycleStartMs,
+                               uint32_t budgetMs) {
   metrics = TransportMetrics{};
   metrics.transportAttempts = 0;
 
   for (uint8_t attempt = 1; attempt <= config::kTransportMaxAttempts; ++attempt) {
-    if ((millis() - cycleStartMs) >= config::kCycleMaxActiveMs) {
-      Serial.println("transport retry budget exhausted (active time)");
+    if ((millis() - cycleStartMs) >= budgetMs) {
+      Serial.println("transport retry budget exhausted (connect phase)");
       break;
     }
 
@@ -662,6 +663,13 @@ int activeMqttState() {
     return -1;
   }
   return activeMqtt->connected() ? 0 : -2;
+}
+
+int activeMqttLastError() {
+  if (activeMqtt == nullptr) {
+    return 0;
+  }
+  return activeMqtt->lastError();
 }
 
 void disconnectTransport() {

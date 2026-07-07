@@ -2,7 +2,7 @@
 
 LiPo + `xiao-s3-aws-lte` で観測された **active 約68秒** の原因切り分けと、ファームウェア改善の記録。
 
-- 関連 Issue: #30（時刻同期）、#32（outbox ラッチ・Fix B）
+- 関連 Issue: #30（時刻同期）、#32（送信サイクル再設計・SyncLedger）
 - 実装 PR: `feature/30-lte-modem-tls`（モデム TLS + Fix A/C）
 - 消費電力 mAh 実測: [power-measurement.md](power-measurement.md)（Issue #31）
 
@@ -50,7 +50,7 @@ LiPo + `xiao-s3-aws-lte` で観測された **active 約68秒** の原因切り�
 1. 直接 publish の PUBACK 確認が失敗 → outbox に enqueue
 2. 以降: flush 成功 + 直接 publish 失敗を毎サイクル反復 → active ≈ `PSS_CYCLE_MAX_ACTIVE_MS`（120秒）
 
-→ Fix B は Issue **#32** で追跡。
+→ 送信サイクル再設計（Outbox 廃止・SyncLedger）は Issue **#32** で追跡（[sync-delivery-design.md](sync-delivery-design.md)）。
 
 ### 2.4 `network.*` 欠落（Fix C・済）
 
