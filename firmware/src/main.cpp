@@ -10,8 +10,8 @@
 #include "classify.h"
 #include "config.h"
 #include "device_id.h"
-#include "outbox.h"
 #include "sensor.h"
+#include "sync_ledger.h"
 #include "transport.h"
 
 namespace {
@@ -96,9 +96,10 @@ bool formatTimestamp(char* out, size_t outSize) {
 }
 
 void sleepNow(const char* reason, uint32_t activeMs) {
-  Serial.printf("sleep reason=%s seconds=%lu active_ms=%lu outbox=%u\n", reason,
+  Serial.printf("sleep reason=%s seconds=%lu active_ms=%lu pending=%d\n", reason,
                 static_cast<unsigned long>(config::kSleepSeconds),
-                static_cast<unsigned long>(activeMs), outboxCount());
+                static_cast<unsigned long>(activeMs),
+                syncLedger().pendingValid ? 1 : 0);
   Serial.flush();
 
   disconnectTransport();
@@ -118,8 +119,7 @@ void sleepNow(const char* reason, uint32_t activeMs) {
 
 void buildPayload(const RawSample& sample, ParkingStatus status,
                   const TransportMetrics& transportMetrics, uint32_t activeMs,
-                  bool deliveryConfirmed, uint8_t publishAttempts,
-                  uint8_t outboxPending, char* out, size_t outSize) {
+                  uint8_t publishAttempts, char* out, size_t outSize) {
   JsonDocument doc;
 
   char timestamp[25]{};
@@ -167,133 +167,87 @@ void buildPayload(const RawSample& sample, ParkingStatus status,
   network["publishMs"] = transportMetrics.publishMs;
   network["transportAttempts"] = transportMetrics.transportAttempts;
   network["mqttQos"] = config::kMqttQos;
-  network["deliveryConfirmed"] = deliveryConfirmed;
   network["publishAttempts"] = publishAttempts;
-  network["outboxPending"] = outboxPending;
+
+  // Delivery/diagnostic ledger reflecting state up to the previous cycle.
+  // deliveryConfirmed is intentionally omitted: QoS1 cannot rewrite an
+  // already-sent message, so confirmation is expressed via sync.prevOutcome.
+  const SyncLedger& ledger = syncLedger();
+  JsonObject sync = doc["sync"].to<JsonObject>();
+  sync["lastConfirmedStatus"] = statusToString(ledger.lastConfirmedStatus);
+  sync["lastConfirmedBootCount"] = ledger.lastConfirmedBoot;
+  sync["pending"] = ledger.pendingValid;
+  sync["prevOutcome"] = cycleOutcomeToString(ledger.prevOutcome);
+  sync["prevAttempts"] = ledger.prevAttempts;
+  sync["prevMqttError"] = ledger.prevMqttError;
+  sync["prevActiveMs"] = ledger.prevActiveMs;
 
   serializeJson(doc, out, outSize);
 }
 
-bool publishCurrentWithRetry(const RawSample& sample, ParkingStatus status,
-                             TransportMetrics& metrics, uint32_t cycleStart,
-                             uint8_t outboxPending, char* payload,
-                             size_t payloadSize, PublishResult& result) {
+// PoC keeps full transmission (always publish). The change-only path (#25) is
+// present as a skeleton but disabled unless PSS_CHANGE_ONLY_SEND is defined.
+bool mustPublish(ParkingStatus status) {
+#if defined(PSS_CHANGE_ONLY_SEND) && PSS_CHANGE_ONLY_SEND
+  const SyncLedger& ledger = syncLedger();
+  if (ledger.pendingValid) {
+    return true;  // retry the undelivered observation this cycle
+  }
+  return status != ledger.lastConfirmedStatus;  // heartbeat added in #25
+#else
+  (void)status;
+  return true;  // PoC: full transmission every cycle
+#endif
+}
+
+// Publish the current observation with bounded retries inside the publish-phase
+// budget. Between attempts only the MQTT layer is reconnected (LTE bearer kept,
+// modem never powered off here — that happens only at sleep). Returns true on
+// PUBACK.
+bool publishWithRetry(const RawSample& sample, ParkingStatus status,
+                      TransportMetrics& metrics, uint32_t cycleStart,
+                      bool faultInject, char* payload, size_t payloadSize,
+                      PublishResult& result) {
   result = PublishResult{};
+  const uint32_t phaseStart = millis();
 
   for (uint8_t attempt = 1; attempt <= config::kPublishMaxAttempts; ++attempt) {
     if ((millis() - cycleStart) >= config::kCycleMaxActiveMs) {
-      Serial.println("publish retry budget exhausted (active time)");
+      Serial.println("publish budget exhausted (cycle)");
+      break;
+    }
+    if ((millis() - phaseStart) >= config::kPublishPhaseMs) {
+      Serial.println("publish budget exhausted (phase)");
       break;
     }
 
     if (attempt > 1) {
       delay(config::kRetryDelayMs);
       if (!reconnectActiveTransport(metrics)) {
-        disconnectTransport();
-        if (!connectTransport(metrics)) {
-          continue;
-        }
+        continue;
       }
     }
 
     result.attempts = attempt;
     Serial.printf("publish attempt %u/%u\n", attempt, config::kPublishMaxAttempts);
 
-    // Build immediately before publish so broker JSON matches PUBACK result.
-    buildPayload(sample, status, metrics, millis() - cycleStart, true, attempt,
-                 outboxPending, payload, payloadSize);
+    // Build immediately before publish. sync.* reflects the previous cycle,
+    // which is the correct state to report alongside this observation.
+    buildPayload(sample, status, metrics, millis() - cycleStart, attempt, payload,
+                 payloadSize);
 
-    if (publishTelemetryConfirmed(payload, metrics)) {
-      buildPayload(sample, status, metrics, millis() - cycleStart, true, attempt,
-                   outboxPending, payload, payloadSize);
-      result.confirmed = true;
-      return true;
+    if (faultInject) {
+      Serial.println("FAULT INJECT: forcing publish failure");
+      continue;
     }
 
-    disconnectTransport();
-    if (!connectTransport(metrics)) {
-      continue;
+    if (publishTelemetryConfirmed(payload, metrics)) {
+      result.confirmed = true;
+      return true;
     }
   }
 
   return false;
-}
-
-bool flushOutbox(TransportMetrics& metrics, uint32_t cycleStart) {
-  char pending[kPayloadSize];
-  char patched[kPayloadSize];
-
-  while (outboxCount() > 0) {
-    if ((millis() - cycleStart) >= config::kCycleMaxActiveMs) {
-      Serial.println("outbox flush budget exhausted");
-      return false;
-    }
-
-    if (!outboxPeek(pending, sizeof(pending))) {
-      Serial.println("outbox peek failed");
-      return false;
-    }
-
-    Serial.printf("outbox flush (%u pending)\n", outboxCount());
-    PublishResult result{};
-
-    for (uint8_t attempt = 1; attempt <= config::kPublishMaxAttempts; ++attempt) {
-      if ((millis() - cycleStart) >= config::kCycleMaxActiveMs) {
-        break;
-      }
-
-      if (attempt > 1) {
-        delay(config::kRetryDelayMs);
-        if (!reconnectActiveTransport(metrics)) {
-          disconnectTransport();
-          if (!connectTransport(metrics)) {
-            continue;
-          }
-        }
-      }
-
-      JsonDocument doc;
-      if (deserializeJson(doc, pending) != DeserializationError::Ok) {
-        Serial.println("outbox: invalid JSON, dropping");
-        outboxDequeue();
-        break;
-      }
-
-      // Preserve the enqueue-time network metadata (transport, connect timings)
-      // instead of replacing the object, so outbox replays stay diagnosable.
-      JsonObject network = doc["network"].is<JsonObject>()
-                               ? doc["network"].as<JsonObject>()
-                               : doc["network"].to<JsonObject>();
-      network["deliveryConfirmed"] = true;
-      network["publishAttempts"] = attempt;
-      network["mqttQos"] = config::kMqttQos;
-
-      if (serializeJson(doc, patched, sizeof(patched)) == 0) {
-        Serial.println("outbox: serialize failed");
-        return false;
-      }
-
-      result.attempts = attempt;
-      if (publishTelemetryConfirmed(patched, metrics)) {
-        result.confirmed = true;
-        outboxDequeue();
-        Serial.println(patched);
-        break;
-      }
-
-      disconnectTransport();
-      if (!connectTransport(metrics)) {
-        continue;
-      }
-    }
-
-    if (!result.confirmed) {
-      Serial.println("outbox flush failed, keeping oldest entry");
-      return false;
-    }
-  }
-
-  return true;
 }
 
 void runLteTest() {
@@ -312,17 +266,24 @@ void runLteTest() {
 
 void runCycle() {
   const uint32_t cycleStart = millis();
-  const uint8_t outboxAtStart = outboxCount();
+  static uint32_t cycleIndex = 0;
+  ++cycleIndex;
 
-  Serial.printf("board=%s boot=%lu wake=%s reset=%s outbox=%u\n", BOARD_NAME,
-                static_cast<unsigned long>(bootCount),
+  const SyncLedger& prev = syncLedger();
+  Serial.printf("board=%s boot=%lu wake=%s reset=%s prevOutcome=%s pending=%d\n",
+                BOARD_NAME, static_cast<unsigned long>(bootCount),
                 wakeCauseToString(esp_sleep_get_wakeup_cause()),
-                resetReasonToString(esp_reset_reason()), outboxAtStart);
+                resetReasonToString(esp_reset_reason()),
+                cycleOutcomeToString(prev.prevOutcome),
+                prev.pendingValid ? 1 : 0);
 
   if (!initSensor()) {
     Serial.println("ERROR: VEML6040 not found at 0x10");
     scanI2cBus();
-    sleepNow("sensor-error", millis() - cycleStart);
+    const uint32_t activeMs = millis() - cycleStart;
+    ledgerRecordFailure(CycleOutcome::kSensorError, ParkingStatus::kUnknown,
+                        bootCount, 0, 0, activeMs);
+    sleepNow("sensor-error", activeMs);
     return;
   }
 
@@ -336,53 +297,67 @@ void runCycle() {
                 sample.green, sample.blue, sample.white, rgDiff,
                 statusToString(status));
 
-  char payload[kPayloadSize]{};
-  TransportMetrics transportMetrics{};
-  buildPayload(sample, status, transportMetrics, millis() - cycleStart, false,
-               0, outboxAtStart, payload, sizeof(payload));
-
-  if (!connectTransportWithRetry(transportMetrics, cycleStart)) {
-    Serial.println("ERROR: no transport available, saving to outbox");
-    outboxEnqueue(payload);
-    sleepNow("transport-error-outbox", millis() - cycleStart);
+  if (!mustPublish(status)) {
+    const uint32_t activeMs = millis() - cycleStart;
+    ledgerRecordFailure(CycleOutcome::kSkipped, status, bootCount, 0, 0, activeMs);
+    sleepNow("skipped", activeMs);
     return;
   }
 
-  syncClock(config::kTimeSyncTimeoutMs);
+  char payload[kPayloadSize]{};
+  TransportMetrics metrics{};
 
-  if (!flushOutbox(transportMetrics, cycleStart)) {
-    Serial.println("outbox not fully flushed");
+  if (!connectTransportWithRetry(metrics, cycleStart, config::kConnectPhaseMs)) {
+    const uint32_t activeMs = millis() - cycleStart;
+    const int16_t mqttErr = static_cast<int16_t>(activeMqttLastError());
+    Serial.println("ERROR: connect phase failed");
+    ledgerRecordFailure(CycleOutcome::kConnectFailed, status, bootCount, 0,
+                        mqttErr, activeMs);
+    sleepNow("connect-failed", activeMs);
+    return;
   }
 
-  PublishResult publishResult{};
-  if (publishCurrentWithRetry(sample, status, transportMetrics, cycleStart,
-                              outboxCount(), payload, sizeof(payload),
-                              publishResult)) {
+  // LTE clock is synced inside connect (ensureLteClock via NITZ/+CNTP).
+  // syncClock() only does work on the Wi-Fi path; no-op on LTE-only builds.
+  syncClock(config::kTimeSyncTimeoutMs);
+
+  const bool faultInject =
+      config::kFaultInjectPublishFails > 0 &&
+      cycleIndex <= config::kFaultInjectPublishFails;
+
+  PublishResult pub{};
+  const bool ok = publishWithRetry(sample, status, metrics, cycleStart,
+                                   faultInject, payload, sizeof(payload), pub);
+  const uint32_t activeMs = millis() - cycleStart;
+  const int16_t mqttErr = static_cast<int16_t>(activeMqttLastError());
+
+  if (ok) {
+    ledgerRecordConfirmed(status, bootCount, pub.attempts, mqttErr, activeMs);
     Serial.println(payload);
     Serial.printf(
         "cycle active_ms=%lu net=%lu tcpTls=%lu mqtt=%lu publish_ms=%lu "
-        "confirmed=true attempts=%u outbox=%u\n",
-        static_cast<unsigned long>(millis() - cycleStart),
-        static_cast<unsigned long>(transportMetrics.networkConnectMs),
-        static_cast<unsigned long>(transportMetrics.tcpTlsConnectMs),
-        static_cast<unsigned long>(transportMetrics.mqttHandshakeMs),
-        static_cast<unsigned long>(transportMetrics.publishMs),
-        publishResult.attempts, outboxCount());
-    sleepNow("confirmed", millis() - cycleStart);
+        "confirmed=true attempts=%u\n",
+        static_cast<unsigned long>(activeMs),
+        static_cast<unsigned long>(metrics.networkConnectMs),
+        static_cast<unsigned long>(metrics.tcpTlsConnectMs),
+        static_cast<unsigned long>(metrics.mqttHandshakeMs),
+        static_cast<unsigned long>(metrics.publishMs), pub.attempts);
+    sleepNow("confirmed", activeMs);
     return;
   }
 
-  buildPayload(sample, status, transportMetrics, millis() - cycleStart, false,
-               publishResult.attempts, outboxCount(), payload, sizeof(payload));
-  outboxEnqueue(payload);
+  const CycleOutcome outcome = (activeMs >= config::kCycleMaxActiveMs)
+                                   ? CycleOutcome::kBudgetExhausted
+                                   : CycleOutcome::kPublishFailed;
+  ledgerRecordFailure(outcome, status, bootCount, pub.attempts, mqttErr, activeMs);
   Serial.println(payload);
   Serial.printf(
-      "cycle active_ms=%lu publish_ms=%lu confirmed=false attempts=%u "
-      "outbox=%u\n",
-      static_cast<unsigned long>(millis() - cycleStart),
-      static_cast<unsigned long>(transportMetrics.publishMs),
-      publishResult.attempts, outboxCount());
-  sleepNow("outbox-saved", millis() - cycleStart);
+      "cycle active_ms=%lu publish_ms=%lu confirmed=false outcome=%s "
+      "attempts=%u\n",
+      static_cast<unsigned long>(activeMs),
+      static_cast<unsigned long>(metrics.publishMs),
+      cycleOutcomeToString(outcome), pub.attempts);
+  sleepNow(cycleOutcomeToString(outcome), activeMs);
 }
 
 }  // namespace
@@ -391,9 +366,9 @@ void setup() {
   Serial.begin(115200);
   waitForSerial();
   initDeviceIdentity();
-  initOutbox();
-  Serial.printf("deviceId=%s mqttTopic=%s outbox=%u\n", getDeviceId(),
-                getMqttTopic(), outboxCount());
+  initSyncLedger();
+  Serial.printf("deviceId=%s mqttTopic=%s pending=%d\n", getDeviceId(),
+                getMqttTopic(), syncLedger().pendingValid ? 1 : 0);
   bootCount++;
 
   const esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();

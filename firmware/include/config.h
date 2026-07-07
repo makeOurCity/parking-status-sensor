@@ -151,6 +151,21 @@
 #define PSS_CYCLE_MAX_ACTIVE_MS 60000
 #endif
 
+// Phase budgets (subsets of the whole-cycle budget). See docs/sync-delivery-design.md §4.1.
+#ifndef PSS_CONNECT_PHASE_MS
+#define PSS_CONNECT_PHASE_MS 45000
+#endif
+
+#ifndef PSS_PUBLISH_PHASE_MS
+#define PSS_PUBLISH_PHASE_MS 20000
+#endif
+
+// Debug: force publish failures to exercise the failure path (§5.1).
+// 0 = disabled. N > 0 = fail the direct publish for the first N cycles per power cycle.
+#ifndef PSS_FAULT_INJECT_PUBLISH_FAILS
+#define PSS_FAULT_INJECT_PUBLISH_FAILS 0
+#endif
+
 namespace config {
 
 constexpr int kStatusThreshold = PSS_STATUS_THRESHOLD;
@@ -189,5 +204,8 @@ constexpr uint8_t kTransportMaxAttempts = PSS_TRANSPORT_MAX_ATTEMPTS;
 constexpr uint8_t kPublishMaxAttempts = PSS_PUBLISH_MAX_ATTEMPTS;
 constexpr uint32_t kRetryDelayMs = PSS_RETRY_DELAY_MS;
 constexpr uint32_t kCycleMaxActiveMs = PSS_CYCLE_MAX_ACTIVE_MS;
+constexpr uint32_t kConnectPhaseMs = PSS_CONNECT_PHASE_MS;
+constexpr uint32_t kPublishPhaseMs = PSS_PUBLISH_PHASE_MS;
+constexpr uint8_t kFaultInjectPublishFails = PSS_FAULT_INJECT_PUBLISH_FAILS;
 
 }  // namespace config

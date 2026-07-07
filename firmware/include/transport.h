@@ -38,13 +38,15 @@ struct LteProbeResult {
 };
 
 bool connectTransport(TransportMetrics& metrics);
-bool connectTransportWithRetry(TransportMetrics& metrics, uint32_t cycleStartMs);
+bool connectTransportWithRetry(TransportMetrics& metrics, uint32_t cycleStartMs,
+                               uint32_t budgetMs);
 bool reconnectActiveTransport(TransportMetrics& metrics);
 bool probeLteModem(LteProbeResult& result);
 void printLteProbeResult(const LteProbeResult& result);
 bool syncClock(uint32_t timeoutMs);
 bool publishTelemetryConfirmed(const char* payload, TransportMetrics& metrics);
 int activeMqttState();
+int activeMqttLastError();
 void disconnectTransport();
 const char* transportName(TransportKind transport);
 void resetLteRadioCache();

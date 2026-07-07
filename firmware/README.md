@@ -281,7 +281,7 @@ LiPo 残量測定のためバッテリーを抜き差しした。直後のログ
 
 **未解決・フォロー**
 
-- Fix B: boot 43 型 outbox ラッチ劣化モード（#32）
+- 送信サイクル再設計（SyncLedger、旧 outbox ラッチ）: #32 → [docs/sync-delivery-design.md](../docs/sync-delivery-design.md)
 - 本番 LiPo 長時間試験（定常 active・`wakeCause: timer` 確認）
 - 電流計による消費電力の実測（#31 → [docs/power-measurement.md](../docs/power-measurement.md)）
 
