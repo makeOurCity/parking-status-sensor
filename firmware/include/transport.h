@@ -14,6 +14,8 @@ struct TransportMetrics {
   int32_t wifiRssi = 0;
   uint32_t networkConnectMs = 0;
   uint32_t mqttConnectMs = 0;
+  uint32_t tcpTlsConnectMs = 0;
+  uint32_t mqttHandshakeMs = 0;
   uint32_t publishMs = 0;
   uint8_t transportAttempts = 0;
 };

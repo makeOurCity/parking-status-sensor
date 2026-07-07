@@ -210,27 +210,36 @@ pio device monitor -e xiao-s3-aws-lte-debug
 pio run -e xiao-s3-aws-lte -t upload
 ```
 
-TLS は ESP32 側の `SSLClient` が `TinyGsmClient` をラップして処理する。
+TLS は **SIM7080 モデム内蔵 TLS**（`GsmClientSecureSIM7080` + mTLS）で AWS IoT Core へ接続する。
+証明書は初回にモデム FS へアップロードし、以降は NVS フラグでスキップする（`PSS_LTE_FORCE_CERT_UPLOAD=1` で再投入）。
+
+従来の ESP32 `SSLClient` → UART AT 平文 TCP 経由は `PSS_LTE_MODEM_TLS=0` のときのみ（非推奨）。
+
 LTE 接続は Wi-Fi より時間がかかるため、`xiao-s3-aws-lte` は active 上限を 120 秒にしている。
 
 #### 実測タイミングと送信間隔（2026-07 実機）
 
-LiPo + Deep Sleep + `xiao-s3-aws-lte` で AWS IoT Core へ送信した際の目安:
+LiPo + Deep Sleep + `xiao-s3-aws-lte` + **モデム内蔵 TLS** で AWS IoT Core へ送信した際の目安:
 
-| 指標 | 実測 |
-|---|---|
-| `networkConnectMs`（LTE 接続） | 約2.5〜14秒（2回目以降は短いことが多い） |
-| `mqttConnectMs`（TLS + MQTT） | 約34〜35秒 |
-| `activeMsBeforePublish` | 約68〜77秒 |
-| クラウド受信間隔 | 約8分（`PSS_SLEEP_SECONDS=300` 設定時） |
+| 指標 | 改善前（ESP32 TLS） | 改善後（モデム TLS + Fix A） |
+|---|---|---|
+| `networkConnectMs`（LTE 接続） | 約2.5秒 | 約2.5秒（初回コールドスタートは〜10秒） |
+| `tcpTlsConnectMs` | （未分解、`mqttConnectMs` に含む） | 約 **1.5秒** |
+| `mqttHandshakeMs` | （未分解） | 約 **0.2秒** |
+| `mqttConnectMs`（TLS + MQTT 合計） | 約 **34〜35秒** | 約 **1.7秒** |
+| `activeMsBeforePublish` | 約 **68〜77秒** | 定常約 **6秒**（初回 power_on は〜14秒） |
+| `timestamp` | **null**（#30） | **ISO8601 UTC**（モデム時刻・Fix A） |
+| クラウド受信間隔 | 約 **8分** | 約 **5分弱**（見込み、`PSS_SLEEP_SECONDS=300`） |
 
 `PSS_SLEEP_SECONDS` は **スリープ時間** であり受信間隔ではない。受信間隔 ≈ active + sleep + モデム切断待ち。
 
-- **約8分間隔** … 満空 PoC としては問題ない（README §6.2.2）
-- **15分推奨** … 主に電池試算（5分→37日 vs 15分→100日）と業務上の即時性不要から（README §6.2）
-- 試算は LTE active 5〜10秒前提のため、TLS 実装後は **電池持ちを実測で再評価** すること（`power.activeMsBeforePublish` 等をログに含む）
+- 改善前は NTP 空振り（約30秒）+ ESP32 TLS over UART（約34秒）が支配的だった（[docs/power-measurement.md](../docs/power-measurement.md) §4.2, §7）
+- **15分間隔**は主に電池試算（5分→37日 vs 15分→100日）と業務上の即時性不要から（README §6.2）
+- mAh 実測は U200-1A 到着後（#31）
 
-関連: README §6.2、#25（低消費電力）、#30（LTE 時刻同期）
+**LTE 時刻同期（#30）:** `syncClock()` は lwIP SNTP を使わず、モデム `AT+CCLK`（NITZ）→ 未提供時 `+CNTP` で ESP32 の system clock を設定する。LTE-only では `configTime()` を呼ばない。
+
+関連: README §6.2、#25（低消費電力）、#30（LTE 時刻同期）、#31（処理時間分解）
 
 #### 一晩通し試験（2026-07-07）
 
@@ -273,9 +282,15 @@ LiPo 残量測定のためバッテリーを抜き差しした。直後のログ
 
 **未解決・フォロー**
 
-- ペイロード `timestamp` が `null`（#30）
-- boot 43 以降の `activeMs` 増加と `network` メトリクス欠落の原因（要調査）
-- 電流計による消費電力の実測（#25 / README §8.1）
+- Fix B: boot 43 型 outbox ラッチ劣化モードの再現・修正（#31 §4.3）
+- 本番 LiPo 長時間試験（モデム TLS 移行後の定常 active・`wakeCause: timer` 確認）
+- 電流計による消費電力の実測（#31 → [docs/power-measurement.md](../docs/power-measurement.md)、#25 / README §8.1）
+
+**解消済み（2026-07-07）**
+
+- `timestamp: null` → モデム時刻同期（Fix A、#30）
+- `network` メトリクス欠落 → `flushOutbox` 修正（Fix C）
+- active 68秒 → モデム内蔵 TLS + Fix A で定常約6秒（#31 §7）
 
 ## 関連 Issue
 

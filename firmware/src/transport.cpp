@@ -7,11 +7,15 @@
 #include <TinyGsmClient.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
-#if PSS_MQTT_USE_TLS
+#if PSS_MQTT_USE_TLS && !PSS_LTE_MODEM_TLS
 #include <SSLClient.h>
+#endif
+#if PSS_LTE_MODEM_TLS
+#include "lte_modem_tls.h"
 #endif
 #include <esp_system.h>
 #include <string.h>
+#include <sys/time.h>
 #include <time.h>
 
 #include "board.h"
@@ -28,7 +32,9 @@ MQTTClient wifiMqtt(1024);
 
 TinyGsm modem(Serial1);
 TinyGsmClient lteClient(modem);
-#if PSS_MQTT_USE_TLS
+#if PSS_LTE_MODEM_TLS
+AwsLteSecureClient lteSecureClient(modem);
+#elif PSS_MQTT_USE_TLS
 SSLClient lteSecureClient(&lteClient);
 #endif
 MQTTClient lteMqtt(1024);
@@ -46,6 +52,8 @@ bool hasText(const char* value) {
   return value != nullptr && value[0] != '\0';
 }
 
+bool ensureLteClock();
+
 Client& wifiNetworkClient() {
 #if PSS_MQTT_USE_TLS
   return wifiSecureClient;
@@ -55,7 +63,7 @@ Client& wifiNetworkClient() {
 }
 
 Client& lteNetworkClient() {
-#if PSS_MQTT_USE_TLS
+#if PSS_LTE_MODEM_TLS || PSS_MQTT_USE_TLS
   return lteSecureClient;
 #else
   return lteClient;
@@ -86,17 +94,34 @@ void configureWifiTlsClient() {
 #endif
 }
 
+#if PSS_LTE_MODEM_TLS
 void configureLteTlsClient() {
-#if PSS_MQTT_USE_TLS
+  resetLteMqttLink();
+  lteSecureClient.setCaCert(lteModemCaCertName());
+  lteSecureClient.setMtlsClientCert(lteModemClientCertName());
+  lteSecureClient.setCertificate(lteModemCaCertName());
+}
+
+bool ensureLteModemCertificates() {
+  if (!ensureLteClock()) {
+    Serial.println("WARN: modem clock unavailable before TLS cert upload");
+  }
+  if (provisionLteModemCertificates(modem)) {
+    return true;
+  }
+  clearLteModemCertificateCache();
+  return false;
+}
+#elif PSS_MQTT_USE_TLS
+void configureLteTlsClient() {
   resetLteMqttLink();
   lteSecureClient.setCACert(awsRootCa);
   lteSecureClient.setCertificate(deviceCert);
   lteSecureClient.setPrivateKey(privateKey);
-  // SSLClient::setTimeout() expects milliseconds (unlike WiFiClientSecure).
   lteSecureClient.setTimeout(config::kMqttConnectTimeoutMs);
   lteSecureClient.setHandshakeTimeout(60);
-#endif
 }
+#endif
 
 String mqttClientId() {
   // AWS IoT policy allows iot:Connect only for client/${iot:Connection.Thing.ThingName}.
@@ -184,28 +209,61 @@ bool beginLteUartAndModem() {
 
 bool connectMqtt(MQTTClient& mqtt, Client& net, TransportMetrics& metrics) {
   mqtt.begin(config::kMqttHost, config::kMqttPort, net);
-  mqtt.setOptions(60, true, 2000);
+  mqtt.setOptions(60, true, 10000);
 
-  const uint32_t start = millis();
   const String clientId = mqttClientId();
-  while ((millis() - start) < config::kMqttConnectTimeoutMs) {
-    const bool connected =
-        hasText(config::kMqttUsername)
-            ? mqtt.connect(clientId.c_str(), config::kMqttUsername,
-                           config::kMqttPassword)
-            : mqtt.connect(clientId.c_str());
-    if (connected) {
-      metrics.mqttConnectMs = millis() - start;
-      return true;
+  metrics.tcpTlsConnectMs = 0;
+  metrics.mqttHandshakeMs = 0;
+
+  const uint32_t tlsStart = millis();
+  bool tcpOk = false;
+  while ((millis() - tlsStart) < config::kMqttConnectTimeoutMs) {
+    if (net.connect(config::kMqttHost, config::kMqttPort) > 0) {
+      tcpOk = true;
+      break;
     }
     delay(500);
   }
+  metrics.tcpTlsConnectMs = millis() - tlsStart;
+  if (!tcpOk) {
+    metrics.mqttConnectMs = metrics.tcpTlsConnectMs;
+    Serial.printf("MQTT TCP/TLS connect failed after %lu ms\n",
+                  static_cast<unsigned long>(metrics.tcpTlsConnectMs));
+    return false;
+  }
 
-  metrics.mqttConnectMs = millis() - start;
-  Serial.printf("MQTT connect failed host=%s port=%u tls=%s clientId=%s err=%d\n",
-                config::kMqttHost, config::kMqttPort,
-                config::kMqttUseTls ? "yes" : "no", clientId.c_str(),
-                mqtt.lastError());
+  const uint32_t mqttStart = millis();
+  constexpr uint32_t kMqttHandshakeBudgetMs = 15000;
+  while ((millis() - mqttStart) < kMqttHandshakeBudgetMs) {
+    const uint32_t attemptStart = millis();
+    const bool connected =
+        hasText(config::kMqttUsername)
+            ? mqtt.connect(clientId.c_str(), config::kMqttUsername,
+                           config::kMqttPassword, true)
+            : mqtt.connect(clientId.c_str(), nullptr, nullptr, true);
+    const uint32_t attemptMs = millis() - attemptStart;
+    if (connected) {
+      metrics.mqttHandshakeMs = millis() - mqttStart;
+      metrics.mqttConnectMs = metrics.tcpTlsConnectMs + metrics.mqttHandshakeMs;
+      Serial.printf(
+          "MQTT connected (tcpTls=%lu mqtt=%lu total=%lu ms)\n",
+          static_cast<unsigned long>(metrics.tcpTlsConnectMs),
+          static_cast<unsigned long>(metrics.mqttHandshakeMs),
+          static_cast<unsigned long>(metrics.mqttConnectMs));
+      return true;
+    }
+    metrics.mqttHandshakeMs = attemptMs;
+    delay(500);
+  }
+
+  metrics.mqttHandshakeMs = millis() - mqttStart;
+  metrics.mqttConnectMs = metrics.tcpTlsConnectMs + metrics.mqttHandshakeMs;
+  Serial.printf(
+      "MQTT connect failed host=%s port=%u tls=%s clientId=%s tcpTls=%lu "
+      "mqtt=%lu err=%d\n",
+      config::kMqttHost, config::kMqttPort, config::kMqttUseTls ? "yes" : "no",
+      clientId.c_str(), static_cast<unsigned long>(metrics.tcpTlsConnectMs),
+      static_cast<unsigned long>(metrics.mqttHandshakeMs), mqtt.lastError());
   resetMqttSession(mqtt, net);
   return false;
 }
@@ -261,6 +319,63 @@ bool connectWifi(TransportMetrics& metrics) {
   return true;
 }
 
+// Convert a UTC calendar date to Unix epoch without relying on TZ/mktime
+// (Howard Hinnant's days_from_civil algorithm).
+time_t epochFromUtc(int y, int mo, int d, int h, int mi, int s) {
+  y -= mo <= 2;
+  const long era = (y >= 0 ? y : y - 399) / 400;
+  const unsigned yoe = static_cast<unsigned>(y - era * 400);
+  const unsigned doy = (153 * (mo + (mo > 2 ? -3 : 9)) + 2) / 5 + d - 1;
+  const unsigned doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+  const long days = era * 146097 + static_cast<long>(doe) - 719468;
+  return static_cast<time_t>(days) * 86400 + static_cast<time_t>(h) * 3600 +
+         mi * 60 + s;
+}
+
+// Read the modem's network-provided clock (AT+CCLK, populated via NITZ) and set
+// the ESP32 system time. Unlike lwIP SNTP (configTime), this works over LTE
+// because it never leaves the modem's AT interface.
+bool setSystemClockFromModem() {
+  int y = 0, mo = 0, d = 0, h = 0, mi = 0, s = 0;
+  float tzHours = 0;
+  if (!modem.getNetworkTime(&y, &mo, &d, &h, &mi, &s, &tzHours)) {
+    return false;
+  }
+  // Reject modem power-on defaults (e.g. 1980/2004/2080) so we don't set a
+  // bogus clock when NITZ has not been delivered yet.
+  if (y < 2024 || y > 2035) {
+    Serial.printf("modem clock not from network yet (year=%d)\n", y);
+    return false;
+  }
+
+  const time_t utc =
+      epochFromUtc(y, mo, d, h, mi, s) - static_cast<time_t>(tzHours * 3600.0f);
+  if (utc < 1700000000) {
+    return false;
+  }
+
+  timeval tv{};
+  tv.tv_sec = utc;
+  settimeofday(&tv, nullptr);
+  Serial.printf("clock set from modem utc=%ld tz=%.2f\n",
+                static_cast<long>(utc), tzHours);
+  return true;
+}
+
+// Ensure the system clock is valid on the LTE path. Prefers the (free) NITZ
+// clock; falls back to the modem's own NTP (+CNTP) over the data bearer.
+bool ensureLteClock() {
+  if (time(nullptr) > 1700000000) {
+    return true;
+  }
+  if (setSystemClockFromModem()) {
+    return true;
+  }
+  Serial.println("NITZ unavailable; trying modem NTP (+CNTP)");
+  modem.NTPServerSync(String(config::kNtpServer), 0);
+  return setSystemClockFromModem();
+}
+
 bool connectLte(TransportMetrics& metrics) {
   if (!config::kLteEnabled) {
     return false;
@@ -272,6 +387,7 @@ bool connectLte(TransportMetrics& metrics) {
 
   Serial.println("LTE-M connecting");
   const uint32_t start = millis();
+
   if (!beginLteUartAndModem()) {
     Serial.println("LTE modem init failed");
     return false;
@@ -295,9 +411,16 @@ bool connectLte(TransportMetrics& metrics) {
                 modem.getOperator().c_str(), modem.getSignalQuality());
 
   if (config::kMqttUseTls) {
-    if (!syncClock(config::kTimeSyncTimeoutMs)) {
-      Serial.println("WARN: time sync failed before TLS; continuing");
+#if PSS_LTE_MODEM_TLS
+    if (!ensureLteModemCertificates()) {
+      Serial.println("LTE modem TLS cert setup failed");
+      return false;
     }
+#else
+    if (!ensureLteClock()) {
+      Serial.println("WARN: modem clock unavailable before TLS; continuing");
+    }
+#endif
     configureLteTlsClient();
   }
 
@@ -485,6 +608,13 @@ bool syncClock(uint32_t timeoutMs) {
   time_t now = time(nullptr);
   if (now > 1700000000) {
     return true;
+  }
+
+  // lwIP SNTP (configTime) only reaches the network via the Wi-Fi netif. On the
+  // LTE path the modem clock is set separately (ensureLteClock), so skip here to
+  // avoid a guaranteed timeout that would burn the whole budget for nothing.
+  if (WiFi.status() != WL_CONNECTED) {
+    return false;
   }
 
   configTime(0, 0, config::kNtpServer);

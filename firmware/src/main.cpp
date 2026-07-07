@@ -162,6 +162,9 @@ void buildPayload(const RawSample& sample, ParkingStatus status,
   network["wifiRssi"] = transportMetrics.wifiRssi;
   network["networkConnectMs"] = transportMetrics.networkConnectMs;
   network["mqttConnectMs"] = transportMetrics.mqttConnectMs;
+  network["tcpTlsConnectMs"] = transportMetrics.tcpTlsConnectMs;
+  network["mqttHandshakeMs"] = transportMetrics.mqttHandshakeMs;
+  network["publishMs"] = transportMetrics.publishMs;
   network["transportAttempts"] = transportMetrics.transportAttempts;
   network["mqttQos"] = config::kMqttQos;
   network["deliveryConfirmed"] = deliveryConfirmed;
@@ -201,6 +204,8 @@ bool publishCurrentWithRetry(const RawSample& sample, ParkingStatus status,
                  outboxPending, payload, payloadSize);
 
     if (publishTelemetryConfirmed(payload, metrics)) {
+      buildPayload(sample, status, metrics, millis() - cycleStart, true, attempt,
+                   outboxPending, payload, payloadSize);
       result.confirmed = true;
       return true;
     }
@@ -254,7 +259,11 @@ bool flushOutbox(TransportMetrics& metrics, uint32_t cycleStart) {
         break;
       }
 
-      JsonObject network = doc["network"].to<JsonObject>();
+      // Preserve the enqueue-time network metadata (transport, connect timings)
+      // instead of replacing the object, so outbox replays stay diagnosable.
+      JsonObject network = doc["network"].is<JsonObject>()
+                               ? doc["network"].as<JsonObject>()
+                               : doc["network"].to<JsonObject>();
       network["deliveryConfirmed"] = true;
       network["publishAttempts"] = attempt;
       network["mqttQos"] = config::kMqttQos;
@@ -351,9 +360,12 @@ void runCycle() {
                               publishResult)) {
     Serial.println(payload);
     Serial.printf(
-        "cycle active_ms=%lu publish_ms=%lu confirmed=true attempts=%u "
-        "outbox=%u\n",
+        "cycle active_ms=%lu net=%lu tcpTls=%lu mqtt=%lu publish_ms=%lu "
+        "confirmed=true attempts=%u outbox=%u\n",
         static_cast<unsigned long>(millis() - cycleStart),
+        static_cast<unsigned long>(transportMetrics.networkConnectMs),
+        static_cast<unsigned long>(transportMetrics.tcpTlsConnectMs),
+        static_cast<unsigned long>(transportMetrics.mqttHandshakeMs),
         static_cast<unsigned long>(transportMetrics.publishMs),
         publishResult.attempts, outboxCount());
     sleepNow("confirmed", millis() - cycleStart);
