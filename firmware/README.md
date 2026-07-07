@@ -233,13 +233,12 @@ LiPo + Deep Sleep + `xiao-s3-aws-lte` + **モデム内蔵 TLS** で AWS IoT Core
 
 `PSS_SLEEP_SECONDS` は **スリープ時間** であり受信間隔ではない。受信間隔 ≈ active + sleep + モデム切断待ち。
 
-- 改善前は NTP 空振り（約30秒）+ ESP32 TLS over UART（約34秒）が支配的だった（[docs/power-measurement.md](../docs/power-measurement.md) §4.2, §7）
-- **15分間隔**は主に電池試算（5分→37日 vs 15分→100日）と業務上の即時性不要から（README §6.2）
-- mAh 実測は U200-1A 到着後（#31）
+- 改善前は NTP 空振り（約30秒）+ ESP32 TLS over UART（約34秒）が支配的だった（[docs/lte-active-investigation.md](../docs/lte-active-investigation.md)）
+- mAh 実測は U200-1A 到着後（#31 → [docs/power-measurement.md](../docs/power-measurement.md)）
 
 **LTE 時刻同期（#30）:** `syncClock()` は lwIP SNTP を使わず、モデム `AT+CCLK`（NITZ）→ 未提供時 `+CNTP` で ESP32 の system clock を設定する。LTE-only では `configTime()` を呼ばない。
 
-関連: README §6.2、#25（低消費電力）、#30（LTE 時刻同期）、#31（処理時間分解）
+関連: README §6.2、#25（低消費電力）、#30（LTE 時刻同期）、#31（消費電力実測）、[lte-active-investigation.md](../docs/lte-active-investigation.md)
 
 #### 一晩通し試験（2026-07-07）
 
@@ -282,15 +281,15 @@ LiPo 残量測定のためバッテリーを抜き差しした。直後のログ
 
 **未解決・フォロー**
 
-- Fix B: boot 43 型 outbox ラッチ劣化モードの再現・修正（#31 §4.3）
-- 本番 LiPo 長時間試験（モデム TLS 移行後の定常 active・`wakeCause: timer` 確認）
-- 電流計による消費電力の実測（#31 → [docs/power-measurement.md](../docs/power-measurement.md)、#25 / README §8.1）
+- Fix B: boot 43 型 outbox ラッチ劣化モード（#32）
+- 本番 LiPo 長時間試験（定常 active・`wakeCause: timer` 確認）
+- 電流計による消費電力の実測（#31 → [docs/power-measurement.md](../docs/power-measurement.md)）
 
 **解消済み（2026-07-07）**
 
 - `timestamp: null` → モデム時刻同期（Fix A、#30）
 - `network` メトリクス欠落 → `flushOutbox` 修正（Fix C）
-- active 68秒 → モデム内蔵 TLS + Fix A で定常約6秒（#31 §7）
+- active 68秒 → モデム内蔵 TLS + Fix A で定常約6秒（[lte-active-investigation.md](../docs/lte-active-investigation.md)）
 
 ## 関連 Issue
 
