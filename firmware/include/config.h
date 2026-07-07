@@ -121,6 +121,20 @@
 #define PSS_LTE_ONLY 0
 #endif
 
+// Debug: skip modem poweroff between cycles (measure warm reconnect only).
+#ifndef PSS_LTE_KEEP_MODEM
+#define PSS_LTE_KEEP_MODEM 0
+#endif
+
+// LTE: TLS on SIM7080 modem (not ESP32 SSLClient over UART).
+#ifndef PSS_LTE_MODEM_TLS
+#define PSS_LTE_MODEM_TLS 0
+#endif
+
+#ifndef PSS_LTE_FORCE_CERT_UPLOAD
+#define PSS_LTE_FORCE_CERT_UPLOAD 0
+#endif
+
 #ifndef PSS_TRANSPORT_MAX_ATTEMPTS
 #define PSS_TRANSPORT_MAX_ATTEMPTS 3
 #endif
@@ -168,6 +182,8 @@ constexpr uint32_t kDebugLoopDelayMs = PSS_DEBUG_LOOP_DELAY_MS;
 constexpr bool kDisableDeepSleep = PSS_DISABLE_DEEP_SLEEP;
 constexpr bool kLteTestMode = PSS_LTE_TEST_MODE;
 constexpr bool kLteOnly = PSS_LTE_ONLY;
+constexpr bool kLteKeepModem = PSS_LTE_KEEP_MODEM;
+constexpr bool kLteModemTls = PSS_LTE_MODEM_TLS;
 
 constexpr uint8_t kTransportMaxAttempts = PSS_TRANSPORT_MAX_ATTEMPTS;
 constexpr uint8_t kPublishMaxAttempts = PSS_PUBLISH_MAX_ATTEMPTS;
