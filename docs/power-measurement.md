@@ -170,8 +170,10 @@ cycleStart
   ├─ syncClock (再)                   … 成功済みなら即 return
   ├─ flushOutbox                      … 未送信キューがあれば追加 active
   ├─ publishCurrentWithRetry          … publishMs（**MQTT ペイロード未出力**）
-  └─ disconnectTransport / sleepNow   … modem poweroff 等（**未計測**）
+  └─ disconnectTransport / sleepNow   … modem poweroff 等（**未計測・§4.5 参照**）
 ```
+
+`activeMsBeforePublish` は **publish 確認（PUBACK）まで**の `millis() - cycleStart` であり、直後の `sleepNow()` 内 `disconnectTransport()` は含まない（`main.cpp`）。
 
 `xiao-s3-aws-lte` の主なタイムアウト（`platformio.ini`）:
 
@@ -247,6 +249,18 @@ network["mqttQos"] = config::kMqttQos;
 - [x] **`publishMs` をペイロードに追加** → 実装済み（§4.2 の空白の一部を裏取り）
 - [ ] 直接 publish 失敗の再現条件を Serial（debug ビルド）で採取（Fix B・要実機再現）
 
+### 4.5 `disconnectTransport` / sleep 周辺が未チェックの理由
+
+Issue #31 §3 で `disconnectTransport()` / `poweroff` と sleep 前後にチェックが入っていないのは、**未着手・見落としではなく計測方針の違い**である。
+
+| 観点 | 内容 |
+|---|---|
+| **何を計測しているか** | ペイロードの `activeMsBeforePublish` は publish 確認まで。`sleepNow()` → `disconnectTransport()`（MQTT disconnect、`gprsDisconnect`、`modem.poweroff()`）は **その後** |
+| **ファームにメトリクスがない** | `modemPoweroffMs` 等は未実装。MQTT テレメトリからは見えない |
+| **優先度** | 改善前は NTP+TLS が active の約94%。改善後は定常約6秒のうち残りは数秒以下の見込みで、ボトルネック切り分けとしては優先度低 |
+| **受信間隔との関係** | 改善前の「sleep 300秒なのに受信約8分」には切断待ちが寄与していた可能性がある。改善後は影響縮小 |
+| **今後の計測** | **U200-1A の電流波形**でコード変更なしに切り出せる（パターン D）。ファームへの `disconnectMs` 追加は必須ではない |
+
 ---
 
 ## 5. 設計評価（中立）
@@ -272,7 +286,17 @@ network["mqttQos"] = config::kMqttQos;
 
 **Fix A の実装**（`transport.cpp`）: lwIP SNTP（`configTime`）を廃し、`modem.getNetworkTime()`（`AT+CCLK`／NITZ）で system clock を設定。NITZ 未提供時は `modem.NTPServerSync()`（`+CNTP`・データベアラ経由で LTE でも動作）にフォールバック。`syncClock()` は Wi-Fi 未接続時に lwIP SNTP を試みないようガードし、`runCycle` 側の 2 回目呼び出しの空振りも解消。#30（timestamp=null）も同時に解消見込み。
 
-### 5.3 方式比較（論点4・実測後に判断）
+### 5.3 方式比較（論点4）— 2026-07-07 方針確定
+
+| 案 | 判定 | メモ |
+|---|---|---|
+| 現行: Deep Sleep + 毎回 modem poweroff + モデム TLS | **採用・継続** | active 68s→6s。本番 LiPo 試験中 |
+| SORACOM Beam / Funnel（端末 TLS 省略） | **記録のみ** | 代替案として §5.3 に残す。**端末実測・採用予定なし** |
+| モデム内蔵 TLS | **採用済み** | `tcpTlsConnectMs` 約1.5秒 |
+| Grove 5V ハード切断 | **見送り** | おそらく実施しない |
+| Wi-Fi / LoRaWAN 優先 | **LoRa は別筋** | LoRa モジュール購入済み・到着待ち（数日）。**LTE で PoC 実証を継続**（mAh 実測後に #25 で間隔・経路確定） |
+
+旧表（検討記録）:
 
 | 案 | 削減対象 | 実測で見るポイント |
 |---|---|---|
@@ -382,3 +406,4 @@ Issue #31 / #30 に紐づくファームウェア改善と実機結果の記録�
 | 2026-07-07 | CloudWatch 生ログ 87 件を分析。§1.2/§4 を実データで訂正（NTP 空振り30秒・outbox ラッチを特定）、§5 に中立的設計評価を追加 |
 | 2026-07-07 | Fix A（lwIP SNTP→モデム時刻 CCLK/CNTP・#30 と共通）、Fix C（flushOutbox の network 保持）、publishMs 追加を実装。3 env ビルド確認 |
 | 2026-07-07 | モデム内蔵 TLS 実装・実機確認。§7 に改善前後比較・本番切替を追記。active 68s→6s |
+| 2026-07-07 | §4.5（disconnect 未計測の理由）、§5.3 方針確定（Beam/Grove 見送り、LoRa 別筋） |
