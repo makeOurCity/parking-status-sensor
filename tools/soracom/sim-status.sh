@@ -21,11 +21,13 @@ if [[ -n "$SIM_ID" ]]; then
   soracom_api sims get --sim-id "$SIM_ID" | jq '{
     simId,
     status,
-    groupId: .groupId,
+    groupId,
     tags,
     sessionOnline: (.sessionStatus.online // false),
-    speedClass: (.speedClass // null),
-    imsi: (.profiles[0].subscribers[0].imsi // null)
+    speedClass,
+    imsi: (.sessionStatus.imsi // null),
+    subscription: (.sessionStatus.subscription // null),
+    ueIpAddress: (.sessionStatus.ueIpAddress // null)
   }'
   exit 0
 fi
