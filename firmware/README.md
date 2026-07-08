@@ -122,6 +122,9 @@ pio device monitor -e xiao-s3-lte-test
 - `FAIL: not registered` … SIM、アンテナ、電波
 - `FAIL: GPRS attach failed` … APN（SORACOM: `soracom.io` / `sora` / `sora`）
 
+SIM 側のステータス・セッション状態は [SORACOM CLI](../tools/soracom/README.md) で確認できる（#35）。
+例: `tools/soracom/sim-status.sh <sim-id>`、セッション詰まり時は `delete-session.sh`。
+
 ## ローカル Mosquitto 検証（#6）
 
 Mac 上でブローカーを立てる手順は `tools/mosquitto/` を参照。
