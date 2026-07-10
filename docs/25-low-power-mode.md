@@ -135,7 +135,7 @@ active 時間短縮（モデム TLS 等）は [#30](lte-active-investigation.md)
 | 項目 | 内容 | 状態 |
 |---|---|---|
 | **LoRaWAN** | Grove Wio-E5 の待機・送信評価 | モジュール到着済（技適付き） |
-| **mustPublish 実装** | Grove PoC 継続時の有効対策 | 未実装 |
+| **mustPublish 実装** | 変化時のみ送信の本番有効化 | [#39](https://github.com/makeOurCity/parking-status-sensor/issues/39) |
 | **README §6.2** | LoRa 実測後に比較表を更新 | 一部済 |
 | **Grove LTE ソフト電源断** | 強化 CPOWD 追試済 — **不成立**（§1.4） | 打ち切り |
 | **専用基板** | LTE 電池運用再検討時 | **保留・優先度低** |
