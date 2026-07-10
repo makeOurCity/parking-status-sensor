@@ -115,6 +115,18 @@ pio run -e xiao-s3-lte-test -t upload
 pio device monitor -e xiao-s3-lte-test
 ```
 
+**モデム poweroff / 復帰だけを検証する場合**（#25。MQTT・Deep Sleep なし）:
+
+```bash
+pio run -e xiao-s3-lte-poweroff-test -t upload
+pio device monitor -e xiao-s3-lte-poweroff-test | tee ../tools/power-logger/phase0-poweroff-test.log
+```
+
+奇数サイクル: 強化 CPOWD（`CNACT/CGATT` 切断 → `AT+CPOWD=1` → post-check）。  
+偶数サイクル: `CFUN=0` のみ（比較用）。
+
+**2026-07-10 実機:** `modemSilent=yes` でも **NETLIGHT 消灯せず**、U200 **50〜120 mA** — UART 停止 ≠ 低消費電力。詳細は [25-low-power-mode.md](../docs/25-low-power-mode.md) §1.4。
+
 シリアルに `modem init` → `network registration` → `data attach` の 4 段階が出る。
 `RESULT: PASS` なら UART・SIM・電波・APN まで通っている。
 
@@ -238,7 +250,7 @@ LiPo + Deep Sleep + `xiao-s3-aws-lte` + **モデム内蔵 TLS** で AWS IoT Core
 `PSS_SLEEP_SECONDS` は **スリープ時間** であり受信間隔ではない。受信間隔 ≈ active + sleep + モデム切断待ち。
 
 - 改善前は NTP 空振り（約30秒）+ ESP32 TLS over UART（約34秒）が支配的だった（[docs/lte-active-investigation.md](../docs/lte-active-investigation.md)）
-- mAh 実測: [docs/power-measurement.md](../docs/power-measurement.md) §6（#31 完了）。**待機 ≈22 mA** → 対策は #25
+- mAh 実測: [docs/power-measurement.md](../docs/power-measurement.md) §6（#31 完了）。**待機 ≈22 mA** → #25 Phase 0 完了: [25-low-power-mode.md](../docs/25-low-power-mode.md)
 
 **LTE 時刻同期（#30）:** `syncClock()` は lwIP SNTP を使わず、モデム `AT+CCLK`（NITZ）→ 未提供時 `+CNTP` で ESP32 の system clock を設定する。LTE-only では `configTime()` を呼ばない。
 

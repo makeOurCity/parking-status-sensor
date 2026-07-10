@@ -128,6 +128,8 @@ OUT- ──→ [Grove Shield BAT-]
 
 LiPo 実効 **3,960 mAh**・定常 **≈2.1 mAh/サイクル**・受信 **≈5 分弱** の暫定試算 → 連続稼働 **約 7 日**（README §6.2 更新済み）。
 
+**#25 Phase 0（2026-07-10）で内訳確定:** 待機 ≈22 mA のほぼ全量は LTE-M（+21〜28 mA）。`poweroff()` 成功応答後も NETLIGHT 点滅・mA 級待機は継続。結論は [25-low-power-mode.md](25-low-power-mode.md)。
+
 ### 6.3 チェックリスト（パターン D）
 
 - [x] 波形 CSV
@@ -147,7 +149,7 @@ LiPo 実効 **3,960 mAh**・定常 **≈2.1 mAh/サイクル**・受信 **≈5 �
 | 2 | ロガー（DevKit + INA226 + OLED） | 済（`tools/power-logger/`） |
 | 3 | パターン D 実測 | 済（§6） |
 | 4 | README §6.2 試算更新 | 済 |
-| 5 | #25 再開 | **次**（周辺電源 OFF・変化時のみ送信） |
+| 5 | #25 Phase 0（内訳・poweroff） | **済** — [25-low-power-mode.md](25-low-power-mode.md) |
 
 ## 5. 完了条件（Issue #31）
 
@@ -166,3 +168,4 @@ LiPo 実効 **3,960 mAh**・定常 **≈2.1 mAh/サイクル**・受信 **≈5 �
 | 2026-07-07 | LTE 調査を [lte-active-investigation.md](lte-active-investigation.md) に分離。本稿は mAh 実測専用に |
 | 2026-07-10 | U200 配線を IN/OUT 4 端子版に修正。ロガーを DevKit + OLED（`tools/power-logger/`）に |
 | 2026-07-10 | パターン D 実測（§6）。#31 完了・#25 へ引き渡し |
+| 2026-07-10 | #25 Phase 0 完了。内訳・結論は [25-low-power-mode.md](25-low-power-mode.md) |

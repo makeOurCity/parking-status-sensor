@@ -23,6 +23,7 @@
 #include "device_id.h"
 
 RTC_DATA_ATTR static bool ltePlanDReady = false;
+static bool lteUartStarted = false;
 
 namespace {
 
@@ -190,21 +191,134 @@ bool prepareLteForPlanD() {
   return true;
 }
 
-bool beginLteUartAndModem() {
+void startLteUart() {
+  if (lteUartStarted) {
+    Serial1.end();
+    delay(50);
+  }
   Serial1.begin(LTE_UART_BAUD, SERIAL_8N1, LTE_UART_RX, LTE_UART_TX);
-  delay(1000);
-  if (!modem.init()) {
-    ltePlanDReady = false;
+  lteUartStarted = true;
+}
+
+void stopLteUart() {
+  if (!lteUartStarted) {
+    return;
+  }
+  Serial1.flush();
+  Serial1.end();
+  lteUartStarted = false;
+}
+
+bool wakeLteModemAt() {
+  for (uint8_t i = 0; i < 10; ++i) {
+    modem.sendAT("");
+    if (modem.waitResponse(1000L) == 1) {
+      return true;
+    }
+    delay(300);
+  }
+  return false;
+}
+
+void logLteInitFailure() {
+  Serial.println("--- LTE init failure diagnostics ---");
+  logModemAt("+CFUN?");
+  logModemAt("+CPIN?");
+  logModemAt("+CEREG?");
+  logModemAt("+CNACT?");
+}
+
+bool recoverLteModemFromPowerOff() {
+  Serial.println("LTE: recovering modem (AT wake + CFUN=1,1)...");
+  if (!wakeLteModemAt()) {
+    Serial.println("LTE: no AT during wake");
     return false;
   }
-  if (!ltePlanDReady) {
-    Serial.println("LTE plan-D setup (first boot this power cycle)");
-    if (!prepareLteForPlanD()) {
-      return false;
-    }
-    ltePlanDReady = true;
+  modem.sendAT("+CFUN=1,1");
+  if (modem.waitResponse(30000L) != 1) {
+    Serial.println("LTE: CFUN=1,1 failed");
+    return false;
   }
-  return true;
+  delay(3000);
+  return wakeLteModemAt();
+}
+
+bool sendModemAtOk(const char* cmd, uint32_t timeoutMs = 10000) {
+  modem.sendAT(cmd);
+  return modem.waitResponse(timeoutMs) == 1;
+}
+
+bool detachLteBearer() {
+  bool ok = true;
+  modem.sendAT("+CNACT=0,0");
+  if (modem.waitResponse(15000L) != 1) {
+    Serial.println("WARN: CNACT=0,0 failed or unsupported");
+    ok = false;
+  }
+  modem.gprsDisconnect();
+  modem.sendAT("+CGATT=0");
+  if (modem.waitResponse(15000L) != 1) {
+    Serial.println("WARN: CGATT=0 failed");
+    ok = false;
+  }
+  delay(200);
+  return ok;
+}
+
+bool modemRespondsToAt(uint32_t timeoutMs) {
+  modem.sendAT("");
+  return modem.waitResponse(timeoutMs) == 1;
+}
+
+bool requestModemPowerOff(uint8_t attempts) {
+  for (uint8_t i = 0; i < attempts; ++i) {
+    modem.sendAT("+CPOWD=1");
+    if (modem.waitResponse(15000L, GF("NORMAL POWER DOWN")) == 1) {
+      return true;
+    }
+    delay(500);
+  }
+  return false;
+}
+
+bool beginLteUartAndModem() {
+  constexpr uint8_t kMaxAttempts = 3;
+
+  for (uint8_t attempt = 1; attempt <= kMaxAttempts; ++attempt) {
+    if (attempt > 1) {
+      Serial.printf("LTE modem init retry %u/%u\n", attempt, kMaxAttempts);
+      stopLteUart();
+      delay(2000);
+    }
+
+    startLteUart();
+    // After CPOWD the modem needs Toff-on >= 2 s before UART is reliable.
+    delay(attempt == 1 ? 1500 : 2500);
+    (void)wakeLteModemAt();
+
+    if (modem.init()) {
+      if (!ltePlanDReady) {
+        Serial.println("LTE plan-D setup (first boot this power cycle)");
+        if (!prepareLteForPlanD()) {
+          logLteInitFailure();
+          continue;
+        }
+        ltePlanDReady = true;
+      }
+      return true;
+    }
+
+    Serial.printf("LTE modem.init() failed (attempt %u/%u)\n", attempt,
+                  kMaxAttempts);
+    logLteInitFailure();
+
+    if (attempt < kMaxAttempts && recoverLteModemFromPowerOff()) {
+      continue;
+    }
+  }
+
+  ltePlanDReady = false;
+  return false;
 }
 
 bool connectMqtt(MQTTClient& mqtt, Client& net, TransportMetrics& metrics) {
@@ -396,12 +510,14 @@ bool connectLte(TransportMetrics& metrics) {
   if (!modem.waitForNetwork(config::kLteNetworkTimeoutMs)) {
     Serial.println("LTE network failed");
     logLteDiagnostics();
+    (void)powerOffLteModem();
     return false;
   }
 
   if (!modem.gprsConnect(config::kLteApn, config::kLteUser,
                          config::kLtePassword)) {
     Serial.println("LTE data attach failed");
+    (void)powerOffLteModem();
     return false;
   }
 
@@ -414,20 +530,21 @@ bool connectLte(TransportMetrics& metrics) {
 #if PSS_LTE_MODEM_TLS
     if (!ensureLteModemCertificates()) {
       Serial.println("LTE modem TLS cert setup failed");
+      (void)powerOffLteModem();
       return false;
     }
-#else
+    configureLteTlsClient();
+#elif PSS_MQTT_USE_TLS
     if (!ensureLteClock()) {
       Serial.println("WARN: modem clock unavailable before TLS; continuing");
     }
-#endif
     configureLteTlsClient();
+#endif
   }
 
   if (!connectMqtt(lteMqtt, lteNetworkClient(), metrics)) {
     resetLteMqttLink();
-    modem.gprsDisconnect();
-    modem.poweroff();
+    (void)powerOffLteModem();
     return false;
   }
 
@@ -456,9 +573,11 @@ bool reconnectTransport(TransportMetrics& metrics) {
       return connectTransport(metrics);
     }
     Serial.println("MQTT reconnect (LTE still up)");
+#if PSS_MQTT_USE_TLS
     if (config::kMqttUseTls) {
       configureLteTlsClient();
     }
+#endif
     return connectMqtt(lteMqtt, lteNetworkClient(), metrics);
   }
 
@@ -538,7 +657,9 @@ bool probeLteModem(LteProbeResult& result) {
   Serial.println("[1/5] modem init (AT) + plan-D setup...");
   result.initOk = beginLteUartAndModem();
   if (!result.initOk) {
-    Serial.println("FAIL: no AT response (check UART cable, power, TX/RX)");
+    Serial.println(
+        "FAIL: modem init (AT/CLTS/SIM/plan-D). If after CPOWD test, power-cycle "
+        "LTE module or wait for retry.");
     result.elapsedMs = millis() - start;
     return false;
   }
@@ -672,23 +793,121 @@ int activeMqttLastError() {
   return activeMqtt->lastError();
 }
 
+bool powerOffLteModem(LtePoweroffResult* detail) {
+  const uint32_t start = millis();
+  LtePoweroffResult local{};
+  LtePoweroffResult& r = detail != nullptr ? *detail : local;
+
+  lteMqtt.disconnect();
+  resetLteMqttLink();
+
+  if (!lteUartStarted) {
+    Serial.println("powerOffLteModem: skip (UART not started)");
+    activeMqtt = nullptr;
+    activeTransport = TransportKind::kNone;
+    r.elapsedMs = millis() - start;
+    return false;
+  }
+
+  Serial.println("powerOffLteModem: detach bearer");
+  r.bearerDetached = detachLteBearer();
+
+  Serial.println("powerOffLteModem: AT+CPOWD=1");
+  r.cpowdAccepted = requestModemPowerOff(2);
+
+  // SIM7080 HW Design: shutdown completes in ~1.8 s.
+  delay(2000);
+
+  r.modemSilent = !modemRespondsToAt(3000);
+  Serial.printf("powerOffLteModem: cpowd=%s modemSilent=%s\n",
+                r.cpowdAccepted ? "yes" : "no",
+                r.modemSilent ? "yes" : "no");
+
+  if (r.cpowdAccepted && !r.modemSilent) {
+    Serial.println(
+        "powerOffLteModem: CPOWD accepted but modem still responds; "
+        "trying CFUN=0 fallback");
+    if (sendModemAtOk("+CFUN=0", 15000)) {
+      r.radioOffFallback = true;
+      delay(500);
+      r.modemSilent = !modemRespondsToAt(3000);
+      Serial.printf("powerOffLteModem: after CFUN=0 modemSilent=%s\n",
+                    r.modemSilent ? "yes" : "no");
+    }
+  }
+
+  stopLteUart();
+  activeMqtt = nullptr;
+  activeTransport = TransportKind::kNone;
+  r.elapsedMs = millis() - start;
+  return r.cpowdAccepted && r.modemSilent;
+}
+
+bool radioOffLteModem() {
+  lteMqtt.disconnect();
+  resetLteMqttLink();
+
+  if (!lteUartStarted) {
+    startLteUart();
+    delay(1000);
+    if (!modem.testAT()) {
+      Serial.println("radioOffLteModem: no AT response");
+      return false;
+    }
+  }
+
+  (void)detachLteBearer();
+  const bool ok = sendModemAtOk("+CFUN=0", 15000);
+  delay(500);
+  Serial.printf("radioOffLteModem: CFUN=0 => %s\n", ok ? "ok" : "fail");
+  stopLteUart();
+  activeMqtt = nullptr;
+  activeTransport = TransportKind::kNone;
+  return ok;
+}
+
+bool probeLteModemAt(uint32_t timeoutMs) {
+  if (!lteUartStarted) {
+    startLteUart();
+    delay(500);
+  }
+  const bool ok = modemRespondsToAt(timeoutMs);
+  Serial.printf("probeLteModemAt => %s\n", ok ? "RESPONSE" : "silent");
+  return ok;
+}
+
 void disconnectTransport() {
   wifiMqtt.disconnect();
-  lteMqtt.disconnect();
 
   if (activeTransport == TransportKind::kWifi) {
     wifiClient.stop();
     wifiSecureClient.stop();
     WiFi.disconnect(true);
     WiFi.mode(WIFI_OFF);
-  } else if (activeTransport == TransportKind::kLte) {
+    lteMqtt.disconnect();
+    activeMqtt = nullptr;
+    activeTransport = TransportKind::kNone;
+  } else if (config::kLteKeepModem && activeTransport == TransportKind::kLte) {
+    Serial.println("disconnectTransport: PSS_LTE_KEEP_MODEM — skip poweroff");
+    lteMqtt.disconnect();
     resetLteMqttLink();
     modem.gprsDisconnect();
-    modem.poweroff();
+    activeMqtt = nullptr;
+    activeTransport = TransportKind::kNone;
+  } else if (lteUartStarted || activeTransport == TransportKind::kLte) {
+    LtePoweroffResult detail{};
+    const bool ok = powerOffLteModem(&detail);
+    Serial.printf(
+        "lte poweroff: cpowd=%s silent=%s radioOff=%s ok=%s (%lu ms)\n",
+        detail.cpowdAccepted ? "yes" : "no",
+        detail.modemSilent ? "yes" : "no",
+        detail.radioOffFallback ? "yes" : "no", ok ? "yes" : "no",
+        static_cast<unsigned long>(detail.elapsedMs));
+  } else {
+    lteMqtt.disconnect();
+    activeMqtt = nullptr;
+    activeTransport = TransportKind::kNone;
   }
-
-  activeMqtt = nullptr;
-  activeTransport = TransportKind::kNone;
 }
 
 const char* transportName(TransportKind transport) {

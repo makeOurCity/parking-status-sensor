@@ -117,6 +117,15 @@
 #define PSS_LTE_TEST_MODE 0
 #endif
 
+// Debug: LTE attach → poweroff → recover loop (#25 Phase 0 poweroff spike).
+#ifndef PSS_LTE_POWEROFF_TEST_MODE
+#define PSS_LTE_POWEROFF_TEST_MODE 0
+#endif
+
+#ifndef PSS_LTE_POWEROFF_OBSERVE_MS
+#define PSS_LTE_POWEROFF_OBSERVE_MS 30000
+#endif
+
 #ifndef PSS_LTE_ONLY
 #define PSS_LTE_ONLY 0
 #endif
@@ -196,6 +205,8 @@ constexpr uint32_t kLteNetworkTimeoutMs = PSS_LTE_NETWORK_TIMEOUT_MS;
 constexpr uint32_t kDebugLoopDelayMs = PSS_DEBUG_LOOP_DELAY_MS;
 constexpr bool kDisableDeepSleep = PSS_DISABLE_DEEP_SLEEP;
 constexpr bool kLteTestMode = PSS_LTE_TEST_MODE;
+constexpr bool kLtePoweroffTestMode = PSS_LTE_POWEROFF_TEST_MODE;
+constexpr uint32_t kLtePoweroffObserveMs = PSS_LTE_POWEROFF_OBSERVE_MS;
 constexpr bool kLteOnly = PSS_LTE_ONLY;
 constexpr bool kLteKeepModem = PSS_LTE_KEEP_MODEM;
 constexpr bool kLteModemTls = PSS_LTE_MODEM_TLS;

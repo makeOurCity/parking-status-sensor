@@ -1,0 +1,36 @@
+--- Terminal on /dev/cu.usbmodem83201 | 115200 8-N-1
+--- Available filters and text transformations: debug, default, direct, esp32_exception_decoder, hexlify, log2file, nocontrol, printable, send_on_enter, time
+--- More details at https://bit.ly/pio-monitor-filters
+--- Quit: Ctrl+C | Menu: Ctrl+T | Help: Ctrl+T followed by Ctrl+H
+[2816] ### TinyGSM Version: 0.12.0
+[2816] ### TinyGSM Compiled Module:  TinyGsmClientSIM7080
+[3119] ## Turning off echo!
+[3235] ### Modem: SIMCOM_Ltd SIMCOM_SIM7080
+[3235] ### Modem: SIMCOM_Ltd SIMCOM_SIM7080
+LTE plan-D setup (first boot this power cycle)
+configure plan-D (Docomo Cat-M1)...
+AT+CBANDCFG?
+
++CBANDCFG: "CAT-M",1,19
++CBANDCFG: "NB-IOT",1,2,3,4,5,8,12,13,18,19,20,25,26,28,66,71,85
+
+OK
+
+AT+CMNB?
+[8092] ### Unexpected module reset!
+[8092] ### TinyGSM Version: 0.12.0
+[8092] ### TinyGSM Compiled Module:  TinyGsmClientSIM7080
+[8094] ### Network time and time zone updated.
+[8103] ### Modem:  SIMCOM_Ltd
+[8103] ### Modem:  SIMCOM_Ltd
+LTE-M connected operator=docomo csq=16
+clock set from modem utc=1783665229 tz=9.00
+modem TLS certs: skip upload (cached in NVS)
+[20879] ### Got Data: 0
+MQTT connected (tcpTls=4510 mqtt=235 total=4745 ms)
+publish attempt 1/3
+[21150] ### Got Data: 0
+MQTT publish topic=$aws/rules/parking_status_telemetry/parking-status/xiao-e83dc1fb05fc/telemetry confirmed=yes qos=1 bytes=703 ms=269 err=0
+{"deviceId":"xiao-e83dc1fb05fc","status":"unknown","raw":{"red":1063,"green":1021,"blue":514,"clear":2156},"threshold":100,"determinedBy":"device","timestamp":"2026-07-10T06:33:54Z","power":{"bootCount":1,"wakeCause":"power_on","resetReason":"power_on","activeMsBeforePublish":20705,"sleepSeconds":300,"timerWakes":0},"network":{"transport":"lte","fallback":false,"wifiRssi":0,"networkConnectMs":13331,"mqttConnectMs":4745,"tcpTlsConnectMs":4510,"mqttHandshakeMs":235,"publishMs":0,"transportAttempts":1,"mqttQos":1,"publishAttempts":1},"sync":{"lastConfirmedStatus":"unknown","lastConfirmedBootCount":1,"pending":false,"prevOutcome":"confirmed","prevAttempts":1,"prevMqttError":0,"prevActiveMs":15017}}
+cycle active_ms=20976 net=13331 tcpTls=4510 mqtt=235 publish_ms=269 confirmed=true attempts=1
+sleep reason=confirmed seconds=300 active_ms=20976 pending=0
