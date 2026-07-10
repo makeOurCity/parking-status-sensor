@@ -231,13 +231,14 @@ LiPo + Deep Sleep + `xiao-s3-aws-lte` + **モデム内蔵 TLS** で AWS IoT Core
 | `mqttHandshakeMs` | （未分解） | 約 **0.2秒** |
 | `mqttConnectMs`（TLS + MQTT 合計） | 約 **34〜35秒** | 約 **1.7秒** |
 | `activeMsBeforePublish` | 約 **68〜77秒** | 定常約 **6秒**（初回 power_on は〜14秒） |
+| **1 サイクル mAh（U200 実測）** | — | 定常 **≈2.1 mAh**（スリープ **≈22 mA**） |
 | `timestamp` | **null**（#30） | **ISO8601 UTC**（モデム時刻・Fix A） |
 | クラウド受信間隔 | 約 **8分** | 約 **5分弱**（見込み、`PSS_SLEEP_SECONDS=300`） |
 
 `PSS_SLEEP_SECONDS` は **スリープ時間** であり受信間隔ではない。受信間隔 ≈ active + sleep + モデム切断待ち。
 
 - 改善前は NTP 空振り（約30秒）+ ESP32 TLS over UART（約34秒）が支配的だった（[docs/lte-active-investigation.md](../docs/lte-active-investigation.md)）
-- mAh 実測は U200-1A 到着後（#31 → [docs/power-measurement.md](../docs/power-measurement.md)）
+- mAh 実測: [docs/power-measurement.md](../docs/power-measurement.md) §6（#31 完了）。**待機 ≈22 mA** → 対策は #25
 
 **LTE 時刻同期（#30）:** `syncClock()` は lwIP SNTP を使わず、モデム `AT+CCLK`（NITZ）→ 未提供時 `+CNTP` で ESP32 の system clock を設定する。LTE-only では `configTime()` を呼ばない。
 

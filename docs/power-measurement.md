@@ -35,28 +35,36 @@ LiPo 運用時の **mAh / サイクル** を電流計で測り、README §6.2 �
 
 ±1A 版（分解能 32 µA）。Deep Sleep の spot check は手持ちテスター併用。
 
-### 2.1 配線
+### 2.1 配線（U200-1A 端子台）
+
+M5 公式: **IN 端（IN+/IN-）に電源、OUT 端（OUT+/OUT-）に負荷**。
 
 ```
-[LiPo +] ──→ [U200-1A IN+] ──→ [U200-1A IN-] ──→ [Grove Shield BAT+]
-[LiPo -] ──────────────────────────────────────→ [Grove Shield BAT-]
+[LiPo (+)] ──→ IN+
+[LiPo (-)] ──→ IN-
 
-[ロガー XIAO]  SDA/SCL → U200-1A（I2C 0x41）
+OUT+ ──→ [Grove Shield BAT+]
+OUT- ──→ [Grove Shield BAT-]
 ```
 
 | 注意 | 内容 |
 |---|---|
-| 並列給電禁止 | 計測中は DUT の **USB を外す** |
-| ロガー給電 | 予備 XIAO は **USB 給電**（DUT と電源分離） |
+| 並列給電禁止 | 計測中は試験対象機（XIAO）の **USB を外す** |
+| 極性 | 端子シルクどおり。逆接続はユニット損傷の恐れ |
+| ロガー給電 | ESP32 DevKit は **USB 給電**（試験対象機と電源分離） |
 
-### 2.2 ロガー（到着後）
+### 2.2 ロガー（ESP32 DevKit + OLED）
 
-| 項目 | 方針 |
+実装: [tools/power-logger/README.md](../tools/power-logger/README.md)
+
+| 項目 | 内容 |
 |---|---|
-| サンプリング | 10〜20 Hz |
-| 出力 | Serial CSV: `ms,current_mA,bus_mV,power_mW` |
-| 積算 | ホストで `Σ(current × Δt)` → mAh |
-| 同期 | CloudWatch の `bootCount`・`activeMsBeforePublish` と突合 |
+| MCU | ESP32 DevKit（GPIO21=SDA, GPIO22=SCL） |
+| I2C | U200-1A @ `0x41` + SSD1306 OLED @ `0x3C`（共有バス） |
+| サンプリング | 15 Hz |
+| Serial | CSV: `ms,current_mA,bus_mV,power_mW` |
+| OLED | 電流・電圧・電力・セッション mAh・ピーク（ライブ表示） |
+| 積算 | ホスト `integrate_mah.py` または OLED 上の目安 |
 
 到着当日: ロガー単体確認 → 既知負荷で spot check → パターン B → D の順。
 
@@ -93,22 +101,60 @@ LiPo 運用時の **mAh / サイクル** を電流計で測り、README §6.2 �
 
 ---
 
+## 6. 実測結果（2026-07-10）
+
+ロガー: [tools/power-logger/](../tools/power-logger/)（DevKit + U200-1A + OLED）。  
+試験対象機: `xiao-e83dc1fb05fc`、`xiao-s3-aws-lte`、LiPo → U200 IN/OUT → Grove Shield BAT（USB 非接続）。
+
+### 6.1 パターン D（現行 PoC 経路）
+
+| 項目 | 値 |
+|---|---|
+| 記録時間 | 371 s（`integrate_mah.py`: 5970 rows） |
+| 区間積算 | **3.00 mAh**（boot 1 + 2 を含む） |
+| 区間平均電流 | **29.1 mA** |
+| CloudWatch 受信 | boot **1**（`power_on`, active **14.9 s**）→ **307 s 後** → boot **2**（`timer`, active **6.2 s**） |
+| 定常 active | **≈6 s**（#30 改善どおり） |
+| 定常 1 サイクル mAh（概算） | **≈2.0〜2.1 mAh**（active ≈0.2 mAh + スリープ ≈1.8 mAh） |
+| スリープ中ベースライン（概算） | **≈22 mA**（ESP32 Deep Sleep 単体では説明不可） |
+
+### 6.2 所見（#25 へ引き渡し）
+
+| 観測 | 解釈 |
+|---|---|
+| LTE-M 青 LED が **3 秒おきに点滅** | `modem.poweroff()` 後も **Grove 5V 供給継続**。モデム完全停止ではない |
+| カラーセンサ **白 LED 常時点灯** | **VEML6040 shutdown 未実装**（`sensor.cpp` は常時 `SD_ENABLE`） |
+| スリープ時間の大半が **≈22 mA** | 試算（Deep Sleep µA 級）より **桁違いに重い**。主因は周辺電源 |
+
+LiPo 実効 **3,960 mAh**・定常 **≈2.1 mAh/サイクル**・受信 **≈5 分弱** の暫定試算 → 連続稼働 **約 7 日**（README §6.2 更新済み）。
+
+### 6.3 チェックリスト（パターン D）
+
+- [x] 波形 CSV
+- [x] 1 サイクル mAh（定常は概算。boot 3 以降の単独 CSV は #25 施策後に再計測可）
+- [x] MQTT `power.*` / `network.*`（boot 1・2）
+- [x] 備考: 青/白 LED 常時、Grove 5V 未切断
+
+パターン A / B / C / F / E は **#31 スコープ外**（#25 施策の Before/After 再計測でよい）。
+
+---
+
 ## 4. 次のアクション
 
 | 優先 | タスク | 状態 |
 |---|---|---|
-| 1 | U200-1A 到着・配線・ロガー動作確認 | 到着待ち |
-| 2 | ロガー用スケッチ（INA226 CSV） | 未 |
-| 3 | パターン B → D を 1 サイクルずつ | 未 |
-| 4 | パターン A / F（テスター併用） | 未 |
-| 5 | README §6.2 / firmware README の mAh 試算更新 | 未 |
+| 1 | U200-1A 到着・配線・ロガー動作確認 | 済 |
+| 2 | ロガー（DevKit + INA226 + OLED） | 済（`tools/power-logger/`） |
+| 3 | パターン D 実測 | 済（§6） |
+| 4 | README §6.2 試算更新 | 済 |
+| 5 | #25 再開 | **次**（周辺電源 OFF・変化時のみ送信） |
 
 ## 5. 完了条件（Issue #31）
 
 - [x] 電流計・ロガーの選定と配線方針が決まっている
-- [ ] 1 サイクルあたりの mAh を測れる
-- [ ] パターン A〜D の結果が README §6.2 更新に使える
-- [ ] #25 の低消費電力設計を再開できる（mAh 実測後）
+- [x] 1 サイクルあたりの mAh を測れる
+- [x] パターン D の結果が README §6.2 更新に使える
+- [x] #25 の低消費電力設計を再開できる（mAh 実測後）
 
 ---
 
@@ -118,3 +164,5 @@ LiPo 運用時の **mAh / サイクル** を電流計で測り、README §6.2 �
 |---|---|
 | 2026-07-07 | 初版（LTE 調査と同居） |
 | 2026-07-07 | LTE 調査を [lte-active-investigation.md](lte-active-investigation.md) に分離。本稿は mAh 実測専用に |
+| 2026-07-10 | U200 配線を IN/OUT 4 端子版に修正。ロガーを DevKit + OLED（`tools/power-logger/`）に |
+| 2026-07-10 | パターン D 実測（§6）。#31 完了・#25 へ引き渡し |
