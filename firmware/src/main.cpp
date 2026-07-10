@@ -264,6 +264,85 @@ void runLteTest() {
   delay(30000);
 }
 
+void runLtePoweroffTest() {
+  static uint8_t cycle = 0;
+  ++cycle;
+
+  const bool tryRadioOff = (cycle % 2) == 0;
+
+  Serial.printf("\n=== LTE poweroff test cycle %u (%s) ===\n", cycle,
+                tryRadioOff ? "CFUN=0 radioOff" : "CPOWD enhanced");
+  Serial.printf("board=%s boot=%lu reset=%s\n", BOARD_NAME,
+                static_cast<unsigned long>(bootCount),
+                resetReasonToString(esp_reset_reason()));
+  Serial.println(
+      "Purpose: attach LTE -> shutdown -> observe NETLIGHT -> recover attach");
+  Serial.println("Deep Sleep is OFF; Serial stays up for the whole cycle.");
+
+  Serial.println("\n[1/5] attach (network + data bearer)");
+  LteProbeResult attach{};
+  const bool attachOk = probeLteModem(attach);
+  printLteProbeResult(attach);
+  if (!attachOk) {
+    Serial.println("RESULT: attach FAIL — retry in 30s");
+    delay(30000);
+    return;
+  }
+  Serial.println(">> NETLIGHT should blink ~3s while attached");
+
+  Serial.println(tryRadioOff
+                     ? "\n[2/5] radioOff (CNACT/CGATT detach + AT+CFUN=0)"
+                     : "\n[2/5] poweroff (detach + AT+CPOWD=1 + post-check)");
+  const uint32_t shutdownStart = millis();
+  LtePoweroffResult detail{};
+  const bool shutdownOk =
+      tryRadioOff ? radioOffLteModem() : powerOffLteModem(&detail);
+  if (tryRadioOff) {
+    Serial.printf("radioOffLteModem() => %s (%lu ms)\n",
+                  shutdownOk ? "CFUN=0 ok" : "fail",
+                  static_cast<unsigned long>(millis() - shutdownStart));
+  } else {
+    Serial.printf(
+        "powerOffLteModem() => %s cpowd=%s silent=%s radioOffFallback=%s "
+        "(%lu ms)\n",
+        shutdownOk ? "FULL OK" : "partial/fail",
+        detail.cpowdAccepted ? "yes" : "no", detail.modemSilent ? "yes" : "no",
+        detail.radioOffFallback ? "yes" : "no",
+        static_cast<unsigned long>(detail.elapsedMs));
+  }
+
+  Serial.println("\n[3/5] post-shutdown AT probe (UART restarted)");
+  const bool atAfter = probeLteModemAt(3000);
+  Serial.printf(">> modem AT after shutdown: %s (silent = poweroff OK)\n",
+                atAfter ? "RESPONSE" : "silent");
+
+  Serial.printf("\n[4/5] observe NETLIGHT for %lu s\n",
+                static_cast<unsigned long>(config::kLtePoweroffObserveMs / 1000));
+  Serial.println(">> expect OFF if true poweroff/PSM; 3s blink = still registered");
+  delay(config::kLtePoweroffObserveMs);
+
+  Serial.println("\n[5/5] recover (cold probe after shutdown)");
+  resetLteRadioCache();
+  LteProbeResult recover{};
+  const bool recoverOk = probeLteModem(recover);
+  printLteProbeResult(recover);
+  Serial.printf("recover attach => %s\n", recoverOk ? "OK" : "FAIL");
+
+  LtePoweroffResult cleanup{};
+  const bool cleanupOk = powerOffLteModem(&cleanup);
+  Serial.printf("cleanup powerOffLteModem() => cpowd=%s silent=%s\n",
+                cleanup.cpowdAccepted ? "yes" : "no",
+                cleanup.modemSilent ? "yes" : "no");
+
+  Serial.println("--- cycle summary ---");
+  Serial.printf("mode=%s attach=%s shutdown=%s atAfter=%s recover=%s\n",
+                tryRadioOff ? "CFUN=0" : "CPOWD", attachOk ? "ok" : "ng",
+                shutdownOk ? "ok" : "ng", atAfter ? "response" : "silent",
+                recoverOk ? "ok" : "ng");
+  Serial.println("next cycle in 60s...");
+  delay(60000);
+}
+
 void runCycle() {
   const uint32_t cycleStart = millis();
   static uint32_t cycleIndex = 0;
@@ -389,7 +468,9 @@ void setup() {
 }
 
 void loop() {
-#if PSS_LTE_TEST_MODE
+#if PSS_LTE_POWEROFF_TEST_MODE
+  runLtePoweroffTest();
+#elif PSS_LTE_TEST_MODE
   runLteTest();
 #else
   runCycle();

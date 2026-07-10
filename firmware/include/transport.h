@@ -48,5 +48,17 @@ bool publishTelemetryConfirmed(const char* payload, TransportMetrics& metrics);
 int activeMqttState();
 int activeMqttLastError();
 void disconnectTransport();
+// LTE bearer 切断 + modem poweroff（AT+CPOWD=1）+ UART 後処理 + 無応答確認。
+struct LtePoweroffResult {
+  bool bearerDetached = false;
+  bool cpowdAccepted = false;
+  bool modemSilent = false;
+  bool radioOffFallback = false;
+  uint32_t elapsedMs = 0;
+};
+bool powerOffLteModem(LtePoweroffResult* detail = nullptr);
+// RF 停止のみ（AT+CFUN=0）。完全 poweroff 未成立時のフォールバック検証用。
+bool radioOffLteModem();
+bool probeLteModemAt(uint32_t timeoutMs = 2000);
 const char* transportName(TransportKind transport);
 void resetLteRadioCache();

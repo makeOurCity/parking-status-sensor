@@ -1,11 +1,12 @@
-# Issue #25 低消費電力 — 事前調査メモ（WIP）
+# Issue #25 低消費電力 — 調査記録
 
-Issue #25（低消費電力運用モード）に着手する前の調査記録。  
-**暫定・WIP** — Phase 0（実機・一次資料・計測）完了までは設計の正としない。
+Issue #25（低消費電力運用モード）の調査・Phase 0 計測の作業記録。
 
 - 関連 Issue: [#25](https://github.com/makeOurCity/parking-status-sensor/issues/25)
-- 前提実測: [#31](docs/power-measurement.md)（パターン D）
-- 次ステップ: 本メモの Phase 0 チェックリスト → 確定後に `docs/25-low-power-mode.md`（設計の正）
+- **結論（設計の正）:** [25-low-power-mode.md](25-low-power-mode.md) — Phase 0 完了時点
+- 計測手順: [25-low-power-phase0-runbook.md](25-low-power-phase0-runbook.md)
+- 前提実測: [power-measurement.md](power-measurement.md)（#31 パターン D）
+- 一次資料: [datasheets/](datasheets/)
 
 ---
 
@@ -16,7 +17,7 @@ Issue #25（低消費電力運用モード）に着手する前の調査記録�
 | #6 | MQTT・Deep Sleep 骨格 | 完了 |
 | #31 | 消費電力実測（U200） | 完了 |
 | #32 | SyncLedger・送信サイクル | 完了 |
-| **#25** | 低消費電力運用（周辺電源・変化時送信） | **調査中（本メモ）** |
+| **#25** | 低消費電力運用（周辺電源・変化時送信） | **Phase 0 完了 → [結論](25-low-power-mode.md)** |
 
 #31 引き渡し後、#25 を再開。調査は Web・データシート・コードレビュー・並行サブエージェント調査を実施したが、**未取得資料に基づく断定を含んでいた**ため、本メモでは撤回と証拠ルールを明記する。
 
@@ -54,22 +55,26 @@ Issue #25（低消費電力運用モード）に着手する前の調査記録�
 | 事実 | 根拠 | 信頼度 |
 |---|---|---|
 | 定常 ≈2.1 mAh/サイクル、待機 ≈22 mA | [power-measurement.md](power-measurement.md) §6 | confirmed |
-| 手元センサに白 LED が光っている | 実機観察（2026-07-10 調査時） | confirmed |
+| 手元センサに白 LED（Fill-light）が実装されている | 実機観察 + [基板写真](datasheets/grove-color-sensor-v3-board.png) | confirmed |
 | `sensor.cpp` は VEML6040 `SD_ENABLE`（SD=0）固定 | `firmware/src/sensor.cpp` | confirmed |
 | `mustPublish()` は骨格のみ（`PSS_CHANGE_ONLY_SEND` 未定義時は常に true） | `firmware/src/main.cpp` | confirmed |
 | LTE 切断時 `disconnectTransport()` → `modem.poweroff()` | `firmware/src/transport.cpp` | confirmed |
 | SyncLedger（NVS）に `lastConfirmedStatus` あり | `firmware/src/sync_ledger.cpp` | confirmed |
 
-### 未検証（Phase 0 で閉じる）
+### Phase 0 着手後に閉じた項目（2026-07-10）
 
-| 項目 | 備考 |
+| 項目 | 結論 | 根拠 |
+|---|---|---|
+| UART / I2C ポート VCC | **3.3 V レール直結・昇圧なし** | [Shield SCH](datasheets/grove-shield-xiao-v1.0-sch.pdf) |
+| Grove ポート VCC の GPIO 制御 | **なし**（Deep Sleep 中も給電） | 同上 |
+| センサ白 LED と SD ビット | VEML6040 に LED ピンなし → **SD=1 では消えない見込み** | [VEML6040 DS](datasheets/veml6040.pdf) |
+
+### Phase 0 で閉じた項目（2026-07-10 — confirmed）
+
+| 項目 | 結論 |
 |---|---|
-| UART / I2C ポート VCC 電圧 | 「Grove 5V」表現の実態 |
-| 22 mA の機器別内訳 | センサ / LTE / Shield 単体 |
-| センサ白 LED の消灯手段 | SD ビットか VCC 遮断か |
-| `modem.poweroff()` 成否 | Serial `NORMAL POWER DOWN`、NETLIGHT |
-| Grove ポート VCC の GPIO 制御の有無 | Shield 回路図 + 実機 |
-| V3 キャリア基板の LED 回路 | 回路図未取得 |
+| **22 mA の機器別内訳** | **LTE 支配的**（+21〜28 mA）。ベース 1.60 / センサ +0.15 / フル 20〜30 mA |
+| **`modem.poweroff()` 後の実態** | 専用ファームで `NORMAL POWER DOWN` 応答あり。NETLIGHT は **3 s 点滅継続** → Grove LTE Unit は実質停止していない |
 
 ---
 
@@ -155,59 +160,82 @@ Issue #25（低消費電力運用モード）に着手する前の調査記録�
 
 ---
 
-## 7. Phase 0 チェックリスト（設計 PR の前提）
+## 7. Phase 0（設計 PR の前提）
 
-### 7-A 部品同定
+**手順の正:** [25-low-power-phase0-runbook.md](25-low-power-phase0-runbook.md)
 
-- [ ] センサ SKU / シルク（101021133 等）
-- [ ] Shield PMIC 改版（ETA6003 vs BQ24070）
-- [ ] LTE モジュール型番
+Phase 0 の問いは 1 つ: **待機 22 mA はどこで消えているか。** 初版のチェックリスト（部品同定・電圧テスター・SD=1 計測など）は、BOM・動作実績・保存済み回路図で答えが出るものを含んでいたため縮小した（§3 参照）。
 
-### 7-B 電圧（テスター）
+### 計測 1 結果（2026-07-10 — confirmed）
 
-- [ ] I2C ポート VCC（active / Deep Sleep）
-- [ ] UART ポート VCC（active / Deep Sleep）
+| # | 構成 | 待機 I (mA) | Δ | ログ |
+|---|---|---|---|---|
+| 1 | XIAO + Shield | 1.60（CSV 1.65） | — | [capture-phase0-N.csv](../tools/power-logger/capture-phase0-N.csv) |
+| 2 | + センサ | 1.75 | +0.15 | 同上（連続記録） |
+| 3 | + LTE（フル） | 20〜30 往復（CSV 平均 **23.2**） | +21〜28 | 同上 |
 
-### 7-C 電流（U200、抜き差し）
+**所見:** #31 の待機 ≈22 mA は **LTE-M がほぼ全量**。XIAO+Shield+センサだけなら **≈1.75 mA**。20〜30 mA の往復は **≈21 / ≈31 mA の 2 水準**（NETLIGHT 点滅と整合）— U128 Unit がスリープ中も mA 級で動き続けている補強証拠。
 
-- [ ] XIAO + Shield のみ
-- [ ] + センサのみ
-- [ ] + LTE のみ
-- [ ] + 両方（#31 再現）
-- [ ] LTE 抜き差し / センサ抜き差し → **22 mA 内訳**
-- [ ] VEML6040 SD=1 後
-- [ ] `poweroff()` 後（Serial 同時）
+**異常区間:** ログ先頭はバッテリー逆接続（負電流 → ≈1 A スパイク）。以降の区間のみ有効。
 
-### 7-D ファーム・ログ
+**Phase 2 暫定優先度（計測 2 待ち）:** LTE 停止 > mustPublish >> センサ VCC / SD=1
 
-- [ ] `NORMAL POWER DOWN` の有無
-- [ ] TinyGSM `powerOffImpl` 応答待ち（コードレビュー）
-- [ ] 青 NETLIGHT パターン
+### 計測 2 結果（2026-07-10 — confirmed）
 
-### 7-E センサ白 LED
+| 項目 | 結果 |
+|---|---|
+| Serial | `sleep reason=confirmed` まで OK。[phase0-poweroff.log](../tools/power-logger/phase0-poweroff.log) に **`AT+CPOWD=1` / `NORMAL POWER DOWN` 無し** |
+| NETLIGHT（スリープ中） | **3 秒点滅継続**（消灯せず）— 実機目視 2026-07-10 |
+| 判定 | 通常ファームでは `poweroff()` の成功確認不可。NETLIGHT から **U128 Unit は停止していない** |
 
-- [ ] 基板写真・回路図（取得後）
-- [ ] 暗室での光
-- [ ] 満空灯読取への影響（#8 連携）
+### poweroff 専用ファーム結果（2026-07-10 — confirmed）
 
-### 7-F 一次資料のリポジトリ保存
+`xiao-s3-lte-poweroff-test` で Deep Sleep なしに attach → poweroff → 30 s 観察 → recover を実施（[phase0-poweroff-test.log](../tools/power-logger/phase0-poweroff-test.log)）。
 
-- [ ] V3 センサ回路図 → `docs/datasheets/` 等
-- [ ] Shield 回路図
-- [ ] U128 回路図
+| 項目 | 結果 |
+|---|---|
+| attach | OK |
+| `powerOffLteModem()` | **true (`NORMAL POWER DOWN`)** — cycle 1: 1408 ms、cycle 2: 17402 ms |
+| NETLIGHT | **3 秒点滅継続**（ユーザー目視。「今も点滅」） |
+| recover attach | OK |
+
+**結論:** AT コマンド上の SIM7080G poweroff は成功応答を返すが、M5Stack U128 Unit としては青 NETLIGHT が消えず、計測 1 の mA 級待機も残る。Grove 接続のままでは LTE Unit の VCC を切れない。
+
+**PoC 方針（2026-07-10）:** この状態では **LTE を実証のコアに据えない**。専用基板は要件としては明確だが **優先度低**（LoRaWAN 等の経路評価が先）。詳細は [25-low-power-mode.md](25-low-power-mode.md)。
+
+### 強化 CPOWD 追試（2026-07-10 — confirmed）
+
+`CNACT/CGATT` 切断 → `CPOWD=1` → 2 s 待機 → AT post-check → `Serial1.end()` 実装後:
+
+| 項目 | 結果 |
+|---|---|
+| Serial | `cpowd=yes` **`modemSilent=yes`** |
+| NETLIGHT | **3 s 点滅継続**（消灯せず） |
+| U200 | **50〜120 mA 往復**（旧待機 ≈23 mA より悪化） |
+
+ログ: [phase0-poweroff-v2.log](../tools/power-logger/phase0-poweroff-v2.log)
+
+**判定:** UART 無応答だけでは真の power-off にならない。Grove U128 上のソフト電源断追試はここで打ち切り。
+
+### 済（2026-07-10）
+
+- [x] コードレビュー — スリープ前 `AT+CPOWD=1` 送信・`NORMAL POWER DOWN` 待ち。`disconnectTransport()` は戻り値未使用。`PSS_LTE_KEEP_MODEM` は未配線
+- [x] 一次資料 — [datasheets/](datasheets/) に VEML6040 DS / Shield SCH / SIM7080G HW Design を保存（V3 センサ SCH・U128 SCH は未取得 — 内訳判明後に必要なら入手。[datasheets/README.md](datasheets/README.md)）
+- [x] Grove VCC 3.3 V・昇圧なし・スイッチなし（Shield SCH で確定 — §3）
 
 ---
 
-## 8. 実装計画の骨子（Phase 0 後）
+## 8. Phase 0 後の方針（2026-07-10 確定）
 
-| Phase | 内容 |
-|---|---|
-| 0 | 本チェックリスト + 一次資料保存 |
-| 1 | `docs/25-low-power-mode.md`（Phase 0 結果のみを根拠） |
-| 2 | ファーム（poweroff / SD / mustPublish — 優先度は計測後） |
-| 3 | U200 Before/After、README §6.2 更新 |
+| 優先度 | 内容 | 備考 |
+|---|---|---|
+| 記録 | [25-low-power-mode.md](25-low-power-mode.md) | **済** |
+| 高 | LoRaWAN（Grove Wio-E5）の待機・送信評価 | モジュール到着済（技適付き） |
+| 中 | `mustPublish` 実装 | Wi-Fi / LoRa でも有効 |
+| 低 | 専用基板 / LTE VCC 制御 | LTE 電池運用を再検討する段階まで保留 |
+| 見送り | Grove 上での LTE poweroff ファーム修正を主戦場にする | Phase 0 で効果限定的と判断 |
 
-**Phase 0 完了前に設計 PR で「CANNOT」「主因」「優先度 1」を確定しない。**
+LTE-M は **通信パイプライン実証**（SORACOM → AWS IoT）としては残すが、**電池 PoC の主経路にはしない**。
 
 ---
 
@@ -224,7 +252,7 @@ Issue #25（低消費電力運用モード）に着手する前の調査記録�
 9. 変化時のみ送信の mAh 効果未試算
 10. SKU 混在未排除
 11. 環境光 PoC とセンサ LED 常時点灯の整合未整理
-12. ハード遮断案が LTE 偏重（センサ VCC 遮断の効果は LED 次第）
+12. Grove 構成で実現できない VCC 切断を、既存配線で可能な対策のように扱った
 
 ---
 
@@ -233,3 +261,9 @@ Issue #25（低消費電力運用モード）に着手する前の調査記録�
 | 日付 | 内容 |
 |---|---|
 | 2026-07-10 | 初版。#25 事前調査・品質問題の撤回・Phase 0 チェックリスト |
+| 2026-07-10 | Phase 0 着手: `datasheets/` 保存、`25-low-power-phase0-runbook.md`、7-D コードレビュー、7-F 一部完了 |
+| 2026-07-10 | Phase 0 計画を全面縮小: 既知事項をチェックリストから外し、**22 mA 内訳 + poweroff 成否の 2 点**に絞る |
+| 2026-07-10 | VEML6040 DS（Seeed 版）・Grove V3 基板写真を `datasheets/` に保存 |
+| 2026-07-10 | Phase 0 計測 2 + poweroff 専用ファーム完了: `NORMAL POWER DOWN` 応答あり、NETLIGHT 3 s 点滅継続 → Grove LTE Unit は停止せず |
+| 2026-07-10 | Phase 0 完了。`25-low-power-mode.md` 起票。LTE を PoC コアから外す・専用基板は優先度低を明記。Wio-E5 到着 |
+| 2026-07-10 | 強化 CPOWD 追試: modemSilent=yes でも NETLIGHT 点滅・U200 50〜120 mA — ソフト電源断は Grove では不成立 |

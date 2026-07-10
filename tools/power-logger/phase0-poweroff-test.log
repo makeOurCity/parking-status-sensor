@@ -1,0 +1,155 @@
+--- Terminal on /dev/cu.usbmodem83201 | 115200 8-N-1
+--- Available filters and text transformations: debug, default, direct, esp32_exception_decoder, hexlify, log2file, nocontrol, printable, send_on_enter, time
+--- More details at https://bit.ly/pio-monitor-filters
+--- Quit: Ctrl+C | Menu: Ctrl+T | Help: Ctrl+T followed by Ctrl+H
+sync: loaded ledger lastStatus=unknown pending=0 prevOutcome=confirmed
+deviceId=xiao-e83dc1fb05fc mqttTopic=$aws/rules/parking_status_telemetry/parking-status/xiao-e83dc1fb05fc/telemetry pending=0
+
+=== LTE poweroff test cycle 1 ===
+board=xiao-s3 boot=1 reset=power_on
+Purpose: attach LTE -> poweroff -> observe NETLIGHT -> recover attach
+Deep Sleep is OFF; Serial stays up for the whole cycle.
+
+[1/4] attach (network + data bearer)
+=== LTE-M probe ===
+uart rx=44 tx=43 baud=115200
+[1/5] modem init (AT) + plan-D setup...
+[2342] ### TinyGSM Version: 0.12.0
+[2342] ### TinyGSM Compiled Module:  TinyGsmClientSIM7080
+[2645] ## Turning off echo!
+[2761] ### Modem: SIMCOM_Ltd SIMCOM_SIM7080
+[2761] ### Modem: SIMCOM_Ltd SIMCOM_SIM7080
+LTE plan-D setup (first boot this power cycle)
+configure plan-D (Docomo Cat-M1)...
+AT+CBANDCFG?
+
++CBANDCFG: "CAT-M",1,19
++CBANDCFG: "NB-IOT",1,2,3,4,5,8,12,13,18,19,20,25,26,28,66,71,85
+
+OK
+
+AT+CMNB?
+[7544] ### Unexpected module reset!
+[7544] ### TinyGSM Version: 0.12.0
+[7544] ### TinyGSM Compiled Module:  TinyGsmClientSIM7080
+[7547] ### Network time and time zone updated.
+[7556] ### Modem:  SIMCOM_Ltd
+[7556] ### Modem:  SIMCOM_Ltd
+OK
+modem=R1951.07
+imei=863866073091688
+csq=16 (0-31 valid, 99=unknown)
+[2/5] SIM check...
+AT+CPIN?
+
++CPIN: READY
+
+OK
+
+[3/5] network registration (plan-D Cat-M1)...
+OK operator=docomo
+[4/5] data attach apn=soracom.io user=sora...
+OK
+[5/5] done csq=17 elapsed_ms=13286
+--- LTE probe summary ---
+uart=ok init=ok network=ok gprs=ok
+modem=R1951.07 imei=863866073091688 operator=docomo csq=17 elapsed_ms=13286
+RESULT: PASS
+>> NETLIGHT should blink ~3s while attached
+
+[2/4] poweroff (gprsDisconnect + AT+CPOWD=1)
+powerOffLteModem() => true (NORMAL POWER DOWN) (1408 ms)
+>> Observe NETLIGHT for 30000 s (expect OFF if poweroff OK)
+
+[3/4] recover (cold probe after poweroff)
+=== LTE-M probe ===
+uart rx=44 tx=43 baud=115200
+[1/5] modem init (AT) + plan-D setup...
+[47035] ### TinyGSM Version: 0.12.0
+[47035] ### TinyGSM Compiled Module:  TinyGsmClientSIM7080
+[47338] ## Turning off echo!
+[47454] ### Modem: SIMCOM_Ltd SIMCOM_SIM7080
+[47454] ### Modem: SIMCOM_Ltd SIMCOM_SIM7080
+LTE plan-D setup (first boot this power cycle)
+configure plan-D (Docomo Cat-M1)...
+AT+CBANDCFG?
+
++CBANDCFG: "CAT-M",1,19
++CBANDCFG: "NB-IOT",1,2,3,4,5,8,12,13,18,19,20,25,26,28,66,71,85
+
+OK
+
+AT+CMNB?
+[52309] ### Unexpected module reset!
+[52309] ### TinyGSM Version: 0.12.0
+[52309] ### TinyGSM Compiled Module:  TinyGsmClientSIM7080
+[52312] ### Network time and time zone updated.
+[52321] ### Modem:  SIMCOM_Ltd
+[52321] ### Modem:  SIMCOM_Ltd
+OK
+modem=R1951.07
+imei=863866073091688
+csq=16 (0-31 valid, 99=unknown)
+[2/5] SIM check...
+AT+CPIN?
+
++CPIN: READY
+
+OK
+
+[3/5] network registration (plan-D Cat-M1)...
+OK operator=docomo
+[4/5] data attach apn=soracom.io user=sora...
+OK
+[5/5] done csq=16 elapsed_ms=13357
+--- LTE probe summary ---
+uart=ok init=ok network=ok gprs=ok
+modem=R1951.07 imei=863866073091688 operator=docomo csq=16 elapsed_ms=13357
+RESULT: PASS
+recover attach => OK
+
+[4/4] cleanup poweroff
+cleanup powerOffLteModem() => true
+--- cycle summary ---
+attach=ok poweroff=ok recover=ok
+next cycle in 60s...
+
+=== LTE poweroff test cycle 2 ===
+board=xiao-s3 boot=1 reset=power_on
+Purpose: attach LTE -> poweroff -> observe NETLIGHT -> recover attach
+Deep Sleep is OFF; Serial stays up for the whole cycle.
+
+[1/4] attach (network + data bearer)
+=== LTE-M probe ===
+uart rx=44 tx=43 baud=115200
+[1/5] modem init (AT) + plan-D setup...
+[121751] ### TinyGSM Version: 0.12.0
+[121751] ### TinyGSM Compiled Module:  TinyGsmClientSIM7080
+[122054] ## Turning off echo!
+[122170] ### Modem: SIMCOM_Ltd SIMCOM_SIM7080
+[122170] ### Modem: SIMCOM_Ltd SIMCOM_SIM7080
+OK
+modem=R1951.07
+imei=863866073091688
+csq=16 (0-31 valid, 99=unknown)
+[2/5] SIM check...
+AT+CPIN?
+
++CPIN: READY
+
+OK
+
+[3/5] network registration (plan-D Cat-M1)...
+OK operator=docomo
+[4/5] data attach apn=soracom.io user=sora...
+OK
+[5/5] done csq=16 elapsed_ms=3514
+--- LTE probe summary ---
+uart=ok init=ok network=ok gprs=ok
+modem=R1951.07 imei=863866073091688 operator=docomo csq=16 elapsed_ms=3514
+RESULT: PASS
+>> NETLIGHT should blink ~3s while attached
+
+[2/4] poweroff (gprsDisconnect + AT+CPOWD=1)
+powerOffLteModem() => true (NORMAL POWER DOWN) (17402 ms)
+>> Observe NETLIGHT for 30000 s (expect OFF if poweroff OK)
