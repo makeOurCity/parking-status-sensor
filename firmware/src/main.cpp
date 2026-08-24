@@ -2,6 +2,7 @@
 #include <ArduinoJson.h>
 #include <esp_sleep.h>
 #include <esp_system.h>
+#include <esp_task_wdt.h>
 #include <esp_timer.h>
 #include <string.h>
 #include <time.h>
@@ -77,6 +78,12 @@ const char* resetReasonToString(esp_reset_reason_t reason) {
       return "software";
     case ESP_RST_PANIC:
       return "panic";
+    case ESP_RST_TASK_WDT:
+      return "task_wdt";
+    case ESP_RST_INT_WDT:
+      return "int_wdt";
+    case ESP_RST_WDT:
+      return "wdt";
     default:
       return "other";
   }
@@ -344,6 +351,13 @@ void runLtePoweroffTest() {
 }
 
 void runCycle() {
+  if (config::kWatchdogEnabled) {
+    // Fed once here, not inside the connect/publish phases below: a cycle
+    // that doesn't return to this point within the timeout (hung LTE attach,
+    // unresponsive modem, etc.) reboots instead of stalling forever (#41).
+    esp_task_wdt_reset();
+  }
+
   const uint32_t cycleStart = millis();
   static uint32_t cycleIndex = 0;
   ++cycleIndex;
@@ -444,6 +458,14 @@ void runCycle() {
 void setup() {
   Serial.begin(115200);
   waitForSerial();
+
+  if (config::kWatchdogEnabled) {
+    esp_task_wdt_init(config::kWatchdogTimeoutMs / 1000, true);
+    esp_task_wdt_add(nullptr);
+    Serial.printf("watchdog enabled timeout_s=%lu\n",
+                  static_cast<unsigned long>(config::kWatchdogTimeoutMs / 1000));
+  }
+
   initDeviceIdentity();
   initSyncLedger();
   Serial.printf("deviceId=%s mqttTopic=%s pending=%d\n", getDeviceId(),
