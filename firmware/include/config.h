@@ -175,6 +175,17 @@
 #define PSS_FAULT_INJECT_PUBLISH_FAILS 0
 #endif
 
+// #41: hardware task watchdog. Fed once per cycle at runCycle() entry only, so
+// any single cycle (sensor + connect + publish) that overruns the budget +
+// margin reboots the device instead of hanging silently forever.
+#ifndef PSS_WATCHDOG_ENABLED
+#define PSS_WATCHDOG_ENABLED 0
+#endif
+
+#ifndef PSS_WATCHDOG_MARGIN_MS
+#define PSS_WATCHDOG_MARGIN_MS 20000
+#endif
+
 namespace config {
 
 constexpr int kStatusThreshold = PSS_STATUS_THRESHOLD;
@@ -218,5 +229,9 @@ constexpr uint32_t kCycleMaxActiveMs = PSS_CYCLE_MAX_ACTIVE_MS;
 constexpr uint32_t kConnectPhaseMs = PSS_CONNECT_PHASE_MS;
 constexpr uint32_t kPublishPhaseMs = PSS_PUBLISH_PHASE_MS;
 constexpr uint8_t kFaultInjectPublishFails = PSS_FAULT_INJECT_PUBLISH_FAILS;
+
+constexpr bool kWatchdogEnabled = PSS_WATCHDOG_ENABLED;
+constexpr uint32_t kWatchdogTimeoutMs =
+    PSS_CYCLE_MAX_ACTIVE_MS + PSS_WATCHDOG_MARGIN_MS;
 
 }  // namespace config
