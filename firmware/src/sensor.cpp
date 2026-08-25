@@ -11,7 +11,7 @@ namespace {
 VEML6040 sensor;
 
 constexpr uint8_t kVemlIntegration =
-    VEML6040_IT_320MS | VEML6040_AF_AUTO | VEML6040_SD_ENABLE;
+    VEML6040_IT_40MS | VEML6040_AF_AUTO | VEML6040_SD_ENABLE;
 
 }  // namespace
 
