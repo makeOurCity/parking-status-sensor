@@ -15,7 +15,9 @@
 #endif
 
 #ifndef PSS_STATUS_THRESHOLD
-#define PSS_STATUS_THRESHOLD 100
+// #43: VEML6040 積分時間を320ms→40ms化(1/8)したため暫定的に同倍率でスケールダウン
+// (100/8=12.5→13)。現地設置後の実測で最終調整予定。
+#define PSS_STATUS_THRESHOLD 13
 #endif
 
 #ifndef PSS_SLEEP_SECONDS
