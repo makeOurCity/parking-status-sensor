@@ -7,6 +7,7 @@ Grove 構成での電源挙動と、PoC 経路選択への含意をまとめる�
 - 調査過程: [25-low-power-investigation.md](25-low-power-investigation.md)
 - 計測手順・生ログ: [25-low-power-phase0-runbook.md](25-low-power-phase0-runbook.md)
 - 前提実測: [power-measurement.md](power-measurement.md) §6（#31 パターン D）
+- **続編（Phase 2）:** [25-low-power-phase2-hardware-cutoff.md](25-low-power-phase2-hardware-cutoff.md) — 現地での早期電池切れ分析とラッチングリレーによるハード電源遮断設計
 
 **送信ポリシー（変化時のみ・初回必送・heartbeat 不要）** の詳細は Issue #25 本文が正。本ドキュメントは **電源・ハード構成・経路選択** に限定する。
 
