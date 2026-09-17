@@ -188,6 +188,37 @@
 #define PSS_WATCHDOG_MARGIN_MS 20000
 #endif
 
+// #46: Grove 2-Coil Latching Relay で LTE-M モジュールの5V線を物理遮断する。
+// リレー未配線の機体に誤って有効化すると LTE が一切起動しなくなるため、
+// 配線済みの env（xiao-s3-aws-lte-relay）でのみ 1 にする。
+#ifndef PSS_LTE_POWER_RELAY_ENABLED
+#define PSS_LTE_POWER_RELAY_ENABLED 0
+#endif
+
+// Set/Reset パルス幅。仕様上5ms以下で切り替わるが、余裕を見て既定20ms。
+#ifndef PSS_RELAY_PULSE_MS
+#define PSS_RELAY_PULSE_MS 20
+#endif
+
+// リレー投入直後（真のコールド電源投入）からモデムがUART応答可能になるまでの
+// 起動待ち時間。transport.cpp の既存値(1.5s)は AT+CPOWD からの復帰用に調整
+// されており、VCC断からの完全なコールドブートには短すぎる可能性が高い。
+#ifndef PSS_LTE_COLD_BOOT_SETTLE_MS
+#define PSS_LTE_COLD_BOOT_SETTLE_MS 5000
+#endif
+
+// #25/#46: 状態変化時のみ送信する（heartbeatDue / pendingValid も送信条件に含む）。
+// 0 = PoC の全サイクル送信（従来動作）。
+#ifndef PSS_CHANGE_ONLY_SEND
+#define PSS_CHANGE_ONLY_SEND 0
+#endif
+
+// change-only 送信時、状態変化がなくてもこのサイクル数ごとに強制送信する
+// （監視の生存確認用）。既定12サイクル×5分=1時間。
+#ifndef PSS_HEARTBEAT_CYCLES
+#define PSS_HEARTBEAT_CYCLES 12
+#endif
+
 namespace config {
 
 constexpr int kStatusThreshold = PSS_STATUS_THRESHOLD;
@@ -235,5 +266,11 @@ constexpr uint8_t kFaultInjectPublishFails = PSS_FAULT_INJECT_PUBLISH_FAILS;
 constexpr bool kWatchdogEnabled = PSS_WATCHDOG_ENABLED;
 constexpr uint32_t kWatchdogTimeoutMs =
     PSS_CYCLE_MAX_ACTIVE_MS + PSS_WATCHDOG_MARGIN_MS;
+
+constexpr bool kLtePowerRelayEnabled = PSS_LTE_POWER_RELAY_ENABLED;
+constexpr uint32_t kRelayPulseMs = PSS_RELAY_PULSE_MS;
+constexpr uint32_t kLteColdBootSettleMs = PSS_LTE_COLD_BOOT_SETTLE_MS;
+constexpr bool kChangeOnlySend = PSS_CHANGE_ONLY_SEND;
+constexpr uint32_t kHeartbeatCycles = PSS_HEARTBEAT_CYCLES;
 
 }  // namespace config

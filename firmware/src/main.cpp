@@ -11,6 +11,7 @@
 #include "classify.h"
 #include "config.h"
 #include "device_id.h"
+#include "relay.h"
 #include "sensor.h"
 #include "sync_ledger.h"
 #include "transport.h"
@@ -110,6 +111,11 @@ void sleepNow(const char* reason, uint32_t activeMs) {
   Serial.flush();
 
   disconnectTransport();
+  if (config::kLtePowerRelayEnabled) {
+    // #46: どの復帰経路でもここを必ず通るため、setup()先頭の安全パルスと
+    // 合わせた二重のフェイルセーフになる（無条件でRESET、既にOFFなら無害）。
+    relayLteOff();
+  }
 
   lastActiveMs = activeMs;
   lastSleepEntryUs = esp_timer_get_time();
@@ -192,19 +198,23 @@ void buildPayload(const RawSample& sample, ParkingStatus status,
   serializeJson(doc, out, outSize);
 }
 
-// PoC keeps full transmission (always publish). The change-only path (#25) is
-// present as a skeleton but disabled unless PSS_CHANGE_ONLY_SEND is defined.
+// PoC keeps full transmission (always publish) unless PSS_CHANGE_ONLY_SEND is
+// enabled (#25/#46), in which case LTE-M is only powered up on state change,
+// undelivered retry, or heartbeat — see docs/25-low-power-phase2-hardware-cutoff.md §2.5.
 bool mustPublish(ParkingStatus status) {
-#if defined(PSS_CHANGE_ONLY_SEND) && PSS_CHANGE_ONLY_SEND
+  if (!config::kChangeOnlySend) {
+    (void)status;
+    return true;  // PoC: full transmission every cycle
+  }
+
   const SyncLedger& ledger = syncLedger();
   if (ledger.pendingValid) {
     return true;  // retry the undelivered observation this cycle
   }
-  return status != ledger.lastConfirmedStatus;  // heartbeat added in #25
-#else
-  (void)status;
-  return true;  // PoC: full transmission every cycle
-#endif
+  if (status != ledger.lastConfirmedStatus) {
+    return true;  // state change
+  }
+  return ledger.skippedSinceConfirmed >= config::kHeartbeatCycles;
 }
 
 // Publish the current observation with bounded retries inside the publish-phase
@@ -400,6 +410,13 @@ void runCycle() {
   char payload[kPayloadSize]{};
   TransportMetrics metrics{};
 
+  if (config::kLtePowerRelayEnabled) {
+    // #46: LTE-Mへの通電はここから publish 完了/失敗後の sleepNow() までの
+    // 間だけ。変化なしでmustPublish()がfalseの間は、この行に到達しないため
+    // リレーに一切触れない（LTE-Mは通電されない）。
+    relayLteOn();
+  }
+
   if (!connectTransportWithRetry(metrics, cycleStart, config::kConnectPhaseMs)) {
     const uint32_t activeMs = millis() - cycleStart;
     const int16_t mqttErr = static_cast<int16_t>(activeMqttLastError());
@@ -456,8 +473,21 @@ void runCycle() {
 }  // namespace
 
 void setup() {
+  // #46: 他のどの処理よりも前に呼ぶ。ウォッチドッグリセット等でSET後・RESET前に
+  // 再起動しても、ここで確実にLTE-Mを一度OFFへ倒す（フェイルセーフ）。
+  initRelay();
+
   Serial.begin(115200);
   waitForSerial();
+
+  if (config::kLtePowerRelayEnabled) {
+    // initRelay()（RESETパルス送信）は Serial.begin() より前に実行済み。
+    // 実際に送信されたのは t=0ms 付近（このprintより前）。
+    Serial.printf(
+        "relay: startup safety RESET already sent before Serial.begin() "
+        "(t=~0 ms); waitForSerial took %lu ms\n",
+        static_cast<unsigned long>(millis()));
+  }
 
   if (config::kWatchdogEnabled) {
     esp_task_wdt_init(config::kWatchdogTimeoutMs / 1000, true);
