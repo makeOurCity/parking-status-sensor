@@ -800,6 +800,10 @@ int activeMqttLastError() {
   return activeMqtt->lastError();
 }
 
+TransportKind activeTransportKind() {
+  return activeTransport;
+}
+
 bool powerOffLteModem(LtePoweroffResult* detail) {
   const uint32_t start = millis();
   LtePoweroffResult local{};

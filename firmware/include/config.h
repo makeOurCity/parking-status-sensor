@@ -241,6 +241,21 @@
 #define PSS_HISTORY_LOG_DUMP_MAX 0
 #endif
 
+// #50: 電源投入(コールドブート)直後のみ、mustPublish()を無視して無条件に
+// 短間隔連続送信する「ブートモード」。現地調整時の動作確認用。
+// docs/50-boot-mode-design.md 参照。
+#ifndef PSS_BOOT_MODE_ENABLED
+#define PSS_BOOT_MODE_ENABLED 1
+#endif
+
+#ifndef PSS_BOOT_MODE_SEND_COUNT
+#define PSS_BOOT_MODE_SEND_COUNT 5
+#endif
+
+#ifndef PSS_BOOT_MODE_SLOT_INTERVAL_MS
+#define PSS_BOOT_MODE_SLOT_INTERVAL_MS 60000  // 5回 x 60秒 = 総所要時間 約4分
+#endif
+
 namespace config {
 
 constexpr int kStatusThreshold = PSS_STATUS_THRESHOLD;
@@ -299,6 +314,10 @@ constexpr bool kHistoryLogEnabled = PSS_HISTORY_LOG_ENABLED;
 constexpr uint16_t kHistoryLogCapacity = PSS_HISTORY_LOG_CAPACITY;
 constexpr uint16_t kHistoryLogSegments = PSS_HISTORY_LOG_SEGMENTS;
 constexpr uint16_t kHistoryLogDumpMax = PSS_HISTORY_LOG_DUMP_MAX;
+
+constexpr bool kBootModeEnabled = PSS_BOOT_MODE_ENABLED;
+constexpr uint8_t kBootModeSendCount = PSS_BOOT_MODE_SEND_COUNT;
+constexpr uint32_t kBootModeSlotIntervalMs = PSS_BOOT_MODE_SLOT_INTERVAL_MS;
 
 }  // namespace config
 

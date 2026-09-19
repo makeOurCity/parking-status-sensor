@@ -144,9 +144,23 @@ void sleepNow(const char* reason, uint32_t activeMs) {
   esp_deep_sleep_start();
 }
 
+// #50: boot-mode send metadata, threaded through buildPayload()/publishWithRetry()
+// so the outgoing MQTT payload itself (not just Serial logs) lets a remote
+// viewer (cloud dashboard/logs) tell boot-mode sends apart from normal cycles.
+struct BootModeSendInfo {
+  bool active = false;     // true while inside runBootMode()
+  uint8_t slot = 0;        // 1-based send index; 0 outside boot mode
+  uint8_t totalSlots = 0;  // config::kBootModeSendCount; 0 outside boot mode
+
+  BootModeSendInfo() = default;
+  BootModeSendInfo(bool activeIn, uint8_t slotIn, uint8_t totalSlotsIn)
+      : active(activeIn), slot(slotIn), totalSlots(totalSlotsIn) {}
+};
+
 void buildPayload(const RawSample& sample, ParkingStatus status,
                   const TransportMetrics& transportMetrics, uint32_t activeMs,
-                  uint8_t publishAttempts, char* out, size_t outSize) {
+                  uint8_t publishAttempts, const BootModeSendInfo& bootModeInfo,
+                  char* out, size_t outSize) {
   JsonDocument doc;
 
   char timestamp[25]{};
@@ -209,6 +223,13 @@ void buildPayload(const RawSample& sample, ParkingStatus status,
   sync["prevMqttError"] = ledger.prevMqttError;
   sync["prevActiveMs"] = ledger.prevActiveMs;
 
+  // #50: always emit the object (active=false outside boot mode) so the
+  // payload schema stays constant regardless of which path produced it.
+  JsonObject bootMode = doc["bootMode"].to<JsonObject>();
+  bootMode["active"] = bootModeInfo.active;
+  bootMode["slot"] = bootModeInfo.slot;
+  bootMode["totalSlots"] = bootModeInfo.totalSlots;
+
   serializeJson(doc, out, outSize);
 }
 
@@ -237,7 +258,8 @@ bool mustPublish(ParkingStatus status) {
 // PUBACK.
 bool publishWithRetry(const RawSample& sample, ParkingStatus status,
                       TransportMetrics& metrics, uint32_t cycleStart,
-                      bool faultInject, char* payload, size_t payloadSize,
+                      bool faultInject, const BootModeSendInfo& bootModeInfo,
+                      char* payload, size_t payloadSize,
                       PublishResult& result) {
   result = PublishResult{};
   const uint32_t phaseStart = millis();
@@ -264,8 +286,8 @@ bool publishWithRetry(const RawSample& sample, ParkingStatus status,
 
     // Build immediately before publish. sync.* reflects the previous cycle,
     // which is the correct state to report alongside this observation.
-    buildPayload(sample, status, metrics, millis() - cycleStart, attempt, payload,
-                 payloadSize);
+    buildPayload(sample, status, metrics, millis() - cycleStart, attempt,
+                 bootModeInfo, payload, payloadSize);
 
     if (faultInject) {
       Serial.println("FAULT INJECT: forcing publish failure");
@@ -455,7 +477,8 @@ void runCycle() {
 
   PublishResult pub{};
   const bool ok = publishWithRetry(sample, status, metrics, cycleStart,
-                                   faultInject, payload, sizeof(payload), pub);
+                                   faultInject, BootModeSendInfo{}, payload,
+                                   sizeof(payload), pub);
   const uint32_t activeMs = millis() - cycleStart;
   const int16_t mqttErr = static_cast<int16_t>(activeMqttLastError());
 
@@ -486,6 +509,165 @@ void runCycle() {
       static_cast<unsigned long>(metrics.publishMs),
       cycleOutcomeToString(outcome), pub.attempts);
   sleepNow(cycleOutcomeToString(outcome), activeMs);
+}
+
+// #50: waits until (sendIndex+1)*kBootModeSlotIntervalMs has elapsed since
+// bootModeStart, feeding the watchdog every chunk. Returns immediately after
+// the final slot (no trailing wait) or if this slot's own processing already
+// overran the next slot's target time (no backwards delay).
+void waitUntilNextBootSlot(uint32_t bootModeStart, uint8_t sendIndex) {
+  if (sendIndex + 1 >= config::kBootModeSendCount) {
+    return;
+  }
+
+  const uint32_t targetElapsed =
+      static_cast<uint32_t>(sendIndex + 1) * config::kBootModeSlotIntervalMs;
+  const uint32_t elapsed = millis() - bootModeStart;
+  if (elapsed >= targetElapsed) {
+    return;
+  }
+
+  uint32_t remaining = targetElapsed - elapsed;
+  constexpr uint32_t kChunkMs = 1000;
+  while (remaining > 0) {
+    const uint32_t chunk = (remaining < kChunkMs) ? remaining : kChunkMs;
+    delay(chunk);
+    if (config::kWatchdogEnabled) {
+      esp_task_wdt_reset();
+    }
+    remaining -= chunk;
+  }
+}
+
+// #50: runs once, only from setup(), on a cold boot (power-on reset). Sends
+// unconditionally (mustPublish() is never consulted) kBootModeSendCount times
+// at kBootModeSlotIntervalMs spacing, keeping the LTE/MQTT connection up
+// across sends instead of the per-cycle connect/disconnect that runCycle()
+// does — see docs/50-boot-mode-design.md for the full design rationale.
+void runBootMode() {
+  const uint32_t bootModeStart = millis();
+  Serial.printf(
+      "=== boot mode start (power-on) sends=%u interval=%lums ===\n",
+      config::kBootModeSendCount,
+      static_cast<unsigned long>(config::kBootModeSlotIntervalMs));
+
+  if (config::kLtePowerRelayEnabled) {
+    // Kept outside the loop: boot mode never disconnects between sends, so
+    // this is the only SET pulse for the whole boot-mode session.
+    relayLteOn();
+  }
+
+  // Declared once outside the loop (not `TransportMetrics metrics{};` per
+  // slot): a slot that reuses the existing connection (Stage 2/3 below)
+  // never calls connectTransport()/connectLte(), the only places that set
+  // metrics.transport, so a fresh per-slot instance would stay at its
+  // TransportKind::kNone default and misreport network.transport in the
+  // payload even though LTE is genuinely still up.
+  TransportMetrics metrics{};
+  bool transportReady = false;
+
+  for (uint8_t sendIndex = 0; sendIndex < config::kBootModeSendCount;
+       ++sendIndex) {
+    if (config::kWatchdogEnabled) {
+      esp_task_wdt_reset();
+    }
+    const uint32_t slotStart = millis();
+
+    if (!initSensor()) {
+      Serial.println("boot-mode: ERROR VEML6040 not found at 0x10");
+      scanI2cBus();
+      const uint32_t activeMs = millis() - slotStart;
+      ledgerRecordFailure(CycleOutcome::kSensorError, ParkingStatus::kUnknown,
+                          bootCount, 0, 0, activeMs);
+      waitUntilNextBootSlot(bootModeStart, sendIndex);
+      continue;
+    }
+
+    RawSample sample{};
+    readSensor(sample);
+    const ParkingStatus status = classifyStatus(sample, config::kStatusThreshold);
+    Serial.printf(
+        "boot-mode slot=%u/%u sample r=%u g=%u b=%u w=%u status=%s\n",
+        sendIndex + 1, config::kBootModeSendCount, sample.red, sample.green,
+        sample.blue, sample.white, statusToString(status));
+
+    // #47: unconditional, once per slot, same contract as runCycle().
+    historyLogRecordCycle(status, sample, bootCount);
+
+    // Three-stage connection reuse (docs/50-boot-mode-design.md §2.3):
+    // Stage 1 (first slot) does a full connect; later slots first check
+    // whether MQTT is still connected (Stage 2), and only fall back to a
+    // lightweight MQTT-only reconnect (Stage 3) or, failing that, a full
+    // reconnect, keeping the LTE bearer up as long as possible (req. 3).
+    if (sendIndex == 0) {
+      transportReady =
+          connectTransportWithRetry(metrics, slotStart, config::kConnectPhaseMs);
+    } else if (activeMqttState() == 0) {
+      transportReady = true;
+      metrics.transport = activeTransportKind();
+    } else {
+      transportReady = reconnectActiveTransport(metrics);
+      if (transportReady) {
+        metrics.transport = activeTransportKind();
+      } else {
+        // req. 4: same retry policy as normal operation.
+        transportReady = connectTransportWithRetry(metrics, slotStart,
+                                                    config::kConnectPhaseMs);
+      }
+    }
+
+    if (!transportReady) {
+      const uint32_t activeMs = millis() - slotStart;
+      const int16_t mqttErr = static_cast<int16_t>(activeMqttLastError());
+      Serial.println("boot-mode: ERROR connect phase failed");
+      ledgerRecordFailure(CycleOutcome::kConnectFailed, status, bootCount, 0,
+                          mqttErr, activeMs);
+      waitUntilNextBootSlot(bootModeStart, sendIndex);
+      continue;
+    }
+
+    syncClock(config::kTimeSyncTimeoutMs);
+
+    const BootModeSendInfo bootInfo{
+        /*active=*/true, /*slot=*/static_cast<uint8_t>(sendIndex + 1),
+        /*totalSlots=*/config::kBootModeSendCount};
+
+    char payload[kPayloadSize]{};
+    PublishResult pub{};
+    const bool ok = publishWithRetry(sample, status, metrics, slotStart,
+                                     /*faultInject=*/false, bootInfo, payload,
+                                     sizeof(payload), pub);
+    // activeMs is slot-scoped (millis() - slotStart), matching runCycle()'s
+    // own per-cycle semantics — not bootModeStart-relative, which would
+    // make prevActiveMs balloon to several minutes by the last slot and
+    // make the kBudgetExhausted-vs-kPublishFailed split below spuriously
+    // always pick kBudgetExhausted from slot 2 onward.
+    const uint32_t activeMs = millis() - slotStart;
+    const int16_t mqttErr = static_cast<int16_t>(activeMqttLastError());
+
+    if (ok) {
+      ledgerRecordConfirmed(status, bootCount, pub.attempts, mqttErr, activeMs);
+      Serial.println(payload);
+      Serial.printf("boot-mode: send %u/%u confirmed\n", sendIndex + 1,
+                    config::kBootModeSendCount);
+    } else {
+      const CycleOutcome outcome = (activeMs >= config::kCycleMaxActiveMs)
+                                       ? CycleOutcome::kBudgetExhausted
+                                       : CycleOutcome::kPublishFailed;
+      ledgerRecordFailure(outcome, status, bootCount, pub.attempts, mqttErr,
+                          activeMs);
+      Serial.println(payload);
+      Serial.printf("boot-mode: send %u/%u FAILED outcome=%s\n", sendIndex + 1,
+                    config::kBootModeSendCount, cycleOutcomeToString(outcome));
+    }
+
+    waitUntilNextBootSlot(bootModeStart, sendIndex);
+  }
+
+  Serial.println("=== boot mode complete, resuming normal cadence ===");
+  // sleepNow() unconditionally calls disconnectTransport()/relayLteOff(), so
+  // boot mode does not need to disconnect separately here.
+  sleepNow("boot-mode-done", millis() - bootModeStart);
 }
 
 }  // namespace
@@ -543,6 +725,18 @@ void setup() {
                   (long long)wakeDiag.expectedIntervalMs,
                   (long long)wakeDiag.oversleepMs);
   }
+
+#if !PSS_LTE_POWEROFF_TEST_MODE && !PSS_LTE_TEST_MODE
+  // #50: fires at most once per physical reset — setup() itself is only
+  // ever called once per reset by the Arduino/ESP32 framework (loop() is
+  // what repeats, including in the PSS_DISABLE_DEEP_SLEEP debug build where
+  // sleepNow() never actually resets the chip), so no extra one-shot latch
+  // is needed here. Deep-sleep timer wakes report ESP_RST_DEEPSLEEP, not
+  // ESP_RST_POWERON, so normal operation never re-enters this branch.
+  if (config::kBootModeEnabled && esp_reset_reason() == ESP_RST_POWERON) {
+    runBootMode();
+  }
+#endif
 }
 
 void loop() {

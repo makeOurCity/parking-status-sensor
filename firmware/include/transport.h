@@ -47,6 +47,7 @@ bool syncClock(uint32_t timeoutMs);
 bool publishTelemetryConfirmed(const char* payload, TransportMetrics& metrics);
 int activeMqttState();
 int activeMqttLastError();
+TransportKind activeTransportKind();
 void disconnectTransport();
 // LTE bearer 切断 + modem poweroff（AT+CPOWD=1）+ UART 後処理 + 無応答確認。
 struct LtePoweroffResult {
