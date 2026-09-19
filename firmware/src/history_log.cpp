@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <Preferences.h>
+#include <nvs_flash.h>
 #include <string.h>
 #include <time.h>
 
@@ -121,6 +122,28 @@ void writeInitialValues(Preferences& prefs) {
   gTotal = 0;
 }
 
+// #47 design doc §9.3: confirm the on-disk NVS budget against the model in
+// §2.3/§2.4 (fixed per-key overhead) rather than trusting the arithmetic
+// alone. Cheap; printed at the end of historyLogDumpToSerial() rather than
+// at boot — ESP32-S3 native USB CDC reliably drops the first several
+// Serial.print lines emitted right after a host reconnects post-reset, so
+// anything printed immediately in initHistoryLog() was consistently lost
+// in the field. The dump itself survives because it's long enough to
+// outlast that window; stats appended after it inherit that reliability.
+void logNvsStats() {
+  nvs_stats_t stats{};
+  const esp_err_t err = nvs_get_stats(nullptr, &stats);
+  if (err != ESP_OK) {
+    Serial.printf("hlog: nvs_get_stats failed err=%d\n", static_cast<int>(err));
+    return;
+  }
+  Serial.printf(
+      "hlog: nvs stats used=%d free=%d total=%d namespaces=%d\n",
+      static_cast<int>(stats.used_entries), static_cast<int>(stats.free_entries),
+      static_cast<int>(stats.total_entries),
+      static_cast<int>(stats.namespace_count));
+}
+
 }  // namespace
 
 void initHistoryLog() {
@@ -215,6 +238,7 @@ void historyLogDumpToSerial() {
                 count >= kCapacity ? " (full)" : "");
 
   if (shown == 0) {
+    logNvsStats();
     return;
   }
 
@@ -253,6 +277,7 @@ void historyLogDumpToSerial() {
   }
 
   prefs.end();
+  logNvsStats();
 }
 
 uint32_t historyLogStoredCount() {
