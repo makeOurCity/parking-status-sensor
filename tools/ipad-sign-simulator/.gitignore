@@ -1,0 +1,7 @@
+# Xcode per-user state (not needed to build; regenerated locally)
+SignSimulator.xcodeproj/xcuserdata/
+SignSimulator.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcuserstate
+
+# extract_pattern.py's virtualenv (see scripts/README usage in tool README)
+scripts/.venv/
