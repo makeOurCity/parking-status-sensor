@@ -183,6 +183,11 @@ mustPublish =
 `mustPublish == false` のときは **通信スタックを起動せず**（モデム電源オンもしない）、
 SyncLedger の `prevOutcome = skipped` を記録してスリープする。
 
+**#50（ブートモード）による例外:** 電源投入（コールドブート、`esp_reset_reason() == ESP_RST_POWERON`）を
+検知した場合のみ、`setup()` から `mustPublish()` を一切呼ばない別経路（`runBootMode()`）に入り、
+0/1/2/3/4 分の計5回を無条件送信する。Deep Sleep タイマー復帰・ソフトリセット・watchdog リセットでは
+発動しない。詳細は [50-boot-mode-design.md](50-boot-mode-design.md)。
+
 ---
 
 ## 4. サイクルフロー（再設計）
