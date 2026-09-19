@@ -20,6 +20,7 @@ constexpr char kKeyPrevOutcome[] = "pout";
 constexpr char kKeyPrevAttempts[] = "patt";
 constexpr char kKeyPrevMqttErr[] = "perr";
 constexpr char kKeyPrevActiveMs[] = "pms";
+constexpr char kKeySkippedSince[] = "skipn";
 
 SyncLedger ledger;
 
@@ -56,6 +57,7 @@ void persist() {
   prefs.putUChar(kKeyPrevAttempts, ledger.prevAttempts);
   prefs.putShort(kKeyPrevMqttErr, ledger.prevMqttError);
   prefs.putUInt(kKeyPrevActiveMs, ledger.prevActiveMs);
+  prefs.putUInt(kKeySkippedSince, ledger.skippedSinceConfirmed);
   prefs.end();
 }
 
@@ -81,6 +83,7 @@ void initSyncLedger() {
     ledger.prevAttempts = prefs.getUChar(kKeyPrevAttempts, 0);
     ledger.prevMqttError = prefs.getShort(kKeyPrevMqttErr, 0);
     ledger.prevActiveMs = prefs.getUInt(kKeyPrevActiveMs, 0);
+    ledger.skippedSinceConfirmed = prefs.getUInt(kKeySkippedSince, 0);
     prefs.end();
     Serial.printf(
         "sync: loaded ledger lastStatus=%s pending=%d prevOutcome=%s\n",
@@ -110,6 +113,7 @@ void ledgerRecordConfirmed(ParkingStatus status, uint32_t bootCount,
   ledger.prevAttempts = attempts;
   ledger.prevMqttError = mqttError;
   ledger.prevActiveMs = activeMs;
+  ledger.skippedSinceConfirmed = 0;
   persist();
 }
 
@@ -131,6 +135,9 @@ void ledgerRecordFailure(CycleOutcome outcome, ParkingStatus status,
   ledger.prevAttempts = attempts;
   ledger.prevMqttError = mqttError;
   ledger.prevActiveMs = activeMs;
+  if (outcome == CycleOutcome::kSkipped) {
+    ledger.skippedSinceConfirmed++;
+  }
   persist();
 }
 

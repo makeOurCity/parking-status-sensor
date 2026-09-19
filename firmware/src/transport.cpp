@@ -292,8 +292,15 @@ bool beginLteUartAndModem() {
     }
 
     startLteUart();
-    // After CPOWD the modem needs Toff-on >= 2 s before UART is reliable.
-    delay(attempt == 1 ? 1500 : 2500);
+    if (attempt == 1 && config::kLtePowerRelayEnabled) {
+      // #46: このサイクルの relayLteOn() で今まさにコールド電源投入された直後。
+      // 以下の "After CPOWD" 値は AT+CPOWD からの復帰用でコールドブートには
+      // 短すぎるため、専用の待ち時間を使う。
+      delay(config::kLteColdBootSettleMs);
+    } else {
+      // After CPOWD the modem needs Toff-on >= 2 s before UART is reliable.
+      delay(attempt == 1 ? 1500 : 2500);
+    }
     (void)wakeLteModemAt();
 
     if (modem.init()) {

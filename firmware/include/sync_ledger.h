@@ -31,6 +31,11 @@ struct SyncLedger {
   uint8_t prevAttempts = 0;
   int16_t prevMqttError = 0;
   uint32_t prevActiveMs = 0;
+
+  // #46: change-only送信時のheartbeat判定用。confirmedで0にリセットし、
+  // skipped（mustPublish==false）のたびに+1する。電源断をまたいでも
+  // 途切れないようNVSに永続化する（RTCメモリのbootCountとは別管理）。
+  uint32_t skippedSinceConfirmed = 0;
 };
 
 // Load the ledger into RAM. On first run (schemaVersion key absent) this also
