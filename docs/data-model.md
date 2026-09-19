@@ -80,10 +80,11 @@ FIWARE Smart Data Models の [`OffStreetParking`](https://github.com/smart-data-
 
 `ParkingStatusSensor` と `OffStreetParking` は `refParkingLot` Relationship で紐付ける予定。
 
-## MQTT ペイロードの診断フィールド（`sync.*` / `network.*`）
+## MQTT ペイロードの診断フィールド（`sync.*` / `network.*` / `bootMode.*`）
 
 ファームは満空状態のほかに、送信サイクルの診断情報を MQTT ペイロードに含める（[sync-delivery-design.md](sync-delivery-design.md)）。
 
 - `network.*`（`transport`、接続時間、`publishAttempts` 等）と `sync.*`（`prevOutcome`、`pending`、`lastConfirmedStatus` 等）は **端末の運用診断専用**
+- `bootMode.*`（`active`・`slot`・`totalSlots`。#50「電源投入直後のブートモード」）も同様に **端末の運用診断専用**。電源投入(コールドブート)直後の無条件連続送信中かどうか、その何回目の送信かを示す。通常サイクルでは常に `active=false`・`slot=0`・`totalSlots=0`（詳細: [50-boot-mode-design.md](50-boot-mode-design.md)）
 - これらは **Orion（NGSIv2）エンティティにはマップしない**。bridge（#7）の変換対象外
 - 送達確認は `network.deliveryConfirmed`（廃止済み）ではなく、**次サイクルの `sync.prevOutcome == confirmed`** と `sync.lastConfirmedBootCount` で判断する
