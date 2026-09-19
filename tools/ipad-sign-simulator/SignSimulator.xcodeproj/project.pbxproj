@@ -11,6 +11,7 @@
 		27EDC6236F7C0924D7F6E995 /* SettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FC69BF02CC7A18E901173EA /* SettingsStore.swift */; };
 		42C48C09D18D9337F079EE93 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31CBAB5FE397FE9C8708CEA3 /* SettingsView.swift */; };
 		59ED130187A37E09759B0D04 /* SignPattern.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B424824ECB4B95614DC1258 /* SignPattern.swift */; };
+		7B725F6767DE1C669B7791AE /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 5B23C55900F6F72DA7354ACF /* Assets.xcassets */; };
 		AC1A869620CC4EFF1C49307D /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7A1B8725F0D034C3B87F404 /* ContentView.swift */; };
 		F5BABF8BA4ACF63F6E2506EC /* SignSimulatorApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50D33F883F6AF38E7B8A6020 /* SignSimulatorApp.swift */; };
 /* End PBXBuildFile section */
@@ -21,6 +22,7 @@
 		31CBAB5FE397FE9C8708CEA3 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		352AADCBB4D91155F5D2C7CA /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		50D33F883F6AF38E7B8A6020 /* SignSimulatorApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignSimulatorApp.swift; sourceTree = "<group>"; };
+		5B23C55900F6F72DA7354ACF /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		9FC69BF02CC7A18E901173EA /* SettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStore.swift; sourceTree = "<group>"; };
 		B7A1B8725F0D034C3B87F404 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		CFFF5BBF3FD74D5F1304FE00 /* DotMatrixView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DotMatrixView.swift; sourceTree = "<group>"; };
@@ -30,6 +32,7 @@
 		274DC78B001E0B10C71CDDD7 /* SignSimulator */ = {
 			isa = PBXGroup;
 			children = (
+				5B23C55900F6F72DA7354ACF /* Assets.xcassets */,
 				B7A1B8725F0D034C3B87F404 /* ContentView.swift */,
 				CFFF5BBF3FD74D5F1304FE00 /* DotMatrixView.swift */,
 				352AADCBB4D91155F5D2C7CA /* Info.plist */,
@@ -65,6 +68,7 @@
 			buildConfigurationList = EA8CC0B5C307C812632DD8DD /* Build configuration list for PBXNativeTarget "SignSimulator" */;
 			buildPhases = (
 				775B7319CF59CD93CD2937E5 /* Sources */,
+				9DB6BD0C46874AD48B19855E /* Resources */,
 			);
 			buildRules = (
 			);
@@ -110,6 +114,17 @@
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		9DB6BD0C46874AD48B19855E /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7B725F6767DE1C669B7791AE /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		775B7319CF59CD93CD2937E5 /* Sources */ = {
