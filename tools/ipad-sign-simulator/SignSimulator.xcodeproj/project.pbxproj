@@ -1,0 +1,329 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		198D0B4E63AD4969A69C0CDD /* DotMatrixView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFFF5BBF3FD74D5F1304FE00 /* DotMatrixView.swift */; };
+		27EDC6236F7C0924D7F6E995 /* SettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FC69BF02CC7A18E901173EA /* SettingsStore.swift */; };
+		42C48C09D18D9337F079EE93 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31CBAB5FE397FE9C8708CEA3 /* SettingsView.swift */; };
+		59ED130187A37E09759B0D04 /* SignPattern.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B424824ECB4B95614DC1258 /* SignPattern.swift */; };
+		7B725F6767DE1C669B7791AE /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 5B23C55900F6F72DA7354ACF /* Assets.xcassets */; };
+		AC1A869620CC4EFF1C49307D /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7A1B8725F0D034C3B87F404 /* ContentView.swift */; };
+		F5BABF8BA4ACF63F6E2506EC /* SignSimulatorApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50D33F883F6AF38E7B8A6020 /* SignSimulatorApp.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		05BE92FBD27CEBDFCB0158F7 /* SignSimulator.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = SignSimulator.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		2B424824ECB4B95614DC1258 /* SignPattern.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignPattern.swift; sourceTree = "<group>"; };
+		31CBAB5FE397FE9C8708CEA3 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		352AADCBB4D91155F5D2C7CA /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		50D33F883F6AF38E7B8A6020 /* SignSimulatorApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignSimulatorApp.swift; sourceTree = "<group>"; };
+		5B23C55900F6F72DA7354ACF /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		9FC69BF02CC7A18E901173EA /* SettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStore.swift; sourceTree = "<group>"; };
+		B7A1B8725F0D034C3B87F404 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		CFFF5BBF3FD74D5F1304FE00 /* DotMatrixView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DotMatrixView.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		274DC78B001E0B10C71CDDD7 /* SignSimulator */ = {
+			isa = PBXGroup;
+			children = (
+				5B23C55900F6F72DA7354ACF /* Assets.xcassets */,
+				B7A1B8725F0D034C3B87F404 /* ContentView.swift */,
+				CFFF5BBF3FD74D5F1304FE00 /* DotMatrixView.swift */,
+				352AADCBB4D91155F5D2C7CA /* Info.plist */,
+				9FC69BF02CC7A18E901173EA /* SettingsStore.swift */,
+				31CBAB5FE397FE9C8708CEA3 /* SettingsView.swift */,
+				2B424824ECB4B95614DC1258 /* SignPattern.swift */,
+				50D33F883F6AF38E7B8A6020 /* SignSimulatorApp.swift */,
+			);
+			path = SignSimulator;
+			sourceTree = "<group>";
+		};
+		314ACAB7BB04CFDE4AAD2537 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				05BE92FBD27CEBDFCB0158F7 /* SignSimulator.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		6E83060AB5A4D4E15457F00A = {
+			isa = PBXGroup;
+			children = (
+				274DC78B001E0B10C71CDDD7 /* SignSimulator */,
+				314ACAB7BB04CFDE4AAD2537 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		FDB593406D058FEC6EAB1272 /* SignSimulator */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = EA8CC0B5C307C812632DD8DD /* Build configuration list for PBXNativeTarget "SignSimulator" */;
+			buildPhases = (
+				775B7319CF59CD93CD2937E5 /* Sources */,
+				9DB6BD0C46874AD48B19855E /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = SignSimulator;
+			packageProductDependencies = (
+			);
+			productName = SignSimulator;
+			productReference = 05BE92FBD27CEBDFCB0158F7 /* SignSimulator.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		35F0B5601409468CBBC8EF4C /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					FDB593406D058FEC6EAB1272 = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 6600CEFFFDA31BFD1D664DD6 /* Build configuration list for PBXProject "SignSimulator" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 6E83060AB5A4D4E15457F00A;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 314ACAB7BB04CFDE4AAD2537 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				FDB593406D058FEC6EAB1272 /* SignSimulator */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		9DB6BD0C46874AD48B19855E /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7B725F6767DE1C669B7791AE /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		775B7319CF59CD93CD2937E5 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AC1A869620CC4EFF1C49307D /* ContentView.swift in Sources */,
+				198D0B4E63AD4969A69C0CDD /* DotMatrixView.swift in Sources */,
+				27EDC6236F7C0924D7F6E995 /* SettingsStore.swift in Sources */,
+				42C48C09D18D9337F079EE93 /* SettingsView.swift in Sources */,
+				59ED130187A37E09759B0D04 /* SignPattern.swift in Sources */,
+				F5BABF8BA4ACF63F6E2506EC /* SignSimulatorApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		6FA98195D3E1872D8ACBBE2C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		D72C27B1719415A133F7D127 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "";
+				INFOPLIST_FILE = SignSimulator/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = org.code4japan.parkingsensor.signsimulator;
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 2;
+			};
+			name = Release;
+		};
+		E014B6C82B1C3CCF5AD3EC67 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		EC1AABF1FBC2FA05E5A11527 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "";
+				INFOPLIST_FILE = SignSimulator/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = org.code4japan.parkingsensor.signsimulator;
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 2;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		6600CEFFFDA31BFD1D664DD6 /* Build configuration list for PBXProject "SignSimulator" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E014B6C82B1C3CCF5AD3EC67 /* Debug */,
+				6FA98195D3E1872D8ACBBE2C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		EA8CC0B5C307C812632DD8DD /* Build configuration list for PBXNativeTarget "SignSimulator" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				EC1AABF1FBC2FA05E5A11527 /* Debug */,
+				D72C27B1719415A133F7D127 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 35F0B5601409468CBBC8EF4C /* Project object */;
+}
