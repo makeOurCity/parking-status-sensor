@@ -219,6 +219,28 @@
 #define PSS_HEARTBEAT_CYCLES 12
 #endif
 
+// #47: 毎サイクルのセンサー観測ログ(NVSリングバッファ)。読み取り専用の現地診断用。
+// 送信・LTE接続には一切影響しない(docs/47-history-log-design.md)。
+#ifndef PSS_HISTORY_LOG_ENABLED
+#define PSS_HISTORY_LOG_ENABLED 1
+#endif
+
+// 1エントリ16バイト(timestamp+status+flags+bootCountLo8+raw4ch)。
+// 候補値。実機のnvs_get_stats()検証(§9.3)を経てから確定する前提の暫定値。
+#ifndef PSS_HISTORY_LOG_CAPACITY
+#define PSS_HISTORY_LOG_CAPACITY 672
+#endif
+
+// capacity はこの値で割り切れる必要がある(static_assertで保証)。
+#ifndef PSS_HISTORY_LOG_SEGMENTS
+#define PSS_HISTORY_LOG_SEGMENTS 14
+#endif
+
+// 起動時ダンプの最大表示件数。0 = 無制限(全件)。
+#ifndef PSS_HISTORY_LOG_DUMP_MAX
+#define PSS_HISTORY_LOG_DUMP_MAX 0
+#endif
+
 namespace config {
 
 constexpr int kStatusThreshold = PSS_STATUS_THRESHOLD;
@@ -273,4 +295,14 @@ constexpr uint32_t kLteColdBootSettleMs = PSS_LTE_COLD_BOOT_SETTLE_MS;
 constexpr bool kChangeOnlySend = PSS_CHANGE_ONLY_SEND;
 constexpr uint32_t kHeartbeatCycles = PSS_HEARTBEAT_CYCLES;
 
+constexpr bool kHistoryLogEnabled = PSS_HISTORY_LOG_ENABLED;
+constexpr uint16_t kHistoryLogCapacity = PSS_HISTORY_LOG_CAPACITY;
+constexpr uint16_t kHistoryLogSegments = PSS_HISTORY_LOG_SEGMENTS;
+constexpr uint16_t kHistoryLogDumpMax = PSS_HISTORY_LOG_DUMP_MAX;
+
 }  // namespace config
+
+static_assert(PSS_HISTORY_LOG_CAPACITY % PSS_HISTORY_LOG_SEGMENTS == 0,
+              "PSS_HISTORY_LOG_CAPACITY must divide evenly into PSS_HISTORY_LOG_SEGMENTS");
+static_assert((PSS_HISTORY_LOG_CAPACITY / PSS_HISTORY_LOG_SEGMENTS) * 16 % 32 == 0,
+              "history log segment body must be a multiple of 32B to avoid NVS padding waste");

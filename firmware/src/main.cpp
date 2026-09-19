@@ -11,6 +11,7 @@
 #include "classify.h"
 #include "config.h"
 #include "device_id.h"
+#include "history_log.h"
 #include "relay.h"
 #include "sensor.h"
 #include "sync_ledger.h"
@@ -35,6 +36,11 @@ struct WakeDiagnostics {
 
 WakeDiagnostics wakeDiag{};
 
+// #47: set from within waitForSerial()'s existing wait window when the
+// 'h' command is seen; consumed once in setup() to force a history dump
+// outside the usual non-timer-wake trigger.
+bool forceHistoryDump = false;
+
 void computeWakeDiagnostics() {
   const uint64_t nowUs = esp_timer_get_time();
   if (lastSleepEntryUs != 0 && nowUs > lastSleepEntryUs) {
@@ -53,6 +59,14 @@ void waitForSerial() {
   const uint32_t start = millis();
   while (!Serial && (millis() - start) < kSerialWaitMs) {
     delay(10);
+  }
+  // #47: non-blocking check within the existing wait window — adds no new
+  // delay. 'h' forces a history dump in setup() even on a timer wake (e.g.
+  // a bench debug build with Deep Sleep disabled).
+  while (Serial.available()) {
+    if (Serial.read() == 'h') {
+      forceHistoryDump = true;
+    }
   }
 }
 
@@ -400,6 +414,10 @@ void runCycle() {
                 sample.green, sample.blue, sample.white, rgDiff,
                 statusToString(status));
 
+  // #47: unconditional, once per cycle, before mustPublish()/the send path
+  // branches. Independent of SyncLedger/mustPublish — never triggers LTE.
+  historyLogRecordCycle(status, sample, bootCount);
+
   if (!mustPublish(status)) {
     const uint32_t activeMs = millis() - cycleStart;
     ledgerRecordFailure(CycleOutcome::kSkipped, status, bootCount, 0, 0, activeMs);
@@ -498,6 +516,7 @@ void setup() {
 
   initDeviceIdentity();
   initSyncLedger();
+  initHistoryLog();
   Serial.printf("deviceId=%s mqttTopic=%s pending=%d\n", getDeviceId(),
                 getMqttTopic(), syncLedger().pendingValid ? 1 : 0);
   bootCount++;
@@ -509,6 +528,13 @@ void setup() {
     consecutiveTimerWakes = 0;
     lastSleepEntryUs = 0;
     resetLteRadioCache();
+  }
+  // #47: dump on a non-timer wake (power-on / USB reset) — the moment
+  // someone is plugged in via USB during normal (timer-wake) deep-sleep
+  // operation — or on the explicit 'h' serial command from waitForSerial().
+  if (cause != ESP_SLEEP_WAKEUP_TIMER || forceHistoryDump) {
+    historyLogDumpToSerial();
+    forceHistoryDump = false;
   }
   computeWakeDiagnostics();
   if (wakeDiag.hasPrevSleep) {
