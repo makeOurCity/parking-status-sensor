@@ -115,6 +115,9 @@ ESP32のBrownout検出電圧しきい値は2.43〜2.80V。瞬断がこのしき�
 **注意点（要確認）：**
 LiPo単体運用時（USB非接続）に5V系統が有効かどうか要確認。LTE-Mモジュール（M5STACK-U128）が5V入力を必要とする場合、昇圧回路（3.7V→5V）の追加が必要になる可能性がある。
 
+**充電回路とDeep Sleepの関係（Issue #57 調査）：**
+Grove Shield上の充電IC **ETA6003**（[schematic](datasheets/grove-shield-xiao-v1.0-sch.pdf)）がUSB-Cの5VからLiPoへの充電をハードウェアのみで自律的に行う。`USB_DET` / `STAT` 等のピンはETA6003内で完結しており、XIAO（ESP32S3）のGPIOには配線されていない。そのため、**ESP32S3がDeep Sleep中かどうかに関わらず充電は継続する**。USB接続時に給電元がUSB側に切り替わるpower-path動作も同様にハードウェアのみで完結し、ファームウェアの介在は不要（かつ不可能）。
+
 **稼働日数の試算（LiPo 4,400mAh・実効率90%・実効3,960mAh）：**
 
 | 条件 | 稼働日数 |
