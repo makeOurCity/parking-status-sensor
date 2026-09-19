@@ -14,6 +14,9 @@ targets:
       path: SignSimulator/Info.plist
       properties:
         UILaunchScreen: {}
+        CFBundleShortVersionString: "1.3"
+        CFBundleVersion: "3"
+        ITSAppUsesNonExemptEncryption: false
         UIRequiresFullScreen: true
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationLandscapeLeft
