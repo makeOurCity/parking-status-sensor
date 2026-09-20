@@ -256,6 +256,29 @@
 #define PSS_BOOT_MODE_SLOT_INTERVAL_MS 60000  // 5回 x 60秒 = 総所要時間 約4分
 #endif
 
+#ifndef PSS_POT_ENABLED
+// #60: 現地調整用ポテンショメーター(Grove - Rotary Angle Sensor、Grove Shield
+// for XIAO Analogポート/D1/GPIO2)による判定閾値の可変化。
+// リレー(#46)同様、配線済みの機体でのみ1にする。未配線機体でフローティングピンの
+// 不定値を閾値として使わないための安全弁。docs/60-potentiometer-threshold-design.md 参照。
+#define PSS_POT_ENABLED 0
+#endif
+
+#ifndef PSS_POT_SAMPLE_COUNT
+#define PSS_POT_SAMPLE_COUNT 8
+#endif
+
+#ifndef PSS_POT_THRESHOLD_MIN
+// 対数マッピングの下限。複数現場の実測が揃うまでの暫定値(Issue #60時点)。
+#define PSS_POT_THRESHOLD_MIN 30
+#endif
+
+#ifndef PSS_POT_THRESHOLD_MAX
+// 対数マッピングの上限。2026-08-25屋外実測(r-g差分最大-11173)に3割の余裕を持たせた
+// 暫定値(Issue #60時点)。#3遮光フード完成後、屋外レンジが変われば再評価する。
+#define PSS_POT_THRESHOLD_MAX 15000
+#endif
+
 namespace config {
 
 constexpr int kStatusThreshold = PSS_STATUS_THRESHOLD;
@@ -319,8 +342,16 @@ constexpr bool kBootModeEnabled = PSS_BOOT_MODE_ENABLED;
 constexpr uint8_t kBootModeSendCount = PSS_BOOT_MODE_SEND_COUNT;
 constexpr uint32_t kBootModeSlotIntervalMs = PSS_BOOT_MODE_SLOT_INTERVAL_MS;
 
+constexpr bool kPotEnabled = PSS_POT_ENABLED;
+constexpr uint8_t kPotSampleCount = PSS_POT_SAMPLE_COUNT;
+constexpr int kPotThresholdMin = PSS_POT_THRESHOLD_MIN;
+constexpr int kPotThresholdMax = PSS_POT_THRESHOLD_MAX;
+
 }  // namespace config
 
+static_assert(PSS_POT_THRESHOLD_MIN > 0 && PSS_POT_THRESHOLD_MAX > PSS_POT_THRESHOLD_MIN,
+              "PSS_POT_THRESHOLD_MIN/MAX must form a positive, increasing range for the "
+              "logarithmic mapping (powf(MAX/MIN, ratio)) to stay well-defined");
 static_assert(PSS_HISTORY_LOG_CAPACITY % PSS_HISTORY_LOG_SEGMENTS == 0,
               "PSS_HISTORY_LOG_CAPACITY must divide evenly into PSS_HISTORY_LOG_SEGMENTS");
 static_assert((PSS_HISTORY_LOG_CAPACITY / PSS_HISTORY_LOG_SEGMENTS) * 16 % 32 == 0,
