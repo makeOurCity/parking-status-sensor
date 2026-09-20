@@ -139,6 +139,29 @@ Grove Shield上の充電IC **ETA6003**（[schematic](datasheets/grove-shield-xia
 
 **#25 Phase 0（2026-07-10）:** U200 で待機 ≈23 mA の内訳を確定。LTE が支配的で Grove 上では VCC 遮断不可。**現時点では LTE を電池 PoC のコア経路に据えない**（[25-low-power-mode.md](25-low-power-mode.md)）。
 
+**2026-09-20 実測再試算（#46リレー・change-only-send反映、Issue #60実機検証時）:**
+
+上記の試算・議論はいずれも2026-07時点のもので、#46（リレーによるLTE-M電源の物理遮断）実装前、かつ`PSS_CHANGE_ONLY_SEND`（状態変化時のみ送信）導入前の前提である。当時は待機電流をLTE-Mの待機リーク（実測 ≈23mA、#25 Phase 0）が支配しており、Grove上ではVCCを遮断できなかった。リレー・change-only-send実装後の実機（`xiao-s3-aws-lte-relay`、`xiao-e83dc1fb05fc`）で改めて実測したところ、前提が根本的に変わっている。
+
+実測値（電源ロガー`tools/power-logger`、詳細は[60-potentiometer-threshold-design.md](60-potentiometer-threshold-design.md) §10.2）:
+
+| 項目 | 実測値 |
+|---|---|
+| Deep Sleep待機電流 | **0.45 mA**（#25 Phase0の23mAから約1/50に低減） |
+| フル送信サイクル（LTE接続+MQTT publish、毎回コールドアタッチ） | 11.2秒 @ 105.2mA平均 = 0.327mAh |
+| スキップサイクル（`PSS_CHANGE_ONLY_SEND`によりLTEに触れずセンサー読取のみ） | 5.07秒 @ 34.3mA平均 = 0.048mAh |
+
+`PSS_HEARTBEAT_CYCLES=12`・`PSS_SLEEP_SECONDS=300`により、状態変化がなければ実質**1時間に1回**しか送信しない。これを踏まえた稼働日数（LiPo実効3,960mAh、5分間隔固定）:
+
+| シナリオ | 稼働日数 |
+|---|---|
+| 定常（状態変化なし、1時間に1回のheartbeatのみ送信） | **約127日** |
+| 毎回変化（worst case、実質毎サイクル送信＝旧試算と同条件） | 約38日 |
+
+旧試算「5分間隔・LTE-M 約37日」は、`PSS_CHANGE_ONLY_SEND`導入前の「毎サイクル強制送信」を前提にしていたため、上記のworst caseとほぼ一致する（≈38日 vs 37日、たまたま近い数字になっているだけで前提は別物）。一方、実運用で想定される「状態がそう頻繁には変わらない」定常ケースでは、約127日と3倍以上の差が出る。**旧試算の「約100日」（15分間隔・LTE-M推奨）は、「active時間の過小評価（5〜10秒仮定）」と「待機電流の過大評価（23mA想定）」という2つの誤差がたまたま打ち消し合っていただけで、現在の構成（#46リレー＋change-only-send）にはそのまま当てはまらない**。15分間隔での再試算は未実施（`PSS_SLEEP_SECONDS`を変更した実測が必要）。
+
+なお、Issue #60（現地調整用ポテンショメーター）を現地調整後も常時接続したままにすると、Deep Sleep待機電流が0.45mA→0.75mAへ増加し、定常ケースの稼働日数は127日→103日（-19%）に低下する。現地調整完了後はケーブルを抜いて常設する運用を推奨する（詳細: [60-potentiometer-threshold-design.md](60-potentiometer-threshold-design.md) §10.3/§10.4）。
+
 **LoRaWAN:** Grove Wio-E5（STM32WLE5JC、技適付き）を調達済（2026-07-10）。ゲートウェイが現場にあり得る場合は経路優先度で LoRaWAN を第一とする。送信が短いため **5 分間隔** でも電池的に現実的（README §6.2.3）。待機電流は Phase 0 と同型の計測で評価予定。
 
 ---
