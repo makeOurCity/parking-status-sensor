@@ -437,7 +437,7 @@ void runCycle() {
 
   const int rgDiff =
       static_cast<int>(sample.red) - static_cast<int>(sample.green);
-  const PotReading potReading = readPotentiometerThreshold();  // #60
+  const PotReading potReading = currentPotThreshold();  // #60: NVS永続化済みの値(ADCには触れない)
   const ParkingStatus status = classifyStatus(sample, potReading.threshold);
   Serial.printf(
       "sample r=%u g=%u b=%u w=%u r-g=%d status=%s threshold=%d potRaw=%u\n",
@@ -593,7 +593,7 @@ void runBootMode() {
 
     RawSample sample{};
     readSensor(sample);
-    const PotReading potReading = readPotentiometerThreshold();  // #60: スロットごとに再読込
+    const PotReading potReading = readPotentiometerThresholdLive();  // #60: スロットごとに生読み+NVS永続化
     const ParkingStatus status = classifyStatus(sample, potReading.threshold);
     Serial.printf(
         "boot-mode slot=%u/%u sample r=%u g=%u b=%u w=%u status=%s "

@@ -1,21 +1,52 @@
 #include "potentiometer.h"
 
 #include <Arduino.h>
+#include <Preferences.h>
 #include <math.h>
 
 #include "board.h"
 #include "config.h"
 
 namespace {
+
 constexpr uint16_t kAdcMax = 4095;
+
+// sync_ledger.cpp/history_log.cppと同じPreferences(NVS)パターン。
+constexpr char kNamespace[] = "pss_pot";
+constexpr char kKeyRaw[] = "raw";
+constexpr char kKeyThreshold[] = "thr";
+
+// initPotentiometer()でNVSからロードし、readPotentiometerThresholdLive()で更新する。
+// currentPotThreshold()はこれをそのまま返すだけでADCには触れない。
+PotReading cached;
+
+void persist(const PotReading& reading) {
+  Preferences prefs;
+  prefs.begin(kNamespace, false);
+  prefs.putUShort(kKeyRaw, reading.raw);
+  prefs.putInt(kKeyThreshold, reading.threshold);
+  prefs.end();
+}
+
 }  // namespace
 
 void initPotentiometer() {
   if (!config::kPotEnabled) {
+    cached = PotReading{0, config::kStatusThreshold};
     return;
   }
   analogReadResolution(12);
   analogSetPinAttenuation(POT_ADC_PIN, ADC_11db);
+
+  Preferences prefs;
+  prefs.begin(kNamespace, true);
+  const bool hasStored = prefs.isKey(kKeyThreshold);
+  const uint16_t raw = prefs.getUShort(kKeyRaw, 0);
+  const int threshold = prefs.getInt(kKeyThreshold, config::kStatusThreshold);
+  prefs.end();
+  // ブートモードがまだ一度もADCを読んでいない初回起動は、既定の固定値にフォールバックする。
+  cached = hasStored ? PotReading(raw, threshold)
+                     : PotReading(0, config::kStatusThreshold);
 }
 
 int computeThresholdFromAdc(uint16_t adc) {
@@ -28,10 +59,9 @@ int computeThresholdFromAdc(uint16_t adc) {
   return static_cast<int>(lroundf(threshold));
 }
 
-PotReading readPotentiometerThreshold() {
+PotReading readPotentiometerThresholdLive() {
   if (!config::kPotEnabled) {
-    // 未配線機体の既定値。ADCには一切触れない。
-    return PotReading{0, config::kStatusThreshold};
+    return cached;  // {0, config::kStatusThreshold}(initPotentiometer()で設定済み)
   }
 
   uint32_t sum = 0;
@@ -44,5 +74,9 @@ PotReading readPotentiometerThreshold() {
     }
   }
   const uint16_t avg = static_cast<uint16_t>(sum / config::kPotSampleCount);
-  return PotReading{avg, computeThresholdFromAdc(avg)};
+  cached = PotReading(avg, computeThresholdFromAdc(avg));
+  persist(cached);
+  return cached;
 }
+
+PotReading currentPotThreshold() { return cached; }

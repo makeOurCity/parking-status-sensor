@@ -17,7 +17,8 @@
 | v1 | 初版。新規モジュール`potentiometer.h/cpp`の新設、対数マッピング関数の実装方式、`classify.cpp`無改修方針、`buildPayload()`/`publishWithRetry()`シグネチャ拡張、GPIO3がESP32-S3のストラップピンである点の指摘を含む。 |
 | v2 | レビュー結果を受け、ポテンショメーターの接続先を**D2/A2(GPIO3)からD1/A1(GPIO2)に変更**(GPIO2はESP32-S3のストラッピングピンではないため、GPIO3のストラップピン懸念を実機検証を待たずに設計変更で解消)。あわせて`platformio.ini`のenv追加案を、卓上テスト用・実機ベンチデバッグ用・本番投入用の3種類に整理し、§8テスト計画・§9実装ステップの対応関係を明確化。`setup()`内の`initPotentiometer()`呼び出し順序が、`initRelay()`のような安全上の要請ではなく便宜上のものである旨を明記。 |
 | v3 | ユーザー判断により、`platformio.ini`への新規env追加を**本番投入用の`xiao-s3-aws-lte-relay-pot`1つのみ**に簡略化(卓上テスト専用・実機ベンチデバッグ専用のenvは追加しない)。卓上での事前確認・起動安定性確認は、専用デバッグenvの代わりに既存のブートモード(`#50`、電源投入直後の最大4分間はDeep Sleepなしで5回連続送信する)を利用する方針に変更し、§8テスト計画・§9実装ステップを単一env前提に書き直した。反復速度に不満が出た場合は、既存の`xiao-s3-aws-lte-relay-debug`と同じパターンで`-pot-debug`亜種を後日追加できる(YAGNI)。 |
-| v4(本版) | 実機検証(§10)を追加。ブートモード・通常運用でのAWS IoT Core経由の送受信を確認した一方、電源ロガーでの実測により**ポットを常時接続したままだとDeep Sleep待機電流が0.45mA→0.75mAへ増加する**ことが判明。`PSS_CHANGE_ONLY_SEND`/`PSS_HEARTBEAT_CYCLES`を反映して稼働日数を再試算した結果、定常運用で約19%(24日分)の低下という結論に至った(§2.6・§6 #6に参照を追記、`docs/hardware.md`の稼働日数試算表も合わせて更新)。 |
+| v4 | 実機検証(§10)を追加。ブートモード・通常運用でのAWS IoT Core経由の送受信を確認した一方、電源ロガーでの実測により**ポットを常時接続したままだとDeep Sleep待機電流が0.45mA→0.75mAへ増加する**ことが判明。`PSS_CHANGE_ONLY_SEND`/`PSS_HEARTBEAT_CYCLES`を反映して稼働日数を再試算した結果、定常運用で約19%(24日分)の低下という結論に至った(§2.6・§6 #6に参照を追記、`docs/hardware.md`の稼働日数試算表も合わせて更新)。当初は「調整完了後に`PSS_POT_ENABLED=0`+確定値で最終再書き込みしてからケーブルを抜く」運用を推奨していたが、v5でより良い設計に置き換えた。 |
+| v5(本版) | ユーザー提案により設計変更: **ADCの生読みをブートモード(`#50`)の5回の送信時だけに限定し、結果をNVSへ永続化。通常サイクル(`runCycle()`)はNVSの値を使うだけでADCには一切触れない**設計に変更した(§2.2/§2.7)。これにより、v4で推奨していた「最終書き込みして`PSS_POT_ENABLED=0`に切り替える」手順が不要になり、**ブートモード完了後はいつでもケーブルを抜いてよい**(NVSに既に永続化済みのため、フローティングピンの不定値を拾わない)。`potentiometer.h/cpp`に`readPotentiometerThresholdLive()`(ブートモード専用、生読み+NVS永続化)と`currentPotThreshold()`(通常サイクル専用、NVS値を返すだけ)を新設し、`readPotentiometerThreshold()`を置き換えた。あわせて、ケーブル撤去後に物理的な電源サイクル(バッテリー交換等)が発生した場合の考慮(§2.7)と、実際の運用ではLiPoを抜かずにUSB-C充電で完結する(`docs/hardware.md`記載のETA6003によるハードウェアのみの充電、システム電源の瞬断なし)ため、この考慮は実質的に問題にならないことを明記した。さらに§11として、リレー(#46)の空きチャンネルにポットのVCCを通し、ケーブルの抜き差し自体を不要にしつつDeep Sleep中のリーク電流も自動的にゼロにするハードウェア拡張案(ユーザー提案)を、コードベース調査による裏付け(制御GPIOが1本のみ・製品名が「2-Coil」であること等、2回路がDPDT的に連動する状況証拠)とともに記録した(実機未検証、本PRのスコープ外・別Issue候補)。 |
 
 ---
 
@@ -118,7 +119,8 @@ history-log設計が「既存の`sync_ledger.*`には一切変更を加えない
 
 // #60: 現地調整用ポテンショメーター(Grove - Rotary Angle Sensor)。
 // Grove Shield for XIAO Analogポート(D1/GPIO2)、対数マッピングで判定閾値を算出する。
-// docs/60-potentiometer-threshold-design.md 参照。
+// ブートモード(#50)の5回の送信の間だけADCを生読みしてNVSへ永続化し、それ以降の通常
+// サイクルはNVSの値を使い続ける(ADCには一切触れない)。詳細は§2.7参照。
 struct PotReading {
   uint16_t raw = 0;                        // 0-4095、平均済みADC値
                                             // (kPotEnabled=falseの場合は常に0)
@@ -132,8 +134,15 @@ struct PotReading {
   PotReading(uint16_t rawIn, int thresholdIn) : raw(rawIn), threshold(thresholdIn) {}
 };
 
+// setup()から1回呼ぶ。ADCのアッテネーション設定 + NVSに永続化済みの値のロードを行う。
 void initPotentiometer();
-PotReading readPotentiometerThreshold();
+
+// runBootMode()専用。ADCを生読みし、結果をNVSへ永続化してから返す。
+PotReading readPotentiometerThresholdLive();
+
+// runCycle()専用。ADCには一切触れず、initPotentiometer()でロード済み(直近の
+// readPotentiometerThresholdLive()呼び出しでNVSに永続化された)値を返す。
+PotReading currentPotThreshold();
 
 // 単体で境界値確認しやすいよう、対数マッピングだけを切り出した純粋関数。
 int computeThresholdFromAdc(uint16_t adc);
@@ -141,14 +150,29 @@ int computeThresholdFromAdc(uint16_t adc);
 
 呼び出しタイミング: `initPotentiometer()`は`relay.h`の`initRelay()`と同じく`setup()`から
 1回(ボード起床のたび、すなわちDeep Sleep復帰のたびに`setup()`ごと再実行される)呼ぶ。
-`readPotentiometerThreshold()`は**`runCycle()`と`runBootMode()`の両方**で、
-`readSensor(sample)`の直後・`classifyStatus()`の直前に呼ぶ(Issueが指摘する「boot-mode時も
-同じ固定値`config::kStatusThreshold`を渡している」問題を、両方の呼び出し箇所で解消する)。
 
-`runBootMode()`では**5回のスロットそれぞれで再読み込みする**設計にする。ブートモード
-(`#50`)は電源投入直後の最大4分間、1分おきに5回連続送信する機能であり、この間に現地作業者が
-ポットを回しながらクラウド側/シリアルログで判定結果の変化をほぼリアルタイムに確認できる
-ことは、本Issueが解決したい「現地調整の往復コスト」を最小化する副次効果になる。
+**v5で変更(ユーザー提案)**: `readPotentiometerThreshold()`を`runCycle()`と
+`runBootMode()`の両方で呼ぶ、というv1〜v4の設計は、「調整完了後にケーブルを抜くと
+フローティングピンの不定値を拾ってしまう」という運用上の弱点があった(v4時点では
+「最後に`PSS_POT_ENABLED=0`+確定値で再書き込みしてから抜く」手順で回避していたが、
+再書き込みという追加コストが発生する)。v5では、ADCを生読みするのは
+**`runBootMode()`の5回のスロットのみ**とし、読むたびに結果を**NVSへ永続化**する
+(`readPotentiometerThresholdLive()`)。`runCycle()`(以降の全ての通常サイクル)は
+ADCに一切触れず、NVSに永続化済みの値をそのまま使う(`currentPotThreshold()`)。
+
+これにより:
+- ブートモード完了後は**いつでもケーブルを抜いてよい**(直近の値が既にNVSに書き込み
+  済みのため、フローティングピンの不定値を拾うことがない)。
+- 再調整したい場合は、ポットを挿し直して物理的に電源を入れ直す(電池抜き差し等)だけで
+  よい。ブートモードが`ESP_RST_POWERON`で自動的に再発動する(`#50`の既存機構をそのまま
+  流用、追加のトリガー機構は不要)。
+- 再書き込み(ビルド・USB接続)は一切不要になる。
+
+詳細な運用手順・関連する考慮事項は§2.7を参照。
+
+ブートモード(`#50`)は電源投入直後の最大4分間、1分おきに5回連続送信する機能であり、この間に
+現地作業者がポットを回しながらクラウド側/シリアルログで判定結果の変化をほぼリアルタイムに
+確認できることは、本Issueが解決したい「現地調整の往復コスト」を最小化する副次効果になる。
 
 補足(v3): この「ブートモード中はDeep Sleepなしで最大4分間動き続ける」性質は、§8のテスト
 計画で専用デバッグenvの代わりに使う前提にもなっている(§8参照)。
@@ -165,21 +189,52 @@ ESP32-S3はハードウェアFPU(単精度)を持ち、この計算はサイク�
 #include "potentiometer.h"
 
 #include <Arduino.h>
+#include <Preferences.h>
 #include <math.h>
 
 #include "board.h"
 #include "config.h"
 
 namespace {
+
 constexpr uint16_t kAdcMax = 4095;
+
+// sync_ledger.cpp/history_log.cppと同じPreferences(NVS)パターン。
+constexpr char kNamespace[] = "pss_pot";
+constexpr char kKeyRaw[] = "raw";
+constexpr char kKeyThreshold[] = "thr";
+
+// initPotentiometer()でNVSからロードし、readPotentiometerThresholdLive()で更新する。
+// currentPotThreshold()はこれをそのまま返すだけでADCには触れない。
+PotReading cached;
+
+void persist(const PotReading& reading) {
+  Preferences prefs;
+  prefs.begin(kNamespace, false);
+  prefs.putUShort(kKeyRaw, reading.raw);
+  prefs.putInt(kKeyThreshold, reading.threshold);
+  prefs.end();
+}
+
 }  // namespace
 
 void initPotentiometer() {
   if (!config::kPotEnabled) {
+    cached = PotReading(0, config::kStatusThreshold);
     return;
   }
   analogReadResolution(12);
   analogSetPinAttenuation(POT_ADC_PIN, ADC_11db);
+
+  Preferences prefs;
+  prefs.begin(kNamespace, true);
+  const bool hasStored = prefs.isKey(kKeyThreshold);
+  const uint16_t raw = prefs.getUShort(kKeyRaw, 0);
+  const int threshold = prefs.getInt(kKeyThreshold, config::kStatusThreshold);
+  prefs.end();
+  // ブートモードがまだ一度もADCを読んでいない初回起動は、既定の固定値にフォールバックする。
+  cached = hasStored ? PotReading(raw, threshold)
+                     : PotReading(0, config::kStatusThreshold);
 }
 
 int computeThresholdFromAdc(uint16_t adc) {
@@ -193,10 +248,9 @@ int computeThresholdFromAdc(uint16_t adc) {
   return static_cast<int>(lroundf(threshold));
 }
 
-PotReading readPotentiometerThreshold() {
+PotReading readPotentiometerThresholdLive() {
   if (!config::kPotEnabled) {
-    // 未配線機体の既定値。ADCには一切触れない(§7参照)。
-    return PotReading{0, config::kStatusThreshold};
+    return cached;  // {0, config::kStatusThreshold}(initPotentiometer()で設定済み)
   }
 
   uint32_t sum = 0;
@@ -209,8 +263,12 @@ PotReading readPotentiometerThreshold() {
     }
   }
   const uint16_t avg = static_cast<uint16_t>(sum / config::kPotSampleCount);
-  return PotReading{avg, computeThresholdFromAdc(avg)};
+  cached = PotReading(avg, computeThresholdFromAdc(avg));
+  persist(cached);
+  return cached;
 }
+
+PotReading currentPotThreshold() { return cached; }
 ```
 
 `PSS_POT_THRESHOLD_MIN`/`MAX`/ADC最大値4095は`config.h`に`PSS_POT_*`マクロとして追加する
@@ -231,14 +289,15 @@ PotReading readPotentiometerThreshold() {
 設ける。理由:
 - リレー同様、ポットが物理配線されていない既存機体(現行運用中の実機を含む)に誤って
   ポット由来の不定値を閾値として使わせないための安全弁が必要。
-- `readPotentiometerThreshold()`自体が内部で`config::kPotEnabled`を判定して
-  `config::kStatusThreshold`をそのまま返すため、呼び出し元(`runCycle()`/`runBootMode()`)は
-  分岐を書かずに済み、`relayLteOn()`等と同様「呼び出しは常に行い、有効/無効の判定は
-  関数内部に閉じる」という既存の設計言語を踏襲できる。
+- `readPotentiometerThresholdLive()`/`currentPotThreshold()`(v5、§2.2/§2.7)は
+  いずれも内部で`config::kPotEnabled`を判定して`config::kStatusThreshold`をそのまま
+  返すため、呼び出し元(`runCycle()`/`runBootMode()`)は分岐を書かずに済み、
+  `relayLteOn()`等と同様「呼び出しは常に行い、有効/無効の判定は関数内部に閉じる」
+  という既存の設計言語を踏襲できる。
 
 `main.cpp`側の呼び出し箇所2箇所(`runCycle()`: `main.cpp:434`、`runBootMode()`:
-`main.cpp:588`)を、それぞれ`readPotentiometerThreshold()`で得た`PotReading.threshold`を
-渡す形に変更する(§4.2/4.3)。
+`main.cpp:588`)を、それぞれ`currentPotThreshold()`/`readPotentiometerThresholdLive()`
+(v5)で得た`PotReading.threshold`を渡す形に変更する(§4.2/4.3)。
 
 ### 2.5 テレメトリJSON
 
@@ -270,8 +329,10 @@ pot["adcRaw"] = potReading.raw;
 起床のたびに(Deep Sleep復帰は`setup()`ごと再実行されるため)毎回呼ぶ。VEML6040のような
 外部I2Cペリフェラルの電源投入直後の安定待ち(`sensor.cpp`の`delay(1500)`)とは異なり、
 内蔵ADCは電源投入直後から即座に読み取り可能であり、**専用の安定待ちは不要**と判断する。
-`readPotentiometerThreshold()`内の8回×2ms=16ms程度のサンプリング間隔は、ノイズ平滑化目的の
-遅延であってハードウェア安定待ちではない。
+`readPotentiometerThresholdLive()`(v5、ブートモード専用)内の8回×2ms=16ms程度の
+サンプリング間隔は、ノイズ平滑化目的の遅延であってハードウェア安定待ちではない。
+`currentPotThreshold()`(v5、通常サイクル用)はADCに一切触れないためこの遅延自体も
+発生しない。
 
 `kPotSampleCount=8`回の`analogRead()`自体は1回あたりマイクロ秒オーダーであり、
 `initSensor()`の1500ms安定待ちや、LTE接続フェーズ(数秒〜数十秒)と比べて無視できるコスト
@@ -286,6 +347,45 @@ pot["adcRaw"] = potReading.raw;
 成否判定より後)。センサーI2C初期化に失敗した場合(`kSensorError`)は元々`classifyStatus()`
 に到達せず送信もしないため、ポット読み取りもそのケースでは行わない(無駄なADC読み取りを
 避ける)。
+
+### 2.7 現地調整完了後の運用(NVS永続化・v5)
+
+v4までは「調整完了後にケーブルを抜くと閾値が壊れる」問題への対策として、
+「`PSS_POT_ENABLED=0`+確定値で最終再書き込みしてから抜く」手順を推奨していた。
+v5ではユーザー提案により、**ADCの生読みをブートモード(`#50`)の5回の送信時だけに
+限定し、結果をNVSへ永続化する**設計に変更し、再書き込みという追加コストを解消した
+(§2.2/§4.1参照)。
+
+**確立された運用手順**:
+
+1. 現地でポットを回し、テレメトリ(`pot.adcRaw`/`threshold`)を見ながら値を決定する
+   (ブートモードの5回の送信、電源投入から最大約4分間)。
+2. ブートモードが完了した時点で、その最後の値が既にNVSへ永続化されている。
+   **以降はいつでもGroveケーブルを抜いてよい**(`runCycle()`はADCに一切触れず、
+   NVSの値をそのまま使い続けるため、フローティングピンの不定値を拾わない)。
+3. 再調整したい場合は、ポットを挿し直してから物理的に電源を入れ直す
+   (電池抜き差し等)。`ESP_RST_POWERON`でブートモードが自動的に再発動し、
+   新しい値がNVSに上書きされる。
+
+**検討した懸念(結論: 実運用では問題にならない)**: ケーブルを抜いた後に何らかの理由で
+物理的な電源サイクル(`ESP_RST_POWERON`)が発生すると、ブートモードが再発動して
+フローティングピンを読み、NVSの正しい値を不定値で上書きしてしまうおそれがある。
+この点について検討した結果、以下の理由で実運用上の問題にはならないと判断した:
+
+- 本プロジェクトの通常のバッテリー充電手順は、**LiPoを抜かずにUSB-Cを接続する**方式
+  である。Grove Shield上の充電IC ETA6003がハードウェアのみで充電を完結させ、
+  `docs/hardware.md`に記載の通り「ESP32S3がDeep Sleep中かどうかに関わらず充電は継続する」
+  ため、**充電のためにシステム電源が瞬断・リセットされることはない**。つまり定期的な
+  バッテリー充電(この運用では約100日ごと、`docs/hardware.md`稼働日数試算参照)は
+  `ESP_RST_POWERON`を発生させず、ブートモードも再発動しない。
+- LiPoが完全に枯渇した場合(通常運用では想定しない障害系)は、装置が電源を失う。
+  この場合の復旧は「NVSの値が破損する」という個別の問題ではなく、**ポットを接続し直して
+  初期設定からやり直す**という、より上位の再セットアップ手順の一部として自然に解決する
+  (このケースでは元々ポットを挿し直すことが前提のフローになるため)。
+
+したがって、リレー(#46)のような追加ハードウェアや、NVS書き込みの信頼性を上げるための
+追加のファームウェア機構(フローティング検出等、§6 #6で検討し不採用とした)は不要と
+判断する。
 
 ---
 
@@ -379,7 +479,7 @@ void setup() {
 
   const int rgDiff =
       static_cast<int>(sample.red) - static_cast<int>(sample.green);
-  const PotReading potReading = readPotentiometerThreshold();  // #60
+  const PotReading potReading = currentPotThreshold();  // #60: NVS永続化済みの値(ADCには触れない)
   const ParkingStatus status = classifyStatus(sample, potReading.threshold);
   Serial.printf(
       "sample r=%u g=%u b=%u w=%u r-g=%d status=%s threshold=%d potRaw=%u\n",
@@ -396,7 +496,7 @@ void setup() {
 ```cpp
     RawSample sample{};
     readSensor(sample);
-    const PotReading potReading = readPotentiometerThreshold();  // #60: スロットごとに再読込
+    const PotReading potReading = readPotentiometerThresholdLive();  // #60: スロットごとに生読み+NVS永続化
     const ParkingStatus status = classifyStatus(sample, potReading.threshold);
     Serial.printf(
         "boot-mode slot=%u/%u sample r=%u g=%u b=%u w=%u status=%s "
@@ -470,20 +570,33 @@ bool publishWithRetry(const RawSample& sample, ParkingStatus status,
 
 ### 5.2 `runCycle()`と`runBootMode()`で一貫した閾値が使われる
 
-両関数とも「`readSensor()`直後→`readPotentiometerThreshold()`→`classifyStatus()`→
-(送信する場合は)`buildPayload()`に同じ`potReading`を渡す」という同一の順序を踏む。
+`runBootMode()`は「`readSensor()`直後→`readPotentiometerThresholdLive()`(生読み+NVS
+永続化)→`classifyStatus()`→(送信する場合は)`buildPayload()`に同じ`potReading`を渡す」、
+`runCycle()`は「`readSensor()`直後→`currentPotThreshold()`(NVSの値をそのまま返す)→
+`classifyStatus()`→`buildPayload()`」という順序を踏む(v5、§2.2/§2.7)。呼び出す関数は
+異なるが、**いずれも「1回のスロット/サイクルにつき1回だけ`PotReading`を取得し、
+`classifyStatus()`とペイロードの両方に同じ値を渡す」という構造は共通**であり、
 `#50`ブートモード設計時に発生した「`metrics.transport`がスロットによって不整合になる」
-類の回帰(`docs/50-boot-mode-design.md` §2.3)と同種の問題が起きないよう、`potReading`は
-1回のスロット/サイクルにつき1回だけ計算し、`classifyStatus()`に使った値とペイロードに
-出力する値が常に同一であることを構造的に保証する(スロット内で2回読み直さない)。
+類の回帰(`docs/50-boot-mode-design.md` §2.3)と同種の問題(片方だけ新しい値、もう片方は
+古い値、というズレ)は起きない。
 
 ### 5.3 `config::kPotEnabled=false`時はADCに一切触れない
 
-`readPotentiometerThreshold()`は`config::kPotEnabled`が偽の場合、`analogRead()`を含む
-ADC API呼び出しを一切行わずに`PotReading{0, config::kStatusThreshold}`を返す
-(`relay.cpp`の`initRelay()`/`relayLteOn()`が`kLtePowerRelayEnabled`で早期returnするのと
-同一パターン)。既存の稼働機体(`PSS_POT_ENABLED`未指定=既定`0`)は、この変更によって
-挙動が一切変わらない(`doc["threshold"]`は従来通り`config::kStatusThreshold`のまま)。
+`readPotentiometerThresholdLive()`/`currentPotThreshold()`はいずれも`config::kPotEnabled`
+が偽の場合、`analogRead()`を含むADC API呼び出しを一切行わずに`initPotentiometer()`で
+設定済みの`PotReading(0, config::kStatusThreshold)`を返す(`relay.cpp`の`initRelay()`/
+`relayLteOn()`が`kLtePowerRelayEnabled`で早期returnするのと同一パターン)。既存の
+稼働機体(`PSS_POT_ENABLED`未指定=既定`0`)は、この変更によって挙動が一切変わらない
+(`doc["threshold"]`は従来通り`config::kStatusThreshold`のまま)。
+
+### 5.5 通常サイクルはADCに一切触れない(v5)
+
+v5では`currentPotThreshold()`(`runCycle()`から呼ばれる)がNVSにキャッシュ済みの
+`PotReading`をそのまま返すだけの実装になっており、`config::kPotEnabled`の真偽に
+関わらず`analogRead()`等のADC APIを一切呼ばない。ADCに触れるのは
+`readPotentiometerThresholdLive()`(`runBootMode()`専用)のみである。これにより、
+ブートモード完了後にGroveケーブルを抜いても、通常サイクルの動作(NVSの値を読むだけ)
+には一切影響しない(§2.7)。
 
 ### 5.4 ペイロードサイズへの影響は無視できる
 
@@ -502,7 +615,7 @@ ADC API呼び出しを一切行わずに`PotReading{0, config::kStatusThreshold}
 | 3 | 筐体へのつまみ露出用開口部(防水・防塵設計) | ハードウェア筐体(`#3`関連、`docs/enclosure.md`)の検討事項であり、本ドキュメント(ファームウェア設計)のスコープ外。別途Issueで追跡することを推奨する。 |
 | 4 | テレメトリJSONへの実効閾値・ポットADC生値の追加 | §2.5/§4.5で対応済み。`doc["threshold"]`を実効値に置き換え、新規`doc["pot"]`(`enabled`/`adcRaw`)を追加する。 |
 | 5(v1で発見、v2でGPIO2選定により解消) | GPIO3がESP32-S3のストラップピン(JTAGソース選択)であることの起動安定性への影響 | v1時点では未検証のリスクだったが、**ポット接続先をA2/D2(GPIO3)からA1/D1(GPIO2)に変更したことで設計上は解消**した(GPIO2はESP32-S3のストラッピングピンではない、§2.1)。念のため§8テスト項目5で実機の基本的な起動安定性を確認する。 |
-| 6(v4で発見、実機実測) | ポットを現地調整後も常時接続したままにすることの消費電力への影響 | 実測(§10.2)により、Deep Sleep待機電流が0.45mA→0.75mAへ増加することが判明。`PSS_CHANGE_ONLY_SEND`/`PSS_HEARTBEAT_CYCLES`を反映した再試算(§10.3)では、定常運用で稼働日数が約19%(24日分)低下する。**現地調整完了後はGroveケーブルを抜いて常設する運用を推奨する**(再調整の利便性を優先する場合は接続したままでも即座に問題になる規模ではない)。ハードウェア側で電源経路自体を遮断する対策(リレー(#46)と同様のパターン)は本設計のスコープ外とし、必要になれば別Issueで検討する。 |
+| 6(v4で発見、実機実測、v5で対策確定) | ポットを現地調整後も常時接続したままにすることの消費電力への影響 | 実測(§10.2)により、Deep Sleep待機電流が0.45mA→0.75mAへ増加することが判明。`PSS_CHANGE_ONLY_SEND`/`PSS_HEARTBEAT_CYCLES`を反映した再試算(§10.3)では、定常運用で稼働日数が約19%(24日分)低下する。**v5のNVS永続化により、ブートモード完了後はいつでもケーブルを抜いてよい**(§2.7)ため、この影響は「ケーブルを抜けば回避できる」問題として解決した。ハードウェア側でポット電源自体を自動遮断する案(リレー(#46)の空きチャンネル活用、ケーブルの抜き差し自体が不要になる)は§11で検討し、本PRのスコープ外・別Issue候補とした。 |
 
 ---
 
@@ -510,13 +623,16 @@ ADC API呼び出しを一切行わずに`PotReading{0, config::kStatusThreshold}
 
 | ケース | 対処 |
 |---|---|
-| `PSS_POT_ENABLED=0`(既定、未配線機体) | `readPotentiometerThreshold()`が内部で早期return、`config::kStatusThreshold`をそのまま返す。ADC APIに一切触れないためフローティングピンの影響を受けない(§5.3)。 |
+| `PSS_POT_ENABLED=0`(既定、未配線機体) | `currentPotThreshold()`/`readPotentiometerThresholdLive()`が内部で早期return、`config::kStatusThreshold`をそのまま返す。ADC APIに一切触れないためフローティングピンの影響を受けない(§5.3)。 |
 | ポット未配線のまま`PSS_POT_ENABLED=1`で誤って書き込んだ | フローティングピンのADC値は不定(周辺ノイズ次第で0〜4095のどこにでも張り付き得る)。実行時の自動検出(分散チェック等)は行わず、`relay.cpp`と同じ「配線済みenvでのみビルドフラグを立てる」運用ルールのみで防ぐ。実装ステップ・レビュー観点に明記する(§9)。 |
 | ADC平均値が0(可変抵抗を最小まで回した) | `computeThresholdFromAdc(0)`: `ratio=0` → `powf(x,0)=1` → `threshold = 30`(下限)。想定通り。 |
 | ADC平均値が4095(可変抵抗を最大まで回した) | `computeThresholdFromAdc(4095)`: `ratio=1` → `powf(x,1)=500` → `threshold = 30×500 = 15000`(上限)。想定通り。 |
 | ADC平均値が理論上4095をわずかに超える(仕様上は起こらないが防御的に) | `computeThresholdFromAdc()`内で`kAdcMax`にクランプしてから計算するため、`ratio`が1.0を超えて`threshold`が15000を超えることはない。 |
-| ブートモード中(`#50`)に現地作業者がポットを回す | 意図した使い方。5スロットそれぞれで`readPotentiometerThreshold()`を再読込するため、回転操作の効果を最大約4分以内(次スロットまで最大60秒)に確認できる(§2.2)。 |
+| ブートモード中(`#50`)に現地作業者がポットを回す | 意図した使い方。5スロットそれぞれで`readPotentiometerThresholdLive()`を再読込・NVS永続化するため、回転操作の効果を最大約4分以内(次スロットまで最大60秒)に確認できる(§2.2)。 |
 | GPIO2(D1/A1)を使用する | ストラッピングピンではないため通常のGPIO起動リスクはないと考えられるが、他のGPIOと同様の基本的な起動安定性確認は§8テスト項目5で行う(§6 #5)。 |
+| ブートモード完了後にGroveケーブルを抜く(v5、想定される主要な運用) | 安全。`currentPotThreshold()`はADCに一切触れず、直近のブートモードでNVSに永続化された値をそのまま使い続ける(§2.7)。 |
+| ケーブル撤去後に物理的な電源サイクルが発生する | ブートモードが再発動し、フローティングピンを読んでNVSの値を不定値で上書きするおそれがある。ただし本プロジェクトの通常のバッテリー充電はLiPoを抜かずUSB-C接続のみで完結する(システム電源の瞬断なし)ため、通常運用では発生しない。LiPo完全枯渇時は初期設定からのやり直し(ポット再接続)が前提となるため問題にならない(§2.7で詳細に検討)。 |
+| `PSS_POT_ENABLED=1`だが`PSS_BOOT_MODE_ENABLED=0`のビルド(非推奨の組み合わせ) | `readPotentiometerThresholdLive()`が一切呼ばれず、NVSに値が永続化されないため`currentPotThreshold()`は常に`initPotentiometer()`時点のフォールバック値(`config::kStatusThreshold`)を返し続ける。ポット機能が実質的に無効化された状態になる。`PSS_BOOT_MODE_ENABLED`は既定で`1`であり、ポット有効機体でこれを`0`にする運用は想定していない(組み合わせる場合は別途対応を検討)。 |
 
 ---
 
@@ -556,6 +672,10 @@ ADC API呼び出しを一切行わずに`PotReading{0, config::kStatusThreshold}
 7. **屋外実地確認**: 実際の設置現場で、現行の暫定閾値(100、または13)相当になるよう
    ポットを合わせた状態から、2026-08-25実証データ相当のr-g差分実測ログと突き合わせ、
    算出される`threshold`が妥当な範囲(飽和判定を誤らない範囲)に収まることを確認する。
+8. **ケーブル抜去後の閾値保持確認(v5、NVS永続化)**: ブートモード完了後にGroveケーブルを
+   物理的に抜き、その後の通常サイクル(複数回のDeep Sleep復帰)で`doc["threshold"]`が
+   ブートモード最終スロットの値のまま変化しない(フローティングピンの不定値を拾って
+   ブレたりしない)ことを確認する(§2.7)。
 
 ---
 
@@ -567,11 +687,14 @@ ADC API呼び出しを一切行わずに`PotReading{0, config::kStatusThreshold}
 3. `firmware/include/config.h`に`PSS_POT_*`マクロ+`config::kPot*`定数+`static_assert`を
    追加(§3)。
 4. `firmware/include/potentiometer.h` / `firmware/src/potentiometer.cpp`を新規作成
-   (§2.2/2.3/4.1)。
+   (§2.2/2.3/4.1)。`Preferences`(NVS)による永続化(`readPotentiometerThresholdLive()`)と
+   キャッシュ読み出し(`currentPotThreshold()`)を実装する(v5)。
 5. `firmware/src/main.cpp`: `#include "potentiometer.h"`追加、`setup()`に
    `initPotentiometer()`呼び出しを追加、`buildPayload()`/`publishWithRetry()`の
-   シグネチャに`PotReading`パラメータを追加、`runCycle()`/`runBootMode()`両方の
-   呼び出し箇所を更新(§4.2〜4.5)。`classify.h`/`classify.cpp`・`history_log.*`は変更しない。
+   シグネチャに`PotReading`パラメータを追加、`runBootMode()`は
+   `readPotentiometerThresholdLive()`、`runCycle()`は`currentPotThreshold()`を
+   呼ぶよう更新する(§4.2〜4.5、v5)。`classify.h`/`classify.cpp`・`history_log.*`は
+   変更しない。
 6. `firmware/platformio.ini`に、本番投入用の新規env`xiao-s3-aws-lte-relay-pot`
    (`env:xiao-s3-aws-lte-relay`を`extends`し`-DPSS_POT_ENABLED=1`のみ追加)を**1つだけ**
    新設する(v3: 卓上テスト専用・実機ベンチデバッグ専用のenvは追加しない。§8参照)。
@@ -594,14 +717,19 @@ ADC API呼び出しを一切行わずに`PotReading{0, config::kStatusThreshold}
 - `PSS_POT_ENABLED=0`(既定)ビルドで、`analogRead()`/`analogSetPinAttenuation()`等の
   ADC APIが一切呼ばれないこと(未配線機体で不定なフローティング値を誤って使わないための
   最重要ガード、§5.3/§7)。
-- `runCycle()`と`runBootMode()`の両方で`readPotentiometerThreshold()`が呼ばれ、
-  どちらも同じ`PotReading`インスタンスを`classifyStatus()`と`buildPayload()`の両方に
-  一貫して渡していること(片方だけ更新して閾値がズレる、という`#50`類似の回帰を避ける、
-  §5.2)。
+- `runBootMode()`は`readPotentiometerThresholdLive()`、`runCycle()`は
+  `currentPotThreshold()`を呼び、いずれも同じ`PotReading`インスタンスを
+  `classifyStatus()`と`buildPayload()`の両方に一貫して渡していること(片方だけ更新して
+  閾値がズレる、という`#50`類似の回帰を避ける、§5.2)。
 - `computeThresholdFromAdc()`の境界値(adc=0→30、adc=4095→15000)が仕様通りであること
   (§7)。
 - `POT_ADC_PIN`がストラッピングピンではないGPIO2(D1/A1)になっていること、および
   基本的な起動安定性が実機(§8テスト項目5)で確認されていること。
+- `currentPotThreshold()`(`runCycle()`用)が`analogRead()`等のADC APIを一切呼ばず、
+  NVSからロード済みのキャッシュを返すだけであること(v5、§5.5、ケーブル抜去後の
+  安全性の要となる最重要ガード)。
+- ブートモード完了後にGroveケーブルを抜いても、直後の通常サイクルで`threshold`が
+  ブレないこと(§8テスト項目8)。
 - 新規env`xiao-s3-aws-lte-relay-pot`がポット未配線の既存本番機体のenv
   (`xiao-s3-aws-lte-relay`)から独立しており、既存機体のビルド・書き込みフローに
   影響しないこと。
@@ -684,25 +812,98 @@ MCUのスリープ状態に関わらず常時給電されているため、ポ�
 (§6 #6)。再調整の利便性を優先して接続したままにする選択も、即座に問題になる規模
 (103日 vs 127日)ではないため、運用judgment次第で成立する。
 
-### 10.4 ケーブルを抜いた場合の閾値の扱い(重要な運用上の注意)
+### 10.4 ケーブルを抜いた場合の閾値の扱い(v5で解消、NVS永続化)
 
-`readPotentiometerThreshold()`は`PSS_POT_ENABLED=1`である限り**毎サイクル必ずADCを
-生で読み直す**設計(現地調整中にリアルタイムに追従させるための意図的な仕様、§2.2)。
-そのため、調整完了後に単純にGroveケーブルを抜くだけでは、閾値は**その時点の値で
-固定されない**。GPIO2がフローティングになり、周辺ノイズ次第で0〜4095のどこにでも
-張り付く不定値をベースに`threshold`が算出され続け、これは§7に記載した「ポット未配線の
-まま`PSS_POT_ENABLED=1`で誤って書き込んだ」ケースと技術的に同一の状態になる。
+**この節はv4時点の記述を置き換える(旧: 「最終書き込みして`PSS_POT_ENABLED=0`に
+切り替える」手順を推奨していたが、v5でより良い設計に置き換えたため不要になった)。**
 
-リレー(#46)や物理スイッチのような追加ハードウェアはコストに見合わないため、以下の
-運用手順を推奨する(ハードウェア変更・追加のファームウェア機構は不要):
+v4までの設計(`readPotentiometerThreshold()`が`PSS_POT_ENABLED=1`である限り**毎サイクル
+必ずADCを生で読み直す**)では、調整完了後に単純にGroveケーブルを抜くと、GPIO2が
+フローティングになり不定値を拾い続けてしまう問題があった。
 
-1. 現地でポットを回し、テレメトリ(`pot.adcRaw`/`threshold`)を見ながら値を決定する。
-2. 決定した値を`PSS_STATUS_THRESHOLD=<確定値>`・`PSS_POT_ENABLED=0`としてビルドし
-   直し、**最後に1回だけ**USB経由で再書き込みする(セットアップ時に既にUSB接続して
-   いるため追加コストはほぼゼロ)。
-3. その後Groveケーブルを抜く。以降は固定値`config::kStatusThreshold`で動作する
-   (§2.4、`PSS_POT_ENABLED=0`時の既定パス)。
+v5では、ユーザー提案により**ADCの生読みをブートモード(`#50`)の5回の送信時だけに
+限定し、結果をNVSへ永続化する**設計に変更した(`readPotentiometerThresholdLive()`/
+`currentPotThreshold()`、§2.2/§2.7)。これにより:
+
+- **ブートモード完了後はいつでもケーブルを抜いてよい**(直近の値が既にNVSに永続化
+  済みのため、フローティングピンの不定値を拾わない、§5.5)。
+- 再書き込み(ビルド・USB接続)は一切不要。
+- 再調整したい場合は、ポットを挿し直して物理的に電源を入れ直すだけでよい
+  (`ESP_RST_POWERON`でブートモードが自動的に再発動、§2.7)。
+
+確立した運用手順・関連する考慮事項(バッテリー充電時に電源サイクルが発生しないこと等)の
+詳細は§2.7を参照。§11で検討する将来のハードウェア拡張(リレーの空きchでポット電源
+自体を自動遮断する案)が実現すれば、**ケーブルを抜く操作自体が不要**になり、この節の
+運用手順も不要になる見込み。
 
 副次的な利点として、屋外設置後の振動・コネクタ劣化等でポットの物理的な位置が
-経年でズレるリスクも同時に排除できる(固定抵抗器由来の`PSS_STATUS_THRESHOLD`と異なり、
-可変抵抗器は機械的にドリフトしうる)。
+経年でズレても、NVSに永続化された値は(ブートモードが再発動するまで)変わらない
+という安定性がある。
+
+---
+
+## 11. 将来の拡張案: リレー空きチャンネルによるポット電源のハードウェア遮断
+
+ユーザー提案(2026-09-20)。本設計(v5)のNVS永続化により「ケーブルを抜いても閾値が
+壊れない」問題は解決済みだが、**ケーブルを物理的に抜く操作自体をなくす**、かつ
+Deep Sleep中のリーク電流(§10.2、+0.3mA)を**自動的にゼロにする**、より優れた
+ハードウェア側の代替案が考えられる。
+
+### 11.1 アイデア
+
+`#46`で導入したGrove 2-Coil Latching Relay(Seeed SKU 103020010)は**2回路搭載だが
+現在1chのみ使用**(LTE-M用)、もう1chは「未使用・将来の予備」(
+`docs/25-low-power-phase2-hardware-cutoff.md` §2.3)。この空きチャンネルにポットの
+VCC線を通し、LTE-Mと同じSET/RESET制御に連動させる。
+
+### 11.2 電気的な裏付け(コードベース調査、実機テスター未使用)
+
+この基板の2回路が機械的に連動(DPDT: 1組のコイルで2つの接点を同時に切替)しているか
+どうかを、実機測定前にコードベースから調査した:
+
+- ファームウェア全体を検索しても、リレー制御に使うGPIOは`LTE_POWER_RELAY_PIN`
+  (`board_xiao.h:15`)**1本のみ**。2回路を独立制御するなら追加の制御信号が必要な
+  はずだが存在しない。
+- 製品名が「**2-Coil** Latching Relay」(コイル数=2、SET用+RESET用)であり、
+  独立2回路(2ch)を仮定すると通常必要になる4コイル構成にはなっていない。
+- `docs/25-low-power-phase2-hardware-cutoff.md`の「制御側:...ふつうのGroveケーブルで
+  ...GPIOポートに接続するだけ」という記述、および端子台命名(「1COM」「1NO」)からも、
+  1組のコイルで2つの可動接点(pole)を同時に駆動するDPDT構成であることが強く示唆される。
+
+これらは状況証拠であり、製品データシートそのものではないため、**実際に配線した後、
+LTE-M側の通電タイミングとポット側の待機電流の変化が完全に一致するかを実測して
+最終確認する**ことを推奨する(このプロジェクトが`relay.cpp`のSET/RESET極性を
+最終的にベンチ実測で確定させたのと同じ文化)。
+
+### 11.3 想定される動作(2回路が連動する前提)
+
+| フェーズ | リレー状態 | ポットの通電 |
+|---|---|---|
+| ブートモード中(電源投入直後、約4分間) | SET(ON)を保持 | 通電(現行の`readPotentiometerThresholdLive()`がそのまま動作) |
+| 通常サイクルのフル送信(LTE接続+publish、約11秒) | SET | 通電(副次効果、実害なし) |
+| Deep Sleep中・スキップサイクル(大部分の時間) | RESET(OFF) | **無通電(リーク電流ゼロ)** |
+
+「run loopに入ったら開きっぱなしで遮断」という当初のイメージとは異なり、**LTE-Mの
+SET/RESETと完全に同期して自動的に開閉する**形になる。ただし結果として、
+「ケーブル抜き差し不要」「Deep Sleep中のリーク電流ゼロ」という2つの目的はどちらも
+達成できる。
+
+### 11.4 ソフトウェアへの影響: なし
+
+この変更は**ハードウェア配線のみ**で完結し、ファームウェアの変更は一切不要である。
+理由:
+
+- ブートモード中はリレーが継続してSETされる(`runBootMode()`の既存実装、§2.2)ため、
+  `readPotentiometerThresholdLive()`は電気的に問題なく生読みできる。
+- `currentPotThreshold()`(通常サイクル用)はそもそもADCに触れない(v5、§5.5)ため、
+  Deep Sleep中にポットが無通電になっていても影響を受けない。
+- 配線変更後にケーブルを常時接続したままにする場合、§2.6で述べた常時通電リーク
+  (+0.3mA)自体が発生しなくなるため、§10.3の稼働日数試算の「ポットあり」列は
+  「ポットなし」列と実質同じ値に近づく(定常運用で約127日、常時接続でも劣化なし)。
+
+### 11.5 スコープ
+
+本Issue(#60)はファームウェア実装が対象であり、この拡張案はハードウェア配線変更
+(既存のGroveケーブルを一部加工する`#46`と同種の作業)を伴うため、本PRのスコープ外と
+する。実施する場合は別Issueとして起票し、実機での連動確認(§11.2)を経てから
+着手することを推奨する。
