@@ -123,6 +123,12 @@ struct PotReading {
                                             // (kPotEnabled=falseの場合は常に0)
   int threshold = 0;                       // rawから算出した実効閾値
                                             // (kPotEnabled=falseの場合はconfig::kStatusThreshold)
+
+  // デフォルトメンバ初期化子付きの集成体は2引数の波括弧初期化
+  // (`PotReading{raw, threshold}`)に使えないため、main.cpp既存の
+  // BootModeSendInfo(main.cpp:150-158)と同じパターンで明示的コンストラクタを持つ。
+  PotReading() = default;
+  PotReading(uint16_t rawIn, int thresholdIn) : raw(rawIn), threshold(thresholdIn) {}
 };
 
 void initPotentiometer();
