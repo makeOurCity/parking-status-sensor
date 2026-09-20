@@ -251,6 +251,7 @@ LiPo + Deep Sleep + `xiao-s3-aws-lte` + **モデム内蔵 TLS** で AWS IoT Core
 
 - 改善前は NTP 空振り（約30秒）+ ESP32 TLS over UART（約34秒）が支配的だった（[docs/lte-active-investigation.md](../docs/lte-active-investigation.md)）
 - mAh 実測: [docs/power-measurement.md](../docs/power-measurement.md) §6（#31 完了）。**待機 ≈22 mA** → #25 Phase 0 完了: [25-low-power-mode.md](../docs/25-low-power-mode.md)
+- **2026-09時点の更新:** `#46`（リレーによるLTE-M電源の物理遮断）実装後、待機電流は**0.45mA**まで低減済み（旧≈22mAの約1/50）。最新の稼働日数試算は[README.md](../README.md) §6.2.5・[docs/hardware.md](../docs/hardware.md)を参照。
 
 **LTE 時刻同期（#30）:** `syncClock()` は lwIP SNTP を使わず、モデム `AT+CCLK`（NITZ）→ 未提供時 `+CNTP` で ESP32 の system clock を設定する。LTE-only では `configTime()` を呼ばない。
 
