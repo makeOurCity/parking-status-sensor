@@ -22,7 +22,7 @@
 | `rawSensor.blue` | Number | カラーセンサ青チャンネル生値（VEML6040 B） |
 | `rawSensor.clear` | Number | 輝度相当の生値（VEML6040 White。MQTT ペイロードの `raw.clear` に対応） |
 | `determinedBy` | Text | 判定主体: `device` または `server` |
-| `threshold` | Number | 判定に使用した R-G 差の閾値 |
+| `threshold` | Number | 判定に使用した R-G 差の閾値（#60: ポテンショメーター搭載機体では現地調整による実効値） |
 | `deviceId` | Text | ESP32 デバイス識別子 |
 | `location` | geo:json | センサ設置箇所の緯度経度（GeoJSON Point） |
 | `dateObserved` | DateTime | 観測日時（ISO 8601） |
@@ -86,5 +86,6 @@ FIWARE Smart Data Models の [`OffStreetParking`](https://github.com/smart-data-
 
 - `network.*`（`transport`、接続時間、`publishAttempts` 等）と `sync.*`（`prevOutcome`、`pending`、`lastConfirmedStatus` 等）は **端末の運用診断専用**
 - `bootMode.*`（`active`・`slot`・`totalSlots`。#50「電源投入直後のブートモード」）も同様に **端末の運用診断専用**。電源投入(コールドブート)直後の無条件連続送信中かどうか、その何回目の送信かを示す。通常サイクルでは常に `active=false`・`slot=0`・`totalSlots=0`（詳細: [50-boot-mode-design.md](50-boot-mode-design.md)）
+- `pot.*`（`enabled`・`adcRaw`。#60「現地調整用ポテンショメーター」）も同様に **端末の運用診断専用**。`enabled` はポット機能のビルド時有効/無効、`adcRaw` は平均済みの生ADC値（0〜4095）。ポット無効機体では常に `enabled=false`・`adcRaw=0` で、`threshold` は従来通りの固定値のまま（詳細: [60-potentiometer-threshold-design.md](60-potentiometer-threshold-design.md)）
 - これらは **Orion（NGSIv2）エンティティにはマップしない**。bridge（#7）の変換対象外
 - 送達確認は `network.deliveryConfirmed`（廃止済み）ではなく、**次サイクルの `sync.prevOutcome == confirmed`** と `sync.lastConfirmedBootCount` で判断する

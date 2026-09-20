@@ -12,6 +12,7 @@
 #include "config.h"
 #include "device_id.h"
 #include "history_log.h"
+#include "potentiometer.h"
 #include "relay.h"
 #include "sensor.h"
 #include "sync_ledger.h"
@@ -160,7 +161,7 @@ struct BootModeSendInfo {
 void buildPayload(const RawSample& sample, ParkingStatus status,
                   const TransportMetrics& transportMetrics, uint32_t activeMs,
                   uint8_t publishAttempts, const BootModeSendInfo& bootModeInfo,
-                  char* out, size_t outSize) {
+                  const PotReading& potReading, char* out, size_t outSize) {
   JsonDocument doc;
 
   char timestamp[25]{};
@@ -175,7 +176,7 @@ void buildPayload(const RawSample& sample, ParkingStatus status,
   raw["blue"] = sample.blue;
   raw["clear"] = sample.white;
 
-  doc["threshold"] = config::kStatusThreshold;
+  doc["threshold"] = potReading.threshold;  // #60: 実効閾値(ポット有効時は算出値)
   doc["determinedBy"] = "device";
   if (hasTimestamp) {
     doc["timestamp"] = timestamp;
@@ -230,6 +231,11 @@ void buildPayload(const RawSample& sample, ParkingStatus status,
   bootMode["slot"] = bootModeInfo.slot;
   bootMode["totalSlots"] = bootModeInfo.totalSlots;
 
+  // #60: 現地でのポット調整履歴を追跡できるよう、生ADC値も併記する。
+  JsonObject pot = doc["pot"].to<JsonObject>();
+  pot["enabled"] = config::kPotEnabled;
+  pot["adcRaw"] = potReading.raw;
+
   serializeJson(doc, out, outSize);
 }
 
@@ -259,8 +265,8 @@ bool mustPublish(ParkingStatus status) {
 bool publishWithRetry(const RawSample& sample, ParkingStatus status,
                       TransportMetrics& metrics, uint32_t cycleStart,
                       bool faultInject, const BootModeSendInfo& bootModeInfo,
-                      char* payload, size_t payloadSize,
-                      PublishResult& result) {
+                      const PotReading& potReading, char* payload,
+                      size_t payloadSize, PublishResult& result) {
   result = PublishResult{};
   const uint32_t phaseStart = millis();
 
@@ -287,7 +293,7 @@ bool publishWithRetry(const RawSample& sample, ParkingStatus status,
     // Build immediately before publish. sync.* reflects the previous cycle,
     // which is the correct state to report alongside this observation.
     buildPayload(sample, status, metrics, millis() - cycleStart, attempt,
-                 bootModeInfo, payload, payloadSize);
+                 bootModeInfo, potReading, payload, payloadSize);
 
     if (faultInject) {
       Serial.println("FAULT INJECT: forcing publish failure");
@@ -431,10 +437,12 @@ void runCycle() {
 
   const int rgDiff =
       static_cast<int>(sample.red) - static_cast<int>(sample.green);
-  const ParkingStatus status = classifyStatus(sample, config::kStatusThreshold);
-  Serial.printf("sample r=%u g=%u b=%u w=%u r-g=%d status=%s\n", sample.red,
-                sample.green, sample.blue, sample.white, rgDiff,
-                statusToString(status));
+  const PotReading potReading = currentPotThreshold();  // #60: NVS永続化済みの値(ADCには触れない)
+  const ParkingStatus status = classifyStatus(sample, potReading.threshold);
+  Serial.printf(
+      "sample r=%u g=%u b=%u w=%u r-g=%d status=%s threshold=%d potRaw=%u\n",
+      sample.red, sample.green, sample.blue, sample.white, rgDiff,
+      statusToString(status), potReading.threshold, potReading.raw);
 
   // #47: unconditional, once per cycle, before mustPublish()/the send path
   // branches. Independent of SyncLedger/mustPublish — never triggers LTE.
@@ -477,8 +485,8 @@ void runCycle() {
 
   PublishResult pub{};
   const bool ok = publishWithRetry(sample, status, metrics, cycleStart,
-                                   faultInject, BootModeSendInfo{}, payload,
-                                   sizeof(payload), pub);
+                                   faultInject, BootModeSendInfo{}, potReading,
+                                   payload, sizeof(payload), pub);
   const uint32_t activeMs = millis() - cycleStart;
   const int16_t mqttErr = static_cast<int16_t>(activeMqttLastError());
 
@@ -585,11 +593,14 @@ void runBootMode() {
 
     RawSample sample{};
     readSensor(sample);
-    const ParkingStatus status = classifyStatus(sample, config::kStatusThreshold);
+    const PotReading potReading = readPotentiometerThresholdLive();  // #60: スロットごとに生読み+NVS永続化
+    const ParkingStatus status = classifyStatus(sample, potReading.threshold);
     Serial.printf(
-        "boot-mode slot=%u/%u sample r=%u g=%u b=%u w=%u status=%s\n",
+        "boot-mode slot=%u/%u sample r=%u g=%u b=%u w=%u status=%s "
+        "threshold=%d potRaw=%u\n",
         sendIndex + 1, config::kBootModeSendCount, sample.red, sample.green,
-        sample.blue, sample.white, statusToString(status));
+        sample.blue, sample.white, statusToString(status),
+        potReading.threshold, potReading.raw);
 
     // #47: unconditional, once per slot, same contract as runCycle().
     historyLogRecordCycle(status, sample, bootCount);
@@ -635,8 +646,8 @@ void runBootMode() {
     char payload[kPayloadSize]{};
     PublishResult pub{};
     const bool ok = publishWithRetry(sample, status, metrics, slotStart,
-                                     /*faultInject=*/false, bootInfo, payload,
-                                     sizeof(payload), pub);
+                                     /*faultInject=*/false, bootInfo, potReading,
+                                     payload, sizeof(payload), pub);
     // activeMs is slot-scoped (millis() - slotStart), matching runCycle()'s
     // own per-cycle semantics — not bootModeStart-relative, which would
     // make prevActiveMs balloon to several minutes by the last slot and
@@ -676,6 +687,10 @@ void setup() {
   // #46: 他のどの処理よりも前に呼ぶ。ウォッチドッグリセット等でSET後・RESET前に
   // 再起動しても、ここで確実にLTE-Mを一度OFFへ倒す（フェイルセーフ）。
   initRelay();
+  // #60: initRelay()のような安全上の緊急性はなく、単にハードウェア初期化群として
+  // まとめて記述する便宜上ここに置いている(Serial.begin()の前後どちらでも動作に
+  // 差はない。docs/60-potentiometer-threshold-design.md §4.2参照)。
+  initPotentiometer();
 
   Serial.begin(115200);
   waitForSerial();
