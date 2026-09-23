@@ -9,7 +9,7 @@
 
 ```
 [iOS アプリ]
-    │ 1. 初回のみ Cognito User Pool にサインイン（SRP 認証）
+    │ 1. 初回のみ Cognito User Pool にサインイン（USER_PASSWORD_AUTH、TLS 経由）
     ▼
 [Cognito User Pool]  ── ID/アクセストークン + リフレッシュトークン（有効 3650 日）
     │ 2. Identity Pool にトークンを渡して一時クレデンシャルを取得
@@ -24,15 +24,17 @@
 ```
 
 - 端末は AWS アクセスキーを一切持たない（IoT Core 側のデバイス証明書認証と同じ思想）
-- リフレッシュトークンは iOS Keychain に保存し、SDK（Amplify or AWS SDK for Swift）が期限切れ前に自動更新する
+- リフレッシュトークンは iOS Keychain に保存し、アプリ内の認証サービスが期限切れ前に自動更新する
 - 無認証（unauthenticated）Identity Pool は採用しない。ログにデバイスの稼働状況が含まれるため、サインイン済みユーザーのみアクセス可能にする
+- サインインは SRP ではなく `USER_PASSWORD_AUTH` を使用する。軽量な Swift 用 SRP 実装が存在せず自前実装はリスクが高いため、パスワードは TLS 経由で Cognito に一度だけ送信する方式を採用（個人利用の PoC ツールとして許容）。以降のセッション延命はすべて `REFRESH_TOKEN_AUTH` で行い、パスワードは二度と送信しない
+- AWS SDK・Amplify 等の外部ライブラリには依存せず、`URLSession` + 自前の SigV4 署名（CloudWatch Logs 呼び出しのみ）で実装する。Cognito の `InitiateAuth` / `GetId` / `GetCredentialsForIdentity` は署名不要の公開 API
 
 ## 作成した AWS リソース（`parking-private` アカウント）
 
 | リソース種別 | 名前 | 備考 |
 |---|---|---|
 | Cognito User Pool | `parking-status-ios-app` | `AllowAdminCreateUserOnly=true`（セルフサインアップ不可） |
-| App Client | `parking-status-ios-client` | シークレットなし（ネイティブアプリ用）。リフレッシュトークン有効期間 **3650 日**（Cognito の上限） |
+| App Client | `parking-status-ios-client` | シークレットなし（ネイティブアプリ用）。認証フローは `USER_PASSWORD_AUTH` + `REFRESH_TOKEN_AUTH`。リフレッシュトークン有効期間 **3650 日**（Cognito の上限） |
 | Cognito ユーザー | `kazuki@code4japan.org` | `admin-create-user` + `admin-set-user-password --permanent` で作成（開発者本人のみ） |
 | Identity Pool | `parking_status_ios_app` | 無認証アクセス無効。認証プロバイダは上記 User Pool のみ |
 | IAM ロール | `parking-status-ios-app-authenticated` | Identity Pool の authenticated ロールとして割当 |

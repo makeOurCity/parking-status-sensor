@@ -49,13 +49,17 @@ fi
 CLIENT_ID="$(aws_cognito_idp list-user-pool-clients --user-pool-id "$USER_POOL_ID" --max-results 60 \
   --query "UserPoolClients[?ClientName=='${COGNITO_CLIENT_NAME}'].ClientId | [0]" --output text)"
 
+# USER_PASSWORD_AUTH is used instead of hand-rolled SRP math (no official
+# lightweight Swift SRP client for Cognito). Password still travels over TLS
+# only, and only ever once per sign-in — REFRESH_TOKEN_AUTH covers every
+# renewal after that. Acceptable for a single-user PoC tool.
 if [[ -z "$CLIENT_ID" || "$CLIENT_ID" == "None" ]]; then
   echo "Creating App Client: $COGNITO_CLIENT_NAME (refresh token validity 3650 days)"
   CLIENT_ID="$(aws_cognito_idp create-user-pool-client \
     --user-pool-id "$USER_POOL_ID" \
     --client-name "$COGNITO_CLIENT_NAME" \
     --no-generate-secret \
-    --explicit-auth-flows ALLOW_USER_SRP_AUTH ALLOW_REFRESH_TOKEN_AUTH \
+    --explicit-auth-flows ALLOW_USER_PASSWORD_AUTH ALLOW_REFRESH_TOKEN_AUTH \
     --refresh-token-validity 3650 \
     --access-token-validity 60 \
     --id-token-validity 60 \
@@ -63,7 +67,17 @@ if [[ -z "$CLIENT_ID" || "$CLIENT_ID" == "None" ]]; then
     --prevent-user-existence-errors ENABLED \
     --query 'UserPoolClient.ClientId' --output text)"
 else
-  echo "App Client exists: $COGNITO_CLIENT_NAME ($CLIENT_ID)"
+  echo "App Client exists: $COGNITO_CLIENT_NAME ($CLIENT_ID) — updating auth flows"
+  aws_cognito_idp update-user-pool-client \
+    --user-pool-id "$USER_POOL_ID" \
+    --client-id "$CLIENT_ID" \
+    --client-name "$COGNITO_CLIENT_NAME" \
+    --explicit-auth-flows ALLOW_USER_PASSWORD_AUTH ALLOW_REFRESH_TOKEN_AUTH \
+    --refresh-token-validity 3650 \
+    --access-token-validity 60 \
+    --id-token-validity 60 \
+    --token-validity-units 'RefreshToken=days,AccessToken=minutes,IdToken=minutes' \
+    --prevent-user-existence-errors ENABLED >/dev/null
 fi
 
 # --- Developer user ---
