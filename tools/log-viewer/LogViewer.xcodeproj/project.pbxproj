@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		0CD58BB7C97F045BDE3CF824 /* DeviceDetailViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12D7CE38ABFB49E50B6CC8C9 /* DeviceDetailViewModel.swift */; };
+		251D1FDF614E0A44022D491A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 703F0895A84FF6D309CE6479 /* Assets.xcassets */; };
 		2D4158220D70B72BD37A2EAC /* CancellationSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 305A9CBD9C684A4394D09D53 /* CancellationSupport.swift */; };
 		2F5F9E787DE0F37215E41B29 /* DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A3AF1122227B22941ED2BCA /* DashboardView.swift */; };
 		352727F24988B2DAAB3C97BA /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F87BA0DD89C3600784C2EB2 /* Theme.swift */; };
@@ -38,6 +39,7 @@
 		3AEAD911D5A02358ECF73708 /* DeviceDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceDetailView.swift; sourceTree = "<group>"; };
 		3D531CA60F1325D546B59CA1 /* SignInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignInView.swift; sourceTree = "<group>"; };
 		69E778E6ABD6E71CC3EEE28A /* LogViewerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogViewerApp.swift; sourceTree = "<group>"; };
+		703F0895A84FF6D309CE6479 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		7A3AF1122227B22941ED2BCA /* DashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardView.swift; sourceTree = "<group>"; };
 		7F87BA0DD89C3600784C2EB2 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		9FB9EAF21D2409E20A476F9E /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
@@ -112,6 +114,7 @@
 		C69ACC4D96C9A3F660B9B04F /* LogViewer */ = {
 			isa = PBXGroup;
 			children = (
+				703F0895A84FF6D309CE6479 /* Assets.xcassets */,
 				305A9CBD9C684A4394D09D53 /* CancellationSupport.swift */,
 				32BB332768110C8B5D3A0326 /* Config.swift */,
 				136EB066E4137CC8606D8128 /* Info.plist */,
@@ -141,6 +144,7 @@
 			buildConfigurationList = DC7DFEF92729188AC65120B1 /* Build configuration list for PBXNativeTarget "LogViewer" */;
 			buildPhases = (
 				F4DBBCAFCE27D0EE8AE654D6 /* Sources */,
+				50F480B11CD6E6A09F1EF353 /* Resources */,
 			);
 			buildRules = (
 			);
@@ -186,6 +190,17 @@
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		50F480B11CD6E6A09F1EF353 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				251D1FDF614E0A44022D491A /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		F4DBBCAFCE27D0EE8AE654D6 /* Sources */ = {
