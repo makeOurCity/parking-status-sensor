@@ -8,7 +8,9 @@
 
 /* Begin PBXBuildFile section */
 		0CD58BB7C97F045BDE3CF824 /* DeviceDetailViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12D7CE38ABFB49E50B6CC8C9 /* DeviceDetailViewModel.swift */; };
+		2D4158220D70B72BD37A2EAC /* CancellationSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 305A9CBD9C684A4394D09D53 /* CancellationSupport.swift */; };
 		2F5F9E787DE0F37215E41B29 /* DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A3AF1122227B22941ED2BCA /* DashboardView.swift */; };
+		352727F24988B2DAAB3C97BA /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F87BA0DD89C3600784C2EB2 /* Theme.swift */; };
 		446D9829060AE4D7F225426B /* LogViewerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69E778E6ABD6E71CC3EEE28A /* LogViewerApp.swift */; };
 		4A586E4FCA00B4C30F3B0835 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = CDC1DC98D35750E3626BF02F /* KeychainStore.swift */; };
 		4E1C0D21D80E66E0061C5341 /* CloudWatchLogsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3811A5BB37C4507D130945F8 /* CloudWatchLogsService.swift */; };
@@ -30,12 +32,14 @@
 		136EB066E4137CC8606D8128 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		141333F9D503EDCA97DCA3B1 /* CognitoAuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CognitoAuthService.swift; sourceTree = "<group>"; };
 		2FBBC8240EC9C3FC869FF5BC /* DashboardViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardViewModel.swift; sourceTree = "<group>"; };
+		305A9CBD9C684A4394D09D53 /* CancellationSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CancellationSupport.swift; sourceTree = "<group>"; };
 		32BB332768110C8B5D3A0326 /* Config.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Config.swift; sourceTree = "<group>"; };
 		3811A5BB37C4507D130945F8 /* CloudWatchLogsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudWatchLogsService.swift; sourceTree = "<group>"; };
 		3AEAD911D5A02358ECF73708 /* DeviceDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceDetailView.swift; sourceTree = "<group>"; };
 		3D531CA60F1325D546B59CA1 /* SignInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignInView.swift; sourceTree = "<group>"; };
 		69E778E6ABD6E71CC3EEE28A /* LogViewerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogViewerApp.swift; sourceTree = "<group>"; };
 		7A3AF1122227B22941ED2BCA /* DashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardView.swift; sourceTree = "<group>"; };
+		7F87BA0DD89C3600784C2EB2 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		9FB9EAF21D2409E20A476F9E /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		B71BF4DFD8AF4E68F558E02B /* LogViewer.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = LogViewer.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		CDC1DC98D35750E3626BF02F /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
@@ -64,6 +68,7 @@
 				9FB9EAF21D2409E20A476F9E /* RootView.swift */,
 				3D531CA60F1325D546B59CA1 /* SignInView.swift */,
 				E1B75ED6E7DA78B8F5F8CC79 /* TelemetryDetailsView.swift */,
+				7F87BA0DD89C3600784C2EB2 /* Theme.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -107,6 +112,7 @@
 		C69ACC4D96C9A3F660B9B04F /* LogViewer */ = {
 			isa = PBXGroup;
 			children = (
+				305A9CBD9C684A4394D09D53 /* CancellationSupport.swift */,
 				32BB332768110C8B5D3A0326 /* Config.swift */,
 				136EB066E4137CC8606D8128 /* Info.plist */,
 				69E778E6ABD6E71CC3EEE28A /* LogViewerApp.swift */,
@@ -186,6 +192,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				2D4158220D70B72BD37A2EAC /* CancellationSupport.swift in Sources */,
 				4E1C0D21D80E66E0061C5341 /* CloudWatchLogsService.swift in Sources */,
 				8C4E03C3BA23CAD75DD5F436 /* CognitoAuthService.swift in Sources */,
 				6D62A0468C8C5E0540AA120D /* Config.swift in Sources */,
@@ -202,6 +209,7 @@
 				87E37FAC32CF6C3A51ACBD76 /* SignInView.swift in Sources */,
 				91ECBFF34C7BB51BA034CBB9 /* TelemetryDetailsView.swift in Sources */,
 				BFF7ADB0177174379123B1DF /* TelemetryPayload.swift in Sources */,
+				352727F24988B2DAAB3C97BA /* Theme.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

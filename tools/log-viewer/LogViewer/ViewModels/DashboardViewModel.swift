@@ -23,7 +23,9 @@ final class DashboardViewModel: ObservableObject {
             self.devices = devices
             self.recentLogs = recent
         } catch {
-            errorMessage = error.localizedDescription
+            if !isCancellationError(error) {
+                errorMessage = error.localizedDescription
+            }
         }
         isLoading = false
     }

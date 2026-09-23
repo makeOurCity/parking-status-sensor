@@ -16,9 +16,17 @@ enum DeviceOperationalStatus: String {
 
     var color: Color {
         switch self {
-        case .full: return .red
-        case .available: return .green
-        case .unknown: return .gray
+        case .full: return Theme.full
+        case .available: return Theme.available
+        case .unknown: return Theme.unknown
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .full: return "car.fill"
+        case .available: return "checkmark.circle.fill"
+        case .unknown: return "questionmark.circle.fill"
         }
     }
 }

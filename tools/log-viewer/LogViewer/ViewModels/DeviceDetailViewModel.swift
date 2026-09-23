@@ -20,7 +20,9 @@ final class DeviceDetailViewModel: ObservableObject {
         do {
             logs = try await logsService.fetchDeviceLogs(deviceId: deviceId)
         } catch {
-            errorMessage = error.localizedDescription
+            if !isCancellationError(error) {
+                errorMessage = error.localizedDescription
+            }
         }
         isLoading = false
     }

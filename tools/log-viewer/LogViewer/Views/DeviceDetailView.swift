@@ -8,23 +8,30 @@ struct DeviceDetailView: View {
     }
 
     var body: some View {
-        List {
-            if let errorMessage = viewModel.errorMessage {
-                Section {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                if let errorMessage = viewModel.errorMessage {
                     Text(errorMessage)
-                        .foregroundStyle(.red)
+                        .font(.callout)
+                        .foregroundStyle(Theme.full)
+                        .cardStyle()
+                }
+
+                if viewModel.logs.isEmpty && !viewModel.isLoading {
+                    Text("ログがありません")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .cardStyle()
+                }
+
+                ForEach(viewModel.logs) { entry in
+                    LogDetailCard(entry: entry)
                 }
             }
-
-            if viewModel.logs.isEmpty && !viewModel.isLoading {
-                Text("ログがありません")
-                    .foregroundStyle(.secondary)
-            }
-
-            ForEach(viewModel.logs) { entry in
-                LogDetailRow(entry: entry)
-            }
+            .padding(16)
         }
+        .background(Color(.systemGroupedBackground))
         .navigationTitle(viewModel.deviceId)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -43,15 +50,15 @@ struct DeviceDetailView: View {
     }
 }
 
-private struct LogDetailRow: View {
+private struct LogDetailCard: View {
     let entry: LogEntry
     @State private var showRawLog = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text(JSTTime.dateTimeFormatter.string(from: entry.timestamp))
-                    .font(.subheadline.monospacedDigit())
+                    .font(.subheadline.weight(.medium).monospacedDigit())
                 Spacer()
                 if let status = entry.status {
                     StatusBadge(status: status)
@@ -66,14 +73,29 @@ private struct LogDetailRow: View {
                     .foregroundStyle(.secondary)
             }
 
-            DisclosureGroup("生ログを表示", isExpanded: $showRawLog) {
+            Divider()
+
+            Button {
+                withAnimation(.snappy) { showRawLog.toggle() }
+            } label: {
+                Label(showRawLog ? "生ログを隠す" : "生ログを表示", systemImage: "chevron.forward")
+                    .labelStyle(.titleAndIcon)
+                    .imageScale(.small)
+                    .rotationEffect(.degrees(showRawLog ? 90 : 0))
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+
+            if showRawLog {
                 Text(entry.message)
                     .font(.caption2.monospaced())
                     .textSelection(.enabled)
-                    .padding(.top, 4)
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             }
-            .font(.caption)
         }
-        .padding(.vertical, 6)
+        .cardStyle()
     }
 }

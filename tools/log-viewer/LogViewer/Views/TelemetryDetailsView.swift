@@ -29,16 +29,20 @@ struct TelemetryDetailsView: View {
                 }
             }
         case .full:
-            HStack(alignment: .top, spacing: 12) {
+            HStack(alignment: .top, spacing: 14) {
                 if let raw = telemetry.raw {
-                    ColorSwatch(color: raw.previewColor, size: 28)
+                    ColorSwatch(color: raw.previewColor, size: 40, glow: true)
                 }
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 8) {
                     if let raw = telemetry.raw {
-                        Text("R \(raw.red)　G \(raw.green)　B \(raw.blue)　Clear \(raw.clear)")
-                            .font(.caption.monospaced())
+                        HStack(spacing: 6) {
+                            ValueChip(label: "R", value: "\(raw.red)")
+                            ValueChip(label: "G", value: "\(raw.green)")
+                            ValueChip(label: "B", value: "\(raw.blue)")
+                            ValueChip(label: "Clear", value: "\(raw.clear)")
+                        }
                     }
-                    HStack(spacing: 12) {
+                    HStack(spacing: 10) {
                         if let threshold = telemetry.threshold {
                             Label("閾値 \(threshold)", systemImage: "slider.horizontal.3")
                         }
@@ -46,7 +50,7 @@ struct TelemetryDetailsView: View {
                             Label(determinedBy, systemImage: "cpu")
                         }
                     }
-                    .font(.caption2)
+                    .font(.caption2.weight(.medium))
                     .foregroundStyle(.secondary)
                 }
             }
@@ -57,11 +61,38 @@ struct TelemetryDetailsView: View {
 private struct ColorSwatch: View {
     let color: Color
     let size: CGFloat
+    var glow: Bool = false
 
     var body: some View {
         Circle()
-            .fill(color)
+            .fill(
+                RadialGradient(
+                    colors: [color, color.opacity(0.75)],
+                    center: .center,
+                    startRadius: 0,
+                    endRadius: size / 1.4
+                )
+            )
             .frame(width: size, height: size)
-            .overlay(Circle().stroke(.secondary.opacity(0.3), lineWidth: 0.5))
+            .overlay(Circle().stroke(.white.opacity(0.5), lineWidth: 1))
+            .shadow(color: glow ? color.opacity(0.5) : .clear, radius: glow ? 8 : 0)
+    }
+}
+
+private struct ValueChip: View {
+    let label: String
+    let value: String
+
+    var body: some View {
+        HStack(spacing: 2) {
+            Text(label)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .foregroundStyle(.primary)
+        }
+        .font(.caption2.monospaced().weight(.medium))
+        .padding(.horizontal, 7)
+        .padding(.vertical, 3)
+        .background(Color.primary.opacity(0.06), in: Capsule())
     }
 }
