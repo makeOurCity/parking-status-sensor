@@ -1,0 +1,4 @@
+# Xcode per-user state (not needed to build; regenerated locally)
+LogViewer.xcodeproj/xcuserdata/
+LogViewer.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcuserstate
