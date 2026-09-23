@@ -21,6 +21,12 @@ load_config() {
   : "${LAMBDA_FUNCTION_NAME:=parking-status-bridge}"
   : "${MQTT_TOPIC_PREFIX:=parking-status}"
   : "${USE_BASIC_INGEST:=1}"
+  : "${COGNITO_USER_POOL_NAME:=parking-status-ios-app}"
+  : "${COGNITO_CLIENT_NAME:=parking-status-ios-client}"
+  : "${COGNITO_IDENTITY_POOL_NAME:=parking_status_ios_app}"
+  : "${COGNITO_AUTH_ROLE_NAME:=parking-status-ios-app-authenticated}"
+  : "${CLOUDWATCH_LOG_GROUP_NAME:=/aws/lambda/parking-status-bridge}"
+  : "${IOS_APP_USER_EMAIL:=}"
 
   export AWS_REGION AWS_PROFILE
 }
@@ -42,6 +48,18 @@ aws_lambda() {
 
 aws_logs() {
   aws logs "$@"
+}
+
+aws_cognito_idp() {
+  aws cognito-idp "$@"
+}
+
+aws_cognito_identity() {
+  aws cognito-identity "$@"
+}
+
+aws_iam() {
+  aws iam "$@"
 }
 
 iot_endpoint() {

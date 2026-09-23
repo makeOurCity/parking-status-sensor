@@ -37,6 +37,18 @@ chmod +x *.sh lib.sh
 | `provision-device.sh` | Thing + 証明書を端末1台分登録 |
 | `test-publish.sh` | AWS CLI からサンプルペイロードを publish |
 | `deploy-bridge-stub.sh` | Lambda スタブのみデプロイ |
+| `setup-cognito.sh` | iOS ログビューアアプリ向け Cognito User Pool / Identity Pool / IAM ロールを一括作成（[docs/ios-app-cognito.md](../docs/ios-app-cognito.md)） |
+| `verify-cognito.sh` | Cognito セットアップ後のリソース存在確認 |
+
+## iOS ログビューアアプリ向け Cognito（Issue #68）
+
+```bash
+cd infra
+./setup-cognito.sh     # User Pool + App Client + Identity Pool + IAM ロールを作成
+./verify-cognito.sh    # リソース確認
+```
+
+`config.env` の `IOS_APP_USER_EMAIL` で指定したメールアドレスを Cognito ユーザー名として、ログイン用ユーザーを1名作成する（開発者本人のみ想定）。IAM ロールは `CLOUDWATCH_LOG_GROUP_NAME` で指定したロググループの読み取り専用に限定される。詳細設計は [docs/ios-app-cognito.md](../docs/ios-app-cognito.md) を参照。
 
 ## Basic Ingest
 
