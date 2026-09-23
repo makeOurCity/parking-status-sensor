@@ -26,6 +26,7 @@
 		AD7E8E53168F7DE519DD1153 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FB9EAF21D2409E20A476F9E /* RootView.swift */; };
 		BFF7ADB0177174379123B1DF /* TelemetryPayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = E94430C8852A60AC8E36E8D9 /* TelemetryPayload.swift */; };
 		CFB7FF81D3B98934DA123C6B /* SigV4Signer.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDD499E150878688E76DFEF7 /* SigV4Signer.swift */; };
+		F5731DEE27573D74E80BC52B /* AutoRefresh.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2CD39588E5C3AEDA03D3979 /* AutoRefresh.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -43,6 +44,7 @@
 		7A3AF1122227B22941ED2BCA /* DashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardView.swift; sourceTree = "<group>"; };
 		7F87BA0DD89C3600784C2EB2 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		9FB9EAF21D2409E20A476F9E /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		A2CD39588E5C3AEDA03D3979 /* AutoRefresh.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoRefresh.swift; sourceTree = "<group>"; };
 		B71BF4DFD8AF4E68F558E02B /* LogViewer.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = LogViewer.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		CDC1DC98D35750E3626BF02F /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
 		CE1FE3ADD932874A4A8BB0A9 /* Formatting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Formatting.swift; sourceTree = "<group>"; };
@@ -64,6 +66,7 @@
 		38D7D7319E8FEAE6B9F818F0 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				A2CD39588E5C3AEDA03D3979 /* AutoRefresh.swift */,
 				7A3AF1122227B22941ED2BCA /* DashboardView.swift */,
 				3AEAD911D5A02358ECF73708 /* DeviceDetailView.swift */,
 				CE1FE3ADD932874A4A8BB0A9 /* Formatting.swift */,
@@ -207,6 +210,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F5731DEE27573D74E80BC52B /* AutoRefresh.swift in Sources */,
 				2D4158220D70B72BD37A2EAC /* CancellationSupport.swift in Sources */,
 				4E1C0D21D80E66E0061C5341 /* CloudWatchLogsService.swift in Sources */,
 				8C4E03C3BA23CAD75DD5F436 /* CognitoAuthService.swift in Sources */,

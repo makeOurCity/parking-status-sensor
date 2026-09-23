@@ -3,6 +3,7 @@ import SwiftUI
 struct DashboardView: View {
     @ObservedObject private var auth: CognitoAuthService
     @StateObject private var viewModel: DashboardViewModel
+    @Environment(\.scenePhase) private var scenePhase
 
     init(auth: CognitoAuthService) {
         self.auth = auth
@@ -75,7 +76,7 @@ struct DashboardView: View {
             .refreshable {
                 await viewModel.load()
             }
-            .task {
+            .autoRefreshing(scenePhase: scenePhase) {
                 await viewModel.load()
             }
         }

@@ -17,4 +17,9 @@ enum AWSConfig {
     /// Heartbeat is a forced send every 1 hour; add a buffer to avoid false
     /// "offline" flags from normal network/publish jitter.
     static let offlineThreshold: TimeInterval = 90 * 60
+
+    /// How often the dashboard/device detail screens re-query CloudWatch Logs
+    /// on their own while in the foreground, so manual pull-to-refresh is
+    /// rarely needed.
+    static let autoRefreshInterval: TimeInterval = 30
 }

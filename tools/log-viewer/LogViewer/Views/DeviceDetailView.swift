@@ -2,6 +2,7 @@ import SwiftUI
 
 struct DeviceDetailView: View {
     @StateObject private var viewModel: DeviceDetailViewModel
+    @Environment(\.scenePhase) private var scenePhase
 
     init(deviceId: String, auth: CognitoAuthService) {
         _viewModel = StateObject(wrappedValue: DeviceDetailViewModel(deviceId: deviceId, auth: auth))
@@ -44,7 +45,7 @@ struct DeviceDetailView: View {
         .refreshable {
             await viewModel.load()
         }
-        .task {
+        .autoRefreshing(scenePhase: scenePhase) {
             await viewModel.load()
         }
     }
