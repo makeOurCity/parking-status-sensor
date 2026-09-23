@@ -45,29 +45,35 @@ struct DeviceDetailView: View {
 
 private struct LogDetailRow: View {
     let entry: LogEntry
-
-    private static let absoluteFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "ja_JP")
-        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-        return formatter
-    }()
+    @State private var showRawLog = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text(Self.absoluteFormatter.string(from: entry.timestamp))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Text(JSTTime.dateTimeFormatter.string(from: entry.timestamp))
+                    .font(.subheadline.monospacedDigit())
                 Spacer()
                 if let status = entry.status {
                     StatusBadge(status: status)
                 }
             }
-            Text(entry.message)
-                .font(.caption.monospaced())
-                .textSelection(.enabled)
+
+            if let telemetry = entry.telemetry {
+                TelemetryDetailsView(telemetry: telemetry, style: .full)
+            } else {
+                Text("色・閾値の情報がないログです")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            DisclosureGroup("生ログを表示", isExpanded: $showRawLog) {
+                Text(entry.message)
+                    .font(.caption2.monospaced())
+                    .textSelection(.enabled)
+                    .padding(.top, 4)
+            }
+            .font(.caption)
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 6)
     }
 }

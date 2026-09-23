@@ -16,9 +16,12 @@
 		6D62A0468C8C5E0540AA120D /* Config.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32BB332768110C8B5D3A0326 /* Config.swift */; };
 		87E37FAC32CF6C3A51ACBD76 /* SignInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D531CA60F1325D546B59CA1 /* SignInView.swift */; };
 		8C4E03C3BA23CAD75DD5F436 /* CognitoAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 141333F9D503EDCA97DCA3B1 /* CognitoAuthService.swift */; };
+		91ECBFF34C7BB51BA034CBB9 /* TelemetryDetailsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1B75ED6E7DA78B8F5F8CC79 /* TelemetryDetailsView.swift */; };
+		97AC57D07F1CDB5089A7EA5E /* Formatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE1FE3ADD932874A4A8BB0A9 /* Formatting.swift */; };
 		A768EDD9BA20B0B015784E19 /* DeviceDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3AEAD911D5A02358ECF73708 /* DeviceDetailView.swift */; };
 		AB2E64E07E00D118011DBD9D /* DashboardViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2FBBC8240EC9C3FC869FF5BC /* DashboardViewModel.swift */; };
 		AD7E8E53168F7DE519DD1153 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FB9EAF21D2409E20A476F9E /* RootView.swift */; };
+		BFF7ADB0177174379123B1DF /* TelemetryPayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = E94430C8852A60AC8E36E8D9 /* TelemetryPayload.swift */; };
 		CFB7FF81D3B98934DA123C6B /* SigV4Signer.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDD499E150878688E76DFEF7 /* SigV4Signer.swift */; };
 /* End PBXBuildFile section */
 
@@ -36,6 +39,9 @@
 		9FB9EAF21D2409E20A476F9E /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		B71BF4DFD8AF4E68F558E02B /* LogViewer.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = LogViewer.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		CDC1DC98D35750E3626BF02F /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
+		CE1FE3ADD932874A4A8BB0A9 /* Formatting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Formatting.swift; sourceTree = "<group>"; };
+		E1B75ED6E7DA78B8F5F8CC79 /* TelemetryDetailsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TelemetryDetailsView.swift; sourceTree = "<group>"; };
+		E94430C8852A60AC8E36E8D9 /* TelemetryPayload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TelemetryPayload.swift; sourceTree = "<group>"; };
 		EDD499E150878688E76DFEF7 /* SigV4Signer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SigV4Signer.swift; sourceTree = "<group>"; };
 		EDDE3121A4067F699C8A9F03 /* DeviceModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceModels.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -54,8 +60,10 @@
 			children = (
 				7A3AF1122227B22941ED2BCA /* DashboardView.swift */,
 				3AEAD911D5A02358ECF73708 /* DeviceDetailView.swift */,
+				CE1FE3ADD932874A4A8BB0A9 /* Formatting.swift */,
 				9FB9EAF21D2409E20A476F9E /* RootView.swift */,
 				3D531CA60F1325D546B59CA1 /* SignInView.swift */,
+				E1B75ED6E7DA78B8F5F8CC79 /* TelemetryDetailsView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -91,6 +99,7 @@
 			isa = PBXGroup;
 			children = (
 				EDDE3121A4067F699C8A9F03 /* DeviceModels.swift */,
+				E94430C8852A60AC8E36E8D9 /* TelemetryPayload.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -185,11 +194,14 @@
 				A768EDD9BA20B0B015784E19 /* DeviceDetailView.swift in Sources */,
 				0CD58BB7C97F045BDE3CF824 /* DeviceDetailViewModel.swift in Sources */,
 				6CE46F83F06AEB1F2E567B89 /* DeviceModels.swift in Sources */,
+				97AC57D07F1CDB5089A7EA5E /* Formatting.swift in Sources */,
 				4A586E4FCA00B4C30F3B0835 /* KeychainStore.swift in Sources */,
 				446D9829060AE4D7F225426B /* LogViewerApp.swift in Sources */,
 				AD7E8E53168F7DE519DD1153 /* RootView.swift in Sources */,
 				CFB7FF81D3B98934DA123C6B /* SigV4Signer.swift in Sources */,
 				87E37FAC32CF6C3A51ACBD76 /* SignInView.swift in Sources */,
+				91ECBFF34C7BB51BA034CBB9 /* TelemetryDetailsView.swift in Sources */,
+				BFF7ADB0177174379123B1DF /* TelemetryPayload.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -74,7 +74,7 @@ private struct DeviceRow: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(device.deviceId)
                     .font(.body.monospaced())
-                Text("最終受信: \(RelativeTime.string(from: device.lastSeen))")
+                Text("最終受信: \(JSTTime.shortDateTimeFormatter.string(from: device.lastSeen))（\(RelativeTime.string(from: device.lastSeen))）")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -102,18 +102,22 @@ private struct LogRow: View {
                     .font(.caption.monospaced())
                     .foregroundStyle(.secondary)
                 Spacer()
-                Text(RelativeTime.string(from: entry.timestamp))
+                Text(JSTTime.shortDateTimeFormatter.string(from: entry.timestamp))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            HStack {
+            HStack(spacing: 8) {
                 if let status = entry.status {
                     StatusBadge(status: status)
                 }
-                Text(entry.message)
-                    .font(.caption)
-                    .lineLimit(1)
-                    .foregroundStyle(.secondary)
+                if let telemetry = entry.telemetry {
+                    TelemetryDetailsView(telemetry: telemetry, style: .compact)
+                } else {
+                    Text(entry.message)
+                        .font(.caption)
+                        .lineLimit(1)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
         .padding(.vertical, 2)
@@ -131,18 +135,5 @@ struct StatusBadge: View {
             .background(status.color.opacity(0.2))
             .foregroundStyle(status.color)
             .clipShape(Capsule())
-    }
-}
-
-enum RelativeTime {
-    private static let formatter: RelativeDateTimeFormatter = {
-        let formatter = RelativeDateTimeFormatter()
-        formatter.locale = Locale(identifier: "ja_JP")
-        formatter.unitsStyle = .short
-        return formatter
-    }()
-
-    static func string(from date: Date) -> String {
-        formatter.localizedString(for: date, relativeTo: Date())
     }
 }
