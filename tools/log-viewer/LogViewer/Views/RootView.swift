@@ -16,5 +16,11 @@ struct RootView: View {
         .task {
             await auth.bootstrap()
         }
+        .onChange(of: auth.isSignedIn) { _, isSignedIn in
+            if isSignedIn {
+                NotificationSender.requestAuthorizationIfNeeded()
+                BackgroundRefreshScheduler.shared.scheduleNextRefresh()
+            }
+        }
     }
 }

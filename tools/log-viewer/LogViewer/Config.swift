@@ -22,4 +22,14 @@ enum AWSConfig {
     /// on their own while in the foreground, so manual pull-to-refresh is
     /// rarely needed.
     static let autoRefreshInterval: TimeInterval = 30
+
+    /// BGTaskScheduler identifier for background refresh (must match the
+    /// `BGTaskSchedulerPermittedIdentifiers` entry in project.yml/Info.plist).
+    static let backgroundRefreshTaskIdentifier = "org.code4japan.parkingsensor.logviewer.refresh"
+
+    /// Earliest the OS may run the next background refresh. This is a
+    /// request, not a guarantee — iOS schedules BGAppRefreshTask
+    /// opportunistically based on usage patterns and battery, so actual
+    /// gaps can run from minutes to several hours.
+    static let backgroundRefreshMinimumInterval: TimeInterval = 15 * 60
 }

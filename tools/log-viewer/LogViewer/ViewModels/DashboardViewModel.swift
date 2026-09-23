@@ -22,6 +22,7 @@ final class DashboardViewModel: ObservableObject {
             let (devices, recent) = try await (devicesTask, recentTask)
             self.devices = devices
             self.recentLogs = recent
+            await DeviceStateStore.detectChangesAndNotify(devices: devices)
         } catch {
             if !isCancellationError(error) {
                 errorMessage = error.localizedDescription

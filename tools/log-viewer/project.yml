@@ -23,6 +23,10 @@ targets:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
+        UIBackgroundModes:
+          - fetch
+        BGTaskSchedulerPermittedIdentifiers:
+          - org.code4japan.parkingsensor.logviewer.refresh
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: org.code4japan.parkingsensor.logviewer
