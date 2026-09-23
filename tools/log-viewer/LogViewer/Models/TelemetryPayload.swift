@@ -39,4 +39,28 @@ extension LogEntry {
         else { return nil }
         return try? JSONDecoder().decode(TelemetryPayload.self, from: data)
     }
+
+    /// A readable rendering of the raw log line for the "show raw log"
+    /// disclosure: the Lambda-added prefix (timestamp/request id) on its own
+    /// de-emphasized line, then the JSON payload indented and key-sorted
+    /// instead of the single unbroken line CloudWatch stores. Falls back to
+    /// the untouched message if the payload isn't parseable JSON.
+    var formattedRawLog: String {
+        guard let braceIndex = message.firstIndex(of: "{") else { return message }
+
+        let prefix = message[..<braceIndex]
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "\t", with: "  ")
+        let jsonPart = message[braceIndex...]
+
+        guard let data = jsonPart.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data),
+              let prettyData = try? JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys]),
+              let prettyJSON = String(data: prettyData, encoding: .utf8)
+        else {
+            return message
+        }
+
+        return prefix.isEmpty ? prettyJSON : "\(prefix)\n\n\(prettyJSON)"
+    }
 }

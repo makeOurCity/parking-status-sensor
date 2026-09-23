@@ -63,6 +63,10 @@ private struct LogDetailCard: View {
                 if let status = entry.status {
                     StatusBadge(status: status)
                 }
+                Image(systemName: "chevron.down")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.tertiary)
+                    .rotationEffect(.degrees(showRawLog ? 0 : -90))
             }
 
             if let telemetry = entry.telemetry {
@@ -73,22 +77,8 @@ private struct LogDetailCard: View {
                     .foregroundStyle(.secondary)
             }
 
-            Divider()
-
-            Button {
-                withAnimation(.snappy) { showRawLog.toggle() }
-            } label: {
-                Label(showRawLog ? "生ログを隠す" : "生ログを表示", systemImage: "chevron.forward")
-                    .labelStyle(.titleAndIcon)
-                    .imageScale(.small)
-                    .rotationEffect(.degrees(showRawLog ? 90 : 0))
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
-            }
-            .buttonStyle(.plain)
-
             if showRawLog {
-                Text(entry.message)
+                Text(entry.formattedRawLog)
                     .font(.caption2.monospaced())
                     .textSelection(.enabled)
                     .padding(10)
@@ -97,5 +87,9 @@ private struct LogDetailCard: View {
             }
         }
         .cardStyle()
+        .contentShape(Rectangle())
+        .onTapGesture {
+            withAnimation(.snappy) { showRawLog.toggle() }
+        }
     }
 }

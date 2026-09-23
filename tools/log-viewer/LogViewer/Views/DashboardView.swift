@@ -148,6 +148,7 @@ private struct DeviceCard: View {
 
 private struct LogCard: View {
     let entry: LogEntry
+    @State private var showRawLog = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -165,6 +166,10 @@ private struct LogCard: View {
                     Text(JSTTime.shortDateTimeFormatter.string(from: entry.timestamp))
                         .font(.caption)
                         .foregroundStyle(.tertiary)
+                    Image(systemName: "chevron.down")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.tertiary)
+                        .rotationEffect(.degrees(showRawLog ? 0 : -90))
                 }
                 HStack(spacing: 8) {
                     if let status = entry.status {
@@ -179,6 +184,14 @@ private struct LogCard: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+                if showRawLog {
+                    Text(entry.formattedRawLog)
+                        .font(.caption2.monospaced())
+                        .textSelection(.enabled)
+                        .padding(10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                }
             }
         }
         .padding(.vertical, 12)
@@ -192,6 +205,10 @@ private struct LogCard: View {
             RoundedRectangle(cornerRadius: Theme.cardCornerRadius, style: .continuous)
                 .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
         )
+        .contentShape(Rectangle())
+        .onTapGesture {
+            withAnimation(.snappy) { showRawLog.toggle() }
+        }
     }
 }
 
