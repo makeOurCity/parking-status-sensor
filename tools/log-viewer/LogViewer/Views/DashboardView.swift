@@ -144,19 +144,35 @@ private struct DeviceCarousel: View {
     }
 }
 
-/// Each device renders as a small "circuit board" tile — modeled loosely on
-/// the actual XIAO ESP32-S3 module this project uses (castellated pin pads
-/// down the left/right edges of a rectangular board). Unlike an SF Symbol
-/// glyph, this shape is drawn to order, so the pins stay a thin sliver and
-/// almost the entire tile remains open for name/status/freshness/uptime.
+/// Each device renders as a small "circuit board" tile — modeled on the
+/// actual XIAO ESP32-S3 module this project uses: a gently gradient board
+/// body with real castellated pads (gold-plated half-vias) down the left
+/// and right edges, the way SMD modules are actually manufactured, instead
+/// of a flat-color placeholder shape.
 private struct DeviceCard: View {
     let device: DeviceSummary
 
     var body: some View {
         ZStack {
-            BoardBodyShape().fill(device.status.color.opacity(0.12))
-            BoardPinsShape().fill(device.status.color.opacity(0.5))
-            BoardBodyShape().stroke(device.status.color, lineWidth: 1.5)
+            ZStack {
+                BoardBodyShape()
+                    .fill(
+                        LinearGradient(
+                            colors: [device.status.color.opacity(0.20), device.status.color.opacity(0.06)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                CastellatedEdges(tone: .gold)
+            }
+            .clipShape(BoardBodyShape())
+            .compositingGroup()
+
+            BoardBodyShape()
+                .stroke(device.status.color.opacity(0.75), lineWidth: 1.25)
+            BoardBodyShape()
+                .inset(by: 1.25)
+                .stroke(.white.opacity(0.35), lineWidth: 0.75)
 
             VStack(spacing: 6) {
                 Text(device.deviceId)
@@ -169,7 +185,7 @@ private struct DeviceCard: View {
                 StatusBadge(status: device.status)
 
                 Text(RelativeTime.string(from: device.lastSeen))
-                    .font(.caption2)
+                    .font(.caption2.weight(.medium))
                     .foregroundStyle(device.isOffline ? Theme.warning : .secondary)
 
                 if let bootStatus = device.bootStatus {
@@ -182,8 +198,9 @@ private struct DeviceCard: View {
                     .multilineTextAlignment(.center)
                 }
             }
-            .padding(.horizontal, 12)
+            .padding(.horizontal, 15)
         }
+        .shadow(color: .black.opacity(0.14), radius: 7, x: 0, y: 4)
         .overlay(alignment: .topTrailing) {
             if device.isOffline {
                 Image(systemName: "exclamationmark.triangle.fill")
@@ -202,50 +219,98 @@ private struct DeviceCard: View {
 private struct EmptyDeviceSlot: View {
     var body: some View {
         ZStack {
-            BoardBodyShape().fill(Color.primary.opacity(0.04))
-            BoardPinsShape().fill(Color.primary.opacity(0.2))
-            BoardBodyShape().stroke(Color.primary.opacity(0.25), lineWidth: 1.5)
+            BoardBodyShape().fill(Color.primary.opacity(0.03))
+            CastellatedEdges(tone: .muted)
         }
+        .clipShape(BoardBodyShape())
+        .compositingGroup()
+        .overlay(
+            BoardBodyShape().stroke(Color.primary.opacity(0.15), lineWidth: 1.25)
+        )
+        .opacity(0.6)
     }
 }
 
 /// The board's rounded-rectangle body — a plain, unbroken silhouette. Pins
-/// used to protrude past this edge, which (with 6 of them mirrored on both
-/// sides) read as a bug's legs rather than a circuit board; keeping the
-/// outline whole and drawing pins as marks *inside* it (see
-/// `BoardPinsShape`) avoids that.
-private struct BoardBodyShape: Shape {
+/// protruding past this edge read as a bug's legs rather than a circuit
+/// board (see `CastellatedEdges`'s doc comment), so the outline stays whole
+/// and the pads live just inside it.
+private struct BoardBodyShape: InsettableShape {
     var cornerRadius: CGFloat = 16
+    private var insetAmount: CGFloat = 0
 
     func path(in rect: CGRect) -> Path {
-        Path(roundedRect: rect, cornerRadius: cornerRadius)
+        Path(roundedRect: rect.insetBy(dx: insetAmount, dy: insetAmount), cornerRadius: max(0, cornerRadius - insetAmount))
+    }
+
+    func inset(by amount: CGFloat) -> some InsettableShape {
+        var shape = self
+        shape.insetAmount += amount
+        return shape
     }
 }
 
-/// Pin pads along just the left and right edges of `BoardBodyShape` —
-/// matching the XIAO module's own header pins — drawn as short marks just
-/// inside the body's edge rather than tabs protruding past its silhouette.
-private struct BoardPinsShape: Shape {
-    var pinCount: Int = 6
-    var edgeInset: CGFloat = 3
-    var pinLength: CGFloat = 7
-    var pinThickness: CGFloat = 3.5
+/// Realistic castellated pads (7 per side, matching the XIAO module) along
+/// the left/right edges of `BoardBodyShape`: a gold-plated pad with a round
+/// notch punched right at the board edge — the actual look of an SMD
+/// module's half-plated-through-hole pins, not just a colored tab. The
+/// notch is cut with `.destinationOut`, so it genuinely reveals whatever is
+/// behind this view (the tile's own gradient background) rather than
+/// painting a guessed background color over it.
+private struct CastellatedEdges: View {
+    var pinCount: Int = 7
     var cornerRadius: CGFloat = 16
+    var tone: Tone = .gold
 
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
+    enum Tone {
+        case gold, muted
 
-        let usableHeight = rect.height - cornerRadius * 2
-        let pinSpacing = usableHeight / CGFloat(pinCount)
-        for index in 0..<pinCount {
-            let centerY = rect.minY + cornerRadius + pinSpacing * (CGFloat(index) + 0.5)
-            let leftRect = CGRect(x: rect.minX + edgeInset, y: centerY - pinThickness / 2, width: pinLength, height: pinThickness)
-            let rightRect = CGRect(x: rect.maxX - edgeInset - pinLength, y: centerY - pinThickness / 2, width: pinLength, height: pinThickness)
-            path.addRect(leftRect)
-            path.addRect(rightRect)
+        var gradient: Gradient {
+            switch self {
+            case .gold:
+                Gradient(colors: [Color(red: 0.97, green: 0.84, blue: 0.53), Color(red: 0.75, green: 0.57, blue: 0.20)])
+            case .muted:
+                Gradient(colors: [Color(white: 0.78), Color(white: 0.58)])
+            }
         }
+    }
 
-        return path
+    var body: some View {
+        Canvas { context, size in
+            let padWidth: CGFloat = 10
+            let padHeight: CGFloat = 6.5
+            let holeRadius: CGFloat = 3.2
+            let cornerInset = min(cornerRadius, size.height / 2 - 1)
+            let usableHeight = size.height - cornerInset * 2
+            let spacing = usableHeight / CGFloat(pinCount)
+
+            for index in 0..<pinCount {
+                let centerY = cornerInset + spacing * (CGFloat(index) + 0.5)
+
+                for isLeftEdge in [true, false] {
+                    let padRect = isLeftEdge
+                        ? CGRect(x: 0, y: centerY - padHeight / 2, width: padWidth, height: padHeight)
+                        : CGRect(x: size.width - padWidth, y: centerY - padHeight / 2, width: padWidth, height: padHeight)
+                    let padPath = Path(roundedRect: padRect, cornerRadius: 1.5)
+
+                    context.fill(
+                        padPath,
+                        with: .linearGradient(
+                            tone.gradient,
+                            startPoint: CGPoint(x: padRect.midX, y: padRect.minY),
+                            endPoint: CGPoint(x: padRect.midX, y: padRect.maxY)
+                        )
+                    )
+                    context.stroke(padPath, with: .color(.black.opacity(0.2)), lineWidth: 0.5)
+
+                    let edgeX = isLeftEdge ? 0 : size.width
+                    let holeRect = CGRect(x: edgeX - holeRadius, y: centerY - holeRadius, width: holeRadius * 2, height: holeRadius * 2)
+                    context.blendMode = .destinationOut
+                    context.fill(Path(ellipseIn: holeRect), with: .color(.black))
+                    context.blendMode = .normal
+                }
+            }
+        }
     }
 }
 
