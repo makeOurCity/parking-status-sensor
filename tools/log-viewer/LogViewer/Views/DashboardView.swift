@@ -134,63 +134,59 @@ private struct DeviceCarousel: View {
     }
 }
 
+/// Each device renders as one self-contained "icon" tile — its status color
+/// *is* the tile's frame, so there's no separate floating icon glyph to
+/// parse. Everything about the device (name, status, freshness, uptime)
+/// lives centered inside that one frame, the same way a device detail
+/// screen's icon represents the whole thing at a glance.
 private struct DeviceCard: View {
     let device: DeviceSummary
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                ZStack {
-                    Circle().fill(device.status.color.opacity(0.15))
-                    Image(systemName: device.status.icon)
-                        .foregroundStyle(device.status.color)
-                        .font(.callout)
-                }
-                .frame(width: 30, height: 30)
-
-                Spacer()
-
-                if device.isOffline {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(Theme.warning)
-                        .font(.caption2)
-                }
-            }
-
+        VStack(spacing: 6) {
             Text(device.deviceId)
-                .font(.caption.weight(.semibold).monospaced())
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
+                .font(.caption.weight(.bold).monospaced())
                 .foregroundStyle(.primary)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+                .minimumScaleFactor(0.75)
 
             StatusBadge(status: device.status)
 
-            Spacer(minLength: 0)
+            Text(RelativeTime.string(from: device.lastSeen))
+                .font(.caption2)
+                .foregroundStyle(device.isOffline ? Theme.warning : .secondary)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(RelativeTime.string(from: device.lastSeen))
-                    .font(.caption2)
-                    .foregroundStyle(device.isOffline ? Theme.warning : .secondary)
-
-                if let bootStatus = device.bootStatus {
-                    Label("\(bootStatus.bootCount)回・\(bootStatus.uptimeLabel)", systemImage: "arrow.clockwise")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
+            if let bootStatus = device.bootStatus {
+                VStack(spacing: 1) {
+                    Text("ブート \(bootStatus.bootCount)回")
+                    Text("稼働 \(bootStatus.uptimeLabel)")
                 }
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+                .multilineTextAlignment(.center)
             }
         }
         .padding(12)
-        .frame(maxWidth: .infinity, minHeight: 132, alignment: .topLeading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(
             RoundedRectangle(cornerRadius: Theme.cardCornerRadius, style: .continuous)
-                .fill(.background.secondary)
+                .fill(device.status.color.opacity(0.10))
         )
         .overlay(
             RoundedRectangle(cornerRadius: Theme.cardCornerRadius, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
+                .strokeBorder(device.status.color.opacity(0.55), lineWidth: 2)
         )
+        .overlay(alignment: .topTrailing) {
+            if device.isOffline {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.caption2)
+                    .foregroundStyle(.white)
+                    .padding(5)
+                    .background(Circle().fill(Theme.warning))
+                    .offset(x: 8, y: -8)
+            }
+        }
     }
 }
 
