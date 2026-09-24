@@ -209,44 +209,40 @@ private struct EmptyDeviceSlot: View {
     }
 }
 
-/// The board's rounded-rectangle body, inset to leave room for
-/// `BoardPinsShape`'s pins outside its left/right edges. Kept separate from
-/// the pins so it can be stroked as one clean outline — combining body+pins
-/// into a single path and stroking it draws a seam at every pin junction.
+/// The board's rounded-rectangle body — a plain, unbroken silhouette. Pins
+/// used to protrude past this edge, which (with 6 of them mirrored on both
+/// sides) read as a bug's legs rather than a circuit board; keeping the
+/// outline whole and drawing pins as marks *inside* it (see
+/// `BoardPinsShape`) avoids that.
 private struct BoardBodyShape: Shape {
-    var pinLength: CGFloat = 5
     var cornerRadius: CGFloat = 16
 
     func path(in rect: CGRect) -> Path {
-        let bodyRect = rect.insetBy(dx: pinLength, dy: 0)
-        return Path(roundedRect: bodyRect, cornerRadius: cornerRadius)
+        Path(roundedRect: rect, cornerRadius: cornerRadius)
     }
 }
 
-/// Castellated pin pads along just the left and right edges of
-/// `BoardBodyShape` — matching the XIAO module's own header pins. Only
-/// filled (never stroked) since each pad is its own tiny rect; two sides
-/// instead of an icon's four keeps this a thin margin rather than eating
-/// into the space available for text.
+/// Pin pads along just the left and right edges of `BoardBodyShape` —
+/// matching the XIAO module's own header pins — drawn as short marks just
+/// inside the body's edge rather than tabs protruding past its silhouette.
 private struct BoardPinsShape: Shape {
     var pinCount: Int = 6
-    var pinLength: CGFloat = 5
-    var pinThickness: CGFloat = 4
+    var edgeInset: CGFloat = 3
+    var pinLength: CGFloat = 7
+    var pinThickness: CGFloat = 3.5
     var cornerRadius: CGFloat = 16
 
     func path(in rect: CGRect) -> Path {
         var path = Path()
 
-        let bodyRect = rect.insetBy(dx: pinLength, dy: 0)
-        let usableHeight = bodyRect.height - cornerRadius * 2
+        let usableHeight = rect.height - cornerRadius * 2
         let pinSpacing = usableHeight / CGFloat(pinCount)
         for index in 0..<pinCount {
-            let centerY = bodyRect.minY + cornerRadius + pinSpacing * (CGFloat(index) + 0.5)
-            let pinRect = { (x: CGFloat) in
-                CGRect(x: x, y: centerY - pinThickness / 2, width: pinLength, height: pinThickness)
-            }
-            path.addRect(pinRect(rect.minX))
-            path.addRect(pinRect(bodyRect.maxX))
+            let centerY = rect.minY + cornerRadius + pinSpacing * (CGFloat(index) + 0.5)
+            let leftRect = CGRect(x: rect.minX + edgeInset, y: centerY - pinThickness / 2, width: pinLength, height: pinThickness)
+            let rightRect = CGRect(x: rect.maxX - edgeInset - pinLength, y: centerY - pinThickness / 2, width: pinLength, height: pinThickness)
+            path.addRect(leftRect)
+            path.addRect(rightRect)
         }
 
         return path
