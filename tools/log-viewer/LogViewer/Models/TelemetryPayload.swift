@@ -18,13 +18,27 @@ struct RawColorReading: Decodable {
     }
 }
 
+/// `bootCount` lives in ESP32 RTC memory (firmware/src/main.cpp): it survives
+/// deep sleep and increments by 1 on every boot — including plain deep-sleep
+/// timer wakes, not just power-on resets — but resets to 0 (so the next boot
+/// reports 1) on a genuine power-on/brownout/hard reset. So "bootCount == 1"
+/// always marks the first telemetry send after the device's most recent hard
+/// reset, and `resetReason`/`wakeCause` at that same entry explain why it
+/// happened (power_on, brownout, panic, watchdog, ...).
+struct PowerInfo: Decodable {
+    let bootCount: Int?
+    let wakeCause: String?
+    let resetReason: String?
+}
+
 /// The JSON telemetry payload embedded in each log line (docs/data-model.md).
 /// Only the fields the dashboard/detail views actually show are decoded;
-/// `power` / `network` / `sync` / `bootMode` / `pot` are ignored here.
+/// `network` / `sync` / `bootMode` / `pot` are ignored here.
 struct TelemetryPayload: Decodable {
     let raw: RawColorReading?
     let threshold: Int?
     let determinedBy: String?
+    let power: PowerInfo?
 }
 
 extension LogEntry {

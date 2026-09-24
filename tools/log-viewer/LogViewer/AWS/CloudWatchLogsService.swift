@@ -30,23 +30,63 @@ struct CloudWatchLogsService {
 
     // MARK: - Public queries
 
-    /// Current status + last-received time for every device seen within `lookback`.
-    /// One row per device, thanks to `stats ... by deviceId`.
-    func fetchDeviceSummaries(lookback: TimeInterval = 3 * 24 * 3600) async throws -> [DeviceSummary] {
-        let query = """
+    /// Current status + last-received time + boot status for every device
+    /// seen within `lookback`. Both queries below are grouped `by deviceId`,
+    /// so this stays two queries total regardless of how many devices exist
+    /// — it doesn't scale per-device.
+    func fetchDeviceSummaries(
+        lookback: TimeInterval = 3 * 24 * 3600,
+        resetLookback: TimeInterval = 400 * 24 * 3600
+    ) async throws -> [DeviceSummary] {
+        let statusQuery = """
         fields @timestamp, @message
         | filter @message like /\(Self.logRecordFilter)/
         | \(Self.deviceIdParse)
         | parse @message /"status":\\s*"(?<rawStatus>[^"]+)"/
-        | stats latest(@timestamp) as lastSeen, latest(rawStatus) as currentStatus by deviceId
+        | parse @message /"bootCount":\\s*(?<bootCountRaw>\\d+)/
+        | stats latest(@timestamp) as lastSeen, latest(rawStatus) as currentStatus, latest(bootCountRaw) as currentBootCount by deviceId
         """
-        let rows = try await runQuery(query, lookback: lookback)
-        return rows.compactMap { row -> DeviceSummary? in
+
+        // The most recent bootCount==1 entry per device — the start of each
+        // device's current reset epoch (see BootStatusInfo's doc comment).
+        // Needs a much longer lookback than `statusQuery` since a device may
+        // not have hard-reset in months.
+        let resetQuery = """
+        fields @timestamp, @message
+        | filter @message like /\(Self.logRecordFilter)/
+        | \(Self.deviceIdParse)
+        | parse @message /"bootCount":\\s*(?<bootCount>\\d+)/
+        | filter bootCount = 1
+        | stats latest(@timestamp) as resetTimestamp by deviceId
+        """
+
+        async let statusRowsTask = runQuery(statusQuery, lookback: lookback)
+        async let resetRowsTask = runQuery(resetQuery, lookback: resetLookback)
+        let (statusRows, resetRows) = try await (statusRowsTask, resetRowsTask)
+
+        var resetTimestampByDevice: [String: Date] = [:]
+        for row in resetRows {
+            if let deviceId = row["deviceId"], let ms = row["resetTimestamp"].flatMap(Double.init) {
+                resetTimestampByDevice[deviceId] = Date(timeIntervalSince1970: ms / 1000)
+            }
+        }
+
+        return statusRows.compactMap { row -> DeviceSummary? in
             guard let deviceId = row["deviceId"],
                   let lastSeenMs = row["lastSeen"].flatMap(Double.init)
             else { return nil }
             let status = row["currentStatus"].flatMap(DeviceOperationalStatus.init(rawValue:)) ?? .unknown
-            return DeviceSummary(deviceId: deviceId, status: status, lastSeen: Date(timeIntervalSince1970: lastSeenMs / 1000))
+            let lastSeen = Date(timeIntervalSince1970: lastSeenMs / 1000)
+
+            let bootStatus = row["currentBootCount"].flatMap(Int.init).map { bootCount in
+                BootStatusInfo(
+                    bootCount: bootCount,
+                    sessionStartedAt: resetTimestampByDevice[deviceId],
+                    latestTimestamp: lastSeen
+                )
+            }
+
+            return DeviceSummary(deviceId: deviceId, status: status, lastSeen: lastSeen, bootStatus: bootStatus)
         }
         .sorted { $0.deviceId < $1.deviceId }
     }
