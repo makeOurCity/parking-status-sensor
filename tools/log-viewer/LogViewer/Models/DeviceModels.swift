@@ -35,6 +35,7 @@ struct DeviceSummary: Identifiable, Equatable {
     let deviceId: String
     let status: DeviceOperationalStatus
     let lastSeen: Date
+    let bootStatus: BootStatusInfo?
 
     var id: String { deviceId }
 

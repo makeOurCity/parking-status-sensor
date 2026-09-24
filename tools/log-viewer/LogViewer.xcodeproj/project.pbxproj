@@ -27,6 +27,7 @@
 		AD7E8E53168F7DE519DD1153 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FB9EAF21D2409E20A476F9E /* RootView.swift */; };
 		BFF7ADB0177174379123B1DF /* TelemetryPayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = E94430C8852A60AC8E36E8D9 /* TelemetryPayload.swift */; };
 		CFB7FF81D3B98934DA123C6B /* SigV4Signer.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDD499E150878688E76DFEF7 /* SigV4Signer.swift */; };
+		D3872F19583C88AE5D7F5371 /* BootStatusInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E95E80B82777666A2693490 /* BootStatusInfo.swift */; };
 		D78A3E135AD2571299839F37 /* DeviceStateStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D1AB1221879C2991B6735FE /* DeviceStateStore.swift */; };
 		DFA8B65C807BC1992292DC2D /* BackgroundRefreshScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC0FD8B7E220ACA02EDE38B6 /* BackgroundRefreshScheduler.swift */; };
 		F5731DEE27573D74E80BC52B /* AutoRefresh.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2CD39588E5C3AEDA03D3979 /* AutoRefresh.swift */; };
@@ -42,6 +43,7 @@
 		3811A5BB37C4507D130945F8 /* CloudWatchLogsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudWatchLogsService.swift; sourceTree = "<group>"; };
 		3AEAD911D5A02358ECF73708 /* DeviceDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceDetailView.swift; sourceTree = "<group>"; };
 		3D531CA60F1325D546B59CA1 /* SignInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignInView.swift; sourceTree = "<group>"; };
+		3E95E80B82777666A2693490 /* BootStatusInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BootStatusInfo.swift; sourceTree = "<group>"; };
 		5A2683C01FA504E394574C42 /* NotificationSender.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationSender.swift; sourceTree = "<group>"; };
 		5D1AB1221879C2991B6735FE /* DeviceStateStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceStateStore.swift; sourceTree = "<group>"; };
 		69E778E6ABD6E71CC3EEE28A /* LogViewerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogViewerApp.swift; sourceTree = "<group>"; };
@@ -124,6 +126,7 @@
 		C0619D41760D6E88F8EDE8D1 /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				3E95E80B82777666A2693490 /* BootStatusInfo.swift */,
 				EDDE3121A4067F699C8A9F03 /* DeviceModels.swift */,
 				E94430C8852A60AC8E36E8D9 /* TelemetryPayload.swift */,
 			);
@@ -229,6 +232,7 @@
 			files = (
 				F5731DEE27573D74E80BC52B /* AutoRefresh.swift in Sources */,
 				DFA8B65C807BC1992292DC2D /* BackgroundRefreshScheduler.swift in Sources */,
+				D3872F19583C88AE5D7F5371 /* BootStatusInfo.swift in Sources */,
 				2D4158220D70B72BD37A2EAC /* CancellationSupport.swift in Sources */,
 				4E1C0D21D80E66E0061C5341 /* CloudWatchLogsService.swift in Sources */,
 				8C4E03C3BA23CAD75DD5F436 /* CognitoAuthService.swift in Sources */,

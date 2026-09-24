@@ -33,14 +33,8 @@ struct DashboardView: View {
                     SectionHeader(title: "デバイス")
                     if viewModel.devices.isEmpty && !viewModel.isLoading {
                         EmptyStateCard(text: "データがありません")
-                    }
-                    VStack(spacing: 12) {
-                        ForEach(viewModel.devices) { device in
-                            NavigationLink(value: device.deviceId) {
-                                DeviceCard(device: device)
-                            }
-                            .buttonStyle(.plain)
-                        }
+                    } else {
+                        DeviceCarousel(devices: viewModel.devices)
                     }
 
                     SectionHeader(title: "直近のログ")
@@ -106,44 +100,97 @@ private struct EmptyStateCard: View {
     }
 }
 
+/// Horizontal, swipeable row of device cards. Sized so up to 3 devices fill
+/// exactly one screen width with no scrolling — a 4th+ device scrolls in at
+/// that same width instead of the section growing taller, so "デバイス"
+/// stays a fixed height regardless of fleet size and "直近のログ" below it
+/// never gets pushed further down.
+private struct DeviceCarousel: View {
+    let devices: [DeviceSummary]
+
+    private let spacing: CGFloat = 12
+    private let cardHeight: CGFloat = 148
+
+    var body: some View {
+        GeometryReader { geometry in
+            let columns = CGFloat(min(max(devices.count, 1), 3))
+            let cardWidth = (geometry.size.width - spacing * (columns - 1)) / columns
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: spacing) {
+                    ForEach(devices) { device in
+                        NavigationLink(value: device.deviceId) {
+                            DeviceCard(device: device)
+                                .frame(width: cardWidth)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .scrollTargetLayout()
+            }
+            .scrollTargetBehavior(.viewAligned)
+        }
+        .frame(height: cardHeight)
+    }
+}
+
 private struct DeviceCard: View {
     let device: DeviceSummary
 
     var body: some View {
-        HStack(spacing: 14) {
-            ZStack {
-                Circle()
-                    .fill(device.status.color.opacity(0.15))
-                Image(systemName: device.status.icon)
-                    .foregroundStyle(device.status.color)
-                    .font(.title3)
-            }
-            .frame(width: 44, height: 44)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                ZStack {
+                    Circle().fill(device.status.color.opacity(0.15))
+                    Image(systemName: device.status.icon)
+                        .foregroundStyle(device.status.color)
+                        .font(.callout)
+                }
+                .frame(width: 30, height: 30)
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text(device.deviceId)
-                    .font(.callout.weight(.semibold).monospaced())
-                    .foregroundStyle(.primary)
-                HStack(spacing: 4) {
-                    if device.isOffline {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundStyle(Theme.warning)
-                            .font(.caption2)
-                    }
-                    Text("最終受信 \(JSTTime.shortDateTimeFormatter.string(from: device.lastSeen))（\(RelativeTime.string(from: device.lastSeen))）")
-                        .font(.caption)
-                        .foregroundStyle(device.isOffline ? Theme.warning : .secondary)
+                Spacer()
+
+                if device.isOffline {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(Theme.warning)
+                        .font(.caption2)
                 }
             }
 
-            Spacer()
+            Text(device.deviceId)
+                .font(.caption.weight(.semibold).monospaced())
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .foregroundStyle(.primary)
 
             StatusBadge(status: device.status)
-            Image(systemName: "chevron.right")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.tertiary)
+
+            Spacer(minLength: 0)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(RelativeTime.string(from: device.lastSeen))
+                    .font(.caption2)
+                    .foregroundStyle(device.isOffline ? Theme.warning : .secondary)
+
+                if let bootStatus = device.bootStatus {
+                    Label("\(bootStatus.bootCount)回・\(bootStatus.uptimeLabel)", systemImage: "arrow.clockwise")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                }
+            }
         }
-        .cardStyle()
+        .padding(12)
+        .frame(maxWidth: .infinity, minHeight: 132, alignment: .topLeading)
+        .background(
+            RoundedRectangle(cornerRadius: Theme.cardCornerRadius, style: .continuous)
+                .fill(.background.secondary)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.cardCornerRadius, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
+        )
     }
 }
 
