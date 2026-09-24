@@ -174,6 +174,8 @@ private struct DeviceCard: View {
                 .inset(by: 1.25)
                 .stroke(.white.opacity(0.35), lineWidth: 0.75)
 
+            BoardAccents(tone: .gold)
+
             VStack(spacing: 6) {
                 Text(device.deviceId)
                     .font(.caption2.weight(.bold).monospaced())
@@ -215,19 +217,102 @@ private struct DeviceCard: View {
 }
 
 /// A dimmed, contentless board — fills out the row to 3 slots when there
-/// aren't yet 3 devices, so it's visually obvious more fit here.
+/// aren't yet 3 devices, so it's visually obvious more fit here. With no
+/// device data to show, it renders as a full decorative likeness of the
+/// physical XIAO module instead of leaving the "text area" blank: a
+/// silkscreen-module block stands in for the device name/status text real
+/// cards show there.
 private struct EmptyDeviceSlot: View {
     var body: some View {
         ZStack {
-            BoardBodyShape().fill(Color.primary.opacity(0.03))
-            CastellatedEdges(tone: .muted)
-        }
-        .clipShape(BoardBodyShape())
-        .compositingGroup()
-        .overlay(
+            ZStack {
+                BoardBodyShape().fill(Color.primary.opacity(0.03))
+                CastellatedEdges(tone: .muted)
+            }
+            .clipShape(BoardBodyShape())
+            .compositingGroup()
+
             BoardBodyShape().stroke(Color.primary.opacity(0.15), lineWidth: 1.25)
+
+            BoardAccents(tone: .muted)
+
+            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                .fill(Color.primary.opacity(0.05))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.75)
+                )
+                .overlay(
+                    VStack(spacing: 4) {
+                        RoundedRectangle(cornerRadius: 1)
+                            .fill(Color.primary.opacity(0.16))
+                            .frame(width: 38, height: 2.5)
+                        RoundedRectangle(cornerRadius: 1)
+                            .fill(Color.primary.opacity(0.11))
+                            .frame(width: 26, height: 2.5)
+                    }
+                )
+                .frame(width: 62, height: 34)
+        }
+        .opacity(0.65)
+    }
+}
+
+/// Small realistic details beyond the pins — a USB-C port at the top edge,
+/// a u.FL antenna connector at the bottom-left, and a row of passive
+/// components along the bottom edge — modeled on the same reference photo.
+/// All confined to the thin margins above/below the centered text content,
+/// so they never compete with it.
+private struct BoardAccents: View {
+    var tone: CastellatedEdges.Tone = .gold
+
+    private var metallic: LinearGradient {
+        LinearGradient(
+            colors: tone == .gold
+                ? [Color(white: 0.94), Color(white: 0.70)]
+                : [Color(white: 0.82), Color(white: 0.62)],
+            startPoint: .top,
+            endPoint: .bottom
         )
-        .opacity(0.6)
+    }
+
+    private var componentTint: Color {
+        Color.black.opacity(tone == .gold ? 0.55 : 0.22)
+    }
+
+    var body: some View {
+        VStack {
+            RoundedRectangle(cornerRadius: 2, style: .continuous)
+                .fill(metallic)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 2, style: .continuous)
+                        .strokeBorder(.black.opacity(0.25), lineWidth: 0.5)
+                )
+                .frame(width: 26, height: 8)
+                .offset(y: -3)
+
+            Spacer(minLength: 0)
+
+            HStack(spacing: 5) {
+                Circle()
+                    .fill(metallic)
+                    .overlay(Circle().strokeBorder(.black.opacity(0.25), lineWidth: 0.5))
+                    .frame(width: 8, height: 8)
+
+                Spacer(minLength: 0)
+
+                HStack(spacing: 3) {
+                    ForEach(0..<3, id: \.self) { _ in
+                        RoundedRectangle(cornerRadius: 1, style: .continuous)
+                            .fill(componentTint)
+                            .frame(width: 6, height: 4)
+                    }
+                }
+            }
+            .padding(.horizontal, 11)
+            .offset(y: 3)
+        }
+        .padding(.vertical, 5)
     }
 }
 
