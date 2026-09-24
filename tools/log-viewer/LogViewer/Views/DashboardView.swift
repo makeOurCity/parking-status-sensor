@@ -105,25 +105,35 @@ private struct EmptyStateCard: View {
 /// that same width instead of the section growing taller, so "デバイス"
 /// stays a fixed height regardless of fleet size and "直近のログ" below it
 /// never gets pushed further down.
+/// Card width is always "1/3 of the screen", regardless of how many devices
+/// actually exist — 1 device is one small chip at its natural size, not a
+/// stretched-out full-width card. Fewer than 3 devices pads out the row
+/// with empty chip slots so it always reads as "3 fit here", and 4+ scrolls
+/// horizontally at that same fixed width.
 private struct DeviceCarousel: View {
     let devices: [DeviceSummary]
 
     private let spacing: CGFloat = 12
     private let cardHeight: CGFloat = 148
+    private let visibleColumns: CGFloat = 3
 
     var body: some View {
         GeometryReader { geometry in
-            let columns = CGFloat(min(max(devices.count, 1), 3))
-            let cardWidth = (geometry.size.width - spacing * (columns - 1)) / columns
+            let cardWidth = (geometry.size.width - spacing * (visibleColumns - 1)) / visibleColumns
+            let emptySlots = max(0, Int(visibleColumns) - devices.count)
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: spacing) {
                     ForEach(devices) { device in
                         NavigationLink(value: device.deviceId) {
                             DeviceCard(device: device)
-                                .frame(width: cardWidth)
+                                .frame(width: cardWidth, height: cardHeight)
                         }
                         .buttonStyle(.plain)
+                    }
+                    ForEach(0..<emptySlots, id: \.self) { _ in
+                        EmptyDeviceSlot()
+                            .frame(width: cardWidth, height: cardHeight)
                     }
                 }
                 .scrollTargetLayout()
@@ -134,49 +144,46 @@ private struct DeviceCarousel: View {
     }
 }
 
-/// Each device renders as one self-contained "icon" tile — its status color
-/// *is* the tile's frame, so there's no separate floating icon glyph to
-/// parse. Everything about the device (name, status, freshness, uptime)
-/// lives centered inside that one frame, the same way a device detail
-/// screen's icon represents the whole thing at a glance.
+/// Each device renders as a small "circuit board" tile — modeled loosely on
+/// the actual XIAO ESP32-S3 module this project uses (castellated pin pads
+/// down the left/right edges of a rectangular board). Unlike an SF Symbol
+/// glyph, this shape is drawn to order, so the pins stay a thin sliver and
+/// almost the entire tile remains open for name/status/freshness/uptime.
 private struct DeviceCard: View {
     let device: DeviceSummary
 
     var body: some View {
-        VStack(spacing: 6) {
-            Text(device.deviceId)
-                .font(.caption.weight(.bold).monospaced())
-                .foregroundStyle(.primary)
-                .multilineTextAlignment(.center)
-                .lineLimit(2)
-                .minimumScaleFactor(0.75)
+        ZStack {
+            BoardBodyShape().fill(device.status.color.opacity(0.12))
+            BoardPinsShape().fill(device.status.color.opacity(0.5))
+            BoardBodyShape().stroke(device.status.color, lineWidth: 1.5)
 
-            StatusBadge(status: device.status)
+            VStack(spacing: 6) {
+                Text(device.deviceId)
+                    .font(.caption2.weight(.bold).monospaced())
+                    .foregroundStyle(.primary)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.7)
 
-            Text(RelativeTime.string(from: device.lastSeen))
-                .font(.caption2)
-                .foregroundStyle(device.isOffline ? Theme.warning : .secondary)
+                StatusBadge(status: device.status)
 
-            if let bootStatus = device.bootStatus {
-                VStack(spacing: 1) {
-                    Text("ブート \(bootStatus.bootCount)回")
-                    Text("稼働 \(bootStatus.uptimeLabel)")
+                Text(RelativeTime.string(from: device.lastSeen))
+                    .font(.caption2)
+                    .foregroundStyle(device.isOffline ? Theme.warning : .secondary)
+
+                if let bootStatus = device.bootStatus {
+                    VStack(spacing: 1) {
+                        Text("ブート \(bootStatus.bootCount)回")
+                        Text("稼働 \(bootStatus.uptimeLabel)")
+                    }
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .multilineTextAlignment(.center)
                 }
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
-                .multilineTextAlignment(.center)
             }
+            .padding(.horizontal, 12)
         }
-        .padding(12)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(
-            RoundedRectangle(cornerRadius: Theme.cardCornerRadius, style: .continuous)
-                .fill(device.status.color.opacity(0.10))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.cardCornerRadius, style: .continuous)
-                .strokeBorder(device.status.color.opacity(0.55), lineWidth: 2)
-        )
         .overlay(alignment: .topTrailing) {
             if device.isOffline {
                 Image(systemName: "exclamationmark.triangle.fill")
@@ -184,9 +191,65 @@ private struct DeviceCard: View {
                     .foregroundStyle(.white)
                     .padding(5)
                     .background(Circle().fill(Theme.warning))
-                    .offset(x: 8, y: -8)
+                    .offset(x: -2, y: 6)
             }
         }
+    }
+}
+
+/// A dimmed, contentless board — fills out the row to 3 slots when there
+/// aren't yet 3 devices, so it's visually obvious more fit here.
+private struct EmptyDeviceSlot: View {
+    var body: some View {
+        ZStack {
+            BoardBodyShape().fill(Color.primary.opacity(0.04))
+            BoardPinsShape().fill(Color.primary.opacity(0.2))
+            BoardBodyShape().stroke(Color.primary.opacity(0.25), lineWidth: 1.5)
+        }
+    }
+}
+
+/// The board's rounded-rectangle body, inset to leave room for
+/// `BoardPinsShape`'s pins outside its left/right edges. Kept separate from
+/// the pins so it can be stroked as one clean outline — combining body+pins
+/// into a single path and stroking it draws a seam at every pin junction.
+private struct BoardBodyShape: Shape {
+    var pinLength: CGFloat = 5
+    var cornerRadius: CGFloat = 16
+
+    func path(in rect: CGRect) -> Path {
+        let bodyRect = rect.insetBy(dx: pinLength, dy: 0)
+        return Path(roundedRect: bodyRect, cornerRadius: cornerRadius)
+    }
+}
+
+/// Castellated pin pads along just the left and right edges of
+/// `BoardBodyShape` — matching the XIAO module's own header pins. Only
+/// filled (never stroked) since each pad is its own tiny rect; two sides
+/// instead of an icon's four keeps this a thin margin rather than eating
+/// into the space available for text.
+private struct BoardPinsShape: Shape {
+    var pinCount: Int = 6
+    var pinLength: CGFloat = 5
+    var pinThickness: CGFloat = 4
+    var cornerRadius: CGFloat = 16
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+
+        let bodyRect = rect.insetBy(dx: pinLength, dy: 0)
+        let usableHeight = bodyRect.height - cornerRadius * 2
+        let pinSpacing = usableHeight / CGFloat(pinCount)
+        for index in 0..<pinCount {
+            let centerY = bodyRect.minY + cornerRadius + pinSpacing * (CGFloat(index) + 0.5)
+            let pinRect = { (x: CGFloat) in
+                CGRect(x: x, y: centerY - pinThickness / 2, width: pinLength, height: pinThickness)
+            }
+            path.addRect(pinRect(rect.minX))
+            path.addRect(pinRect(bodyRect.maxX))
+        }
+
+        return path
     }
 }
 
