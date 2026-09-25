@@ -44,7 +44,8 @@ struct CloudWatchLogsService {
         | \(Self.deviceIdParse)
         | parse @message /"status":\\s*"(?<rawStatus>[^"]+)"/
         | parse @message /"bootCount":\\s*(?<bootCountRaw>\\d+)/
-        | stats latest(@timestamp) as lastSeen, latest(rawStatus) as currentStatus, latest(bootCountRaw) as currentBootCount by deviceId
+        | parse @message /"transport":\\s*"(?<transportRaw>[^"]+)"/
+        | stats latest(@timestamp) as lastSeen, latest(rawStatus) as currentStatus, latest(bootCountRaw) as currentBootCount, latest(transportRaw) as currentTransport by deviceId
         """
 
         // The most recent bootCount==1 entry per device — the start of each
@@ -86,7 +87,7 @@ struct CloudWatchLogsService {
                 )
             }
 
-            return DeviceSummary(deviceId: deviceId, status: status, lastSeen: lastSeen, bootStatus: bootStatus)
+            return DeviceSummary(deviceId: deviceId, status: status, lastSeen: lastSeen, bootStatus: bootStatus, transport: row["currentTransport"])
         }
         .sorted { $0.deviceId < $1.deviceId }
     }

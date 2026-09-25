@@ -36,16 +36,34 @@ struct DeviceSummary: Identifiable, Equatable {
     let status: DeviceOperationalStatus
     let lastSeen: Date
     let bootStatus: BootStatusInfo?
+    /// Raw `network.transport` value from the latest telemetry (firmware
+    /// `TransportKind`: currently `"wifi"` / `"lte"` / `"none"`; a LoRaWAN
+    /// build will add `"lora"` once #40's cloud-ingestion follow-up lands).
+    let transport: String?
 
     var id: String { deviceId }
 
     var isOffline: Bool {
         Date().timeIntervalSince(lastSeen) > AWSConfig.offlineThreshold
     }
+
+    /// Human-readable transport label, forward-compatible with transport
+    /// values this app doesn't know about yet (falls back to the raw value
+    /// uppercased, so a future firmware addition still shows *something*
+    /// sensible without an app update).
+    var transportLabel: String? {
+        guard let transport, transport != "none" else { return nil }
+        switch transport {
+        case "lte": return "LTE"
+        case "wifi": return "Wi-Fi"
+        case "lora", "lorawan": return "LoRa"
+        default: return transport.uppercased()
+        }
+    }
 }
 
 struct LogEntry: Identifiable, Equatable {
-    let id = UUID()
+    let id: String
     let timestamp: Date
     let deviceId: String?
     let status: DeviceOperationalStatus?
@@ -56,6 +74,18 @@ struct LogEntry: Identifiable, Equatable {
     init?(row: [String: String]) {
         guard let timestampString = row["@timestamp"], let message = row["@message"] else { return nil }
         guard let date = LogEntry.timestampFormatter.date(from: timestampString) else { return nil }
+        // Content-derived id (millisecond timestamp + full message), not a
+        // random UUID generated fresh on every fetch: the same log line then
+        // gets the same SwiftUI identity across the 30s auto-refresh, so
+        // `ForEach` doesn't treat every poll as "all new rows" — an expanded
+        // raw-log disclosure and scroll position survive a background
+        // reload instead of resetting under the user mid-interaction.
+        //
+        // CloudWatch's own `@ptr` looks like it should serve this purpose,
+        // but it isn't actually stable: re-running the identical query for
+        // the identical record returns a different `@ptr` each time
+        // (verified against live data), so it can't be used here.
+        self.id = "\(timestampString)|\(message)"
         self.timestamp = date
         self.deviceId = row["deviceId"]
         self.status = row["status"].flatMap(DeviceOperationalStatus.init(rawValue:))

@@ -29,6 +29,46 @@ struct PowerInfo: Decodable {
     let bootCount: Int?
     let wakeCause: String?
     let resetReason: String?
+
+    /// True for reset reasons that mean the device just came back from a
+    /// real reset — not a routine deep-sleep wake. These are the entries
+    /// worth a second look (e.g. `brownout`), so views can call them out.
+    var isNotableReset: Bool {
+        resetReason != nil && resetReason != "deep_sleep"
+    }
+
+    /// Full-length label for contexts with room to spare (device detail).
+    /// firmware/src/main.cpp: resetReasonToString(esp_reset_reason_t).
+    var resetReasonLabel: String? {
+        guard let resetReason else { return nil }
+        switch resetReason {
+        case "power_on": return "電源投入"
+        case "brownout": return "電圧低下（ブラウンアウト）"
+        case "deep_sleep": return "ディープスリープ復帰"
+        case "software": return "ソフトウェアリセット"
+        case "panic": return "パニック（クラッシュ）"
+        case "task_wdt": return "タスクウォッチドッグ"
+        case "int_wdt": return "割り込みウォッチドッグ"
+        case "wdt": return "ウォッチドッグ"
+        case "other": return "その他"
+        default: return resetReason
+        }
+    }
+
+    /// Compact label for space-constrained contexts (dashboard recent logs).
+    var shortResetReasonLabel: String? {
+        guard let resetReason else { return nil }
+        switch resetReason {
+        case "power_on": return "電源"
+        case "brownout": return "電圧低下"
+        case "deep_sleep": return "スリープ"
+        case "software": return "SW"
+        case "panic": return "パニック"
+        case "task_wdt", "int_wdt", "wdt": return "WDT"
+        case "other": return "他"
+        default: return resetReason
+        }
+    }
 }
 
 /// The JSON telemetry payload embedded in each log line (docs/data-model.md).

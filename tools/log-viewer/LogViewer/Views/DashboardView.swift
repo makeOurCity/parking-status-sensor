@@ -174,7 +174,7 @@ private struct DeviceCard: View {
                 .inset(by: 1.25)
                 .stroke(.white.opacity(0.35), lineWidth: 0.75)
 
-            BoardAccents(tone: .gold)
+            BoardAccents(tone: .gold, transportLabel: device.transportLabel)
 
             VStack(spacing: 6) {
                 Text(device.deviceId)
@@ -265,6 +265,7 @@ private struct EmptyDeviceSlot: View {
 /// so they never compete with it.
 private struct BoardAccents: View {
     var tone: CastellatedEdges.Tone = .gold
+    var transportLabel: String? = nil
 
     private var metallic: LinearGradient {
         LinearGradient(
@@ -293,11 +294,22 @@ private struct BoardAccents: View {
 
             Spacer(minLength: 0)
 
-            HStack(spacing: 5) {
+            HStack(spacing: 3) {
                 Circle()
                     .fill(metallic)
                     .overlay(Circle().strokeBorder(.black.opacity(0.25), lineWidth: 0.5))
                     .frame(width: 8, height: 8)
+
+                if let transportLabel {
+                    HStack(spacing: 1) {
+                        Image(systemName: "antenna.radiowaves.left.and.right")
+                            .font(.system(size: 6, weight: .bold))
+                        Text(transportLabel)
+                            .font(.system(size: 7, weight: .bold))
+                            .lineLimit(1)
+                    }
+                    .foregroundStyle(.secondary)
+                }
 
                 Spacer(minLength: 0)
 
