@@ -27,6 +27,18 @@ struct TelemetryDetailsView: View {
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
+                if let power = telemetry.power {
+                    if let bootCount = power.bootCount {
+                        Text("#\(bootCount)")
+                            .font(.caption2.monospaced())
+                            .foregroundStyle(.secondary)
+                    }
+                    if let label = power.shortResetReasonLabel {
+                        Text(label)
+                            .font(.caption2.weight(power.isNotableReset ? .bold : .regular))
+                            .foregroundStyle(power.isNotableReset ? Theme.warning : .secondary)
+                    }
+                }
             }
         case .full:
             HStack(alignment: .top, spacing: 14) {
@@ -52,6 +64,21 @@ struct TelemetryDetailsView: View {
                     }
                     .font(.caption2.weight(.medium))
                     .foregroundStyle(.secondary)
+
+                    if let power = telemetry.power {
+                        HStack(spacing: 10) {
+                            if let bootCount = power.bootCount {
+                                Label("ブート \(bootCount)回", systemImage: "arrow.clockwise")
+                                    .foregroundStyle(.secondary)
+                            }
+                            if let label = power.resetReasonLabel {
+                                Label(label, systemImage: "bolt.fill")
+                                    .foregroundStyle(power.isNotableReset ? Theme.warning : .secondary)
+                                    .fontWeight(power.isNotableReset ? .bold : .regular)
+                            }
+                        }
+                        .font(.caption2.weight(.medium))
+                    }
                 }
             }
         }
