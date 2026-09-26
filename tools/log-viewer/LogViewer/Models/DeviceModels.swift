@@ -62,6 +62,19 @@ struct DeviceSummary: Identifiable, Equatable {
     }
 }
 
+/// One row from `CloudWatchLogsService.fetchDeviceStatuses` — the cheap
+/// per-device query (see #77). Doesn't carry a reset timestamp; callers that
+/// need uptime combine this with a separately-cached
+/// `fetchResetTimestamps()` result (or skip that entirely, like the
+/// background refresh path, which only needs `status`/`lastSeen`).
+struct DeviceStatusRow {
+    let deviceId: String
+    let status: DeviceOperationalStatus
+    let lastSeen: Date
+    let bootCount: Int?
+    let transport: String?
+}
+
 struct LogEntry: Identifiable, Equatable {
     let id: String
     let timestamp: Date

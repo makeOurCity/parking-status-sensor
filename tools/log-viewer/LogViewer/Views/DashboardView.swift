@@ -68,10 +68,10 @@ struct DashboardView: View {
                 }
             }
             .refreshable {
-                await viewModel.load()
+                await viewModel.load(forceResetRefresh: true)
             }
-            .autoRefreshing(scenePhase: scenePhase) {
-                await viewModel.load()
+            .autoRefreshing(scenePhase: scenePhase) { isInitial in
+                await viewModel.load(forceResetRefresh: isInitial)
             }
         }
         .tint(Theme.accent)
