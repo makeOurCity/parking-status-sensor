@@ -9,19 +9,69 @@ final class DashboardViewModel: ObservableObject {
 
     private let logsService: CloudWatchLogsService
 
+    // Reset-timestamp cache (see #77): `fetchResetTimestamps` scans 400 days
+    // of logs and accounted for ~90% of this app's CloudWatch Logs Insights
+    // volume when it ran on every poll. It's only re-run on app start,
+    // manual pull-to-refresh, or when a device's bootCount just dropped —
+    // the only time the cached value can actually be stale.
+    private var resetTimestampCache: [String: Date] = [:]
+    private var lastKnownBootCount: [String: Int] = [:]
+    private var hasFetchedResetTimestamps = false
+
     init(auth: CognitoAuthService) {
         self.logsService = CloudWatchLogsService(auth: auth)
     }
 
-    func load() async {
+    /// - Parameter forceResetRefresh: true on app start / foreground resume
+    ///   and on manual pull-to-refresh. Otherwise (periodic auto-refresh)
+    ///   the expensive reset-time lookup only re-runs if a device's
+    ///   bootCount dropped since the last check (i.e. it actually reset) or
+    ///   a never-before-seen device showed up.
+    func load(forceResetRefresh: Bool = false) async {
         isLoading = true
         errorMessage = nil
         do {
-            async let devicesTask = logsService.fetchDeviceSummaries()
+            async let statusesTask = logsService.fetchDeviceStatuses()
             async let recentTask = logsService.fetchRecentLogs(limit: 5)
-            let (devices, recent) = try await (devicesTask, recentTask)
-            self.devices = devices
+            let (statuses, recent) = try await (statusesTask, recentTask)
             self.recentLogs = recent
+
+            let needsResetRefresh = forceResetRefresh
+                || !hasFetchedResetTimestamps
+                || statuses.contains { status in
+                    guard resetTimestampCache[status.deviceId] != nil else { return true }
+                    guard let bootCount = status.bootCount, let previous = lastKnownBootCount[status.deviceId] else { return false }
+                    return bootCount < previous
+                }
+
+            if needsResetRefresh {
+                resetTimestampCache = try await logsService.fetchResetTimestamps()
+                hasFetchedResetTimestamps = true
+            }
+
+            for status in statuses {
+                if let bootCount = status.bootCount {
+                    lastKnownBootCount[status.deviceId] = bootCount
+                }
+            }
+
+            self.devices = statuses.map { status in
+                let bootStatus = status.bootCount.map { bootCount in
+                    BootStatusInfo(
+                        bootCount: bootCount,
+                        sessionStartedAt: resetTimestampCache[status.deviceId],
+                        latestTimestamp: status.lastSeen
+                    )
+                }
+                return DeviceSummary(
+                    deviceId: status.deviceId,
+                    status: status.status,
+                    lastSeen: status.lastSeen,
+                    bootStatus: bootStatus,
+                    transport: status.transport
+                )
+            }
+
             await DeviceStateStore.detectChangesAndNotify(devices: devices)
         } catch {
             if !isCancellationError(error) {

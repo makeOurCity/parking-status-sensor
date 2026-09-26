@@ -67,7 +67,18 @@ final class BackgroundRefreshScheduler {
         let refreshTask = Task {
             do {
                 let service = CloudWatchLogsService(auth: auth)
-                let devices = try await service.fetchDeviceSummaries()
+                // Status-only: change detection only needs status/lastSeen,
+                // never the expensive 400-day reset-time lookup (#77).
+                let statuses = try await service.fetchDeviceStatuses()
+                let devices = statuses.map { status in
+                    DeviceSummary(
+                        deviceId: status.deviceId,
+                        status: status.status,
+                        lastSeen: status.lastSeen,
+                        bootStatus: nil,
+                        transport: status.transport
+                    )
+                }
                 await DeviceStateStore.detectChangesAndNotify(devices: devices)
                 task.setTaskCompleted(success: true)
             } catch {

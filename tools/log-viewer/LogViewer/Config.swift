@@ -20,8 +20,11 @@ enum AWSConfig {
 
     /// How often the dashboard/device detail screens re-query CloudWatch Logs
     /// on their own while in the foreground, so manual pull-to-refresh is
-    /// rarely needed.
-    static let autoRefreshInterval: TimeInterval = 30
+    /// rarely needed. Devices only send on status change or roughly once an
+    /// hour otherwise, so 30s (the original value) was needlessly frequent —
+    /// see #77, where this was most of this app's CloudWatch Logs Insights
+    /// scan volume.
+    static let autoRefreshInterval: TimeInterval = 5 * 60
 
     /// BGTaskScheduler identifier for background refresh (must match the
     /// `BGTaskSchedulerPermittedIdentifiers` entry in project.yml/Info.plist).

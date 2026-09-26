@@ -45,7 +45,7 @@ struct DeviceDetailView: View {
         .refreshable {
             await viewModel.load()
         }
-        .autoRefreshing(scenePhase: scenePhase) {
+        .autoRefreshing(scenePhase: scenePhase) { _ in
             await viewModel.load()
         }
     }
