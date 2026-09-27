@@ -27,19 +27,24 @@ def parse_args() -> argparse.Namespace:
 
 def load_rows(path: Path) -> list[tuple[float, float]]:
     rows: list[tuple[float, float]] = []
-    with path.open(newline="") as fh:
+    # 通常モード: ms,current_mA,... / 高速モード(#74): ms,samples,...,current_avg_mA
+    current_col = 1
+    with path.open(newline="", errors="ignore") as fh:
         for line in fh:
             line = line.strip()
             if not line or line.startswith("#"):
                 continue
             if line.startswith("ms,"):
+                header = line.split(",")
+                if "current_avg_mA" in header:
+                    current_col = header.index("current_avg_mA")
                 continue
             parts = line.split(",")
-            if len(parts) < 2:
+            if len(parts) <= current_col:
                 continue
             try:
                 t_ms = float(parts[0])
-                current_ma = float(parts[1])
+                current_ma = float(parts[current_col])
             except ValueError:
                 continue
             rows.append((t_ms, current_ma))
