@@ -49,9 +49,8 @@ int activeMqttState();
 int activeMqttLastError();
 TransportKind activeTransportKind();
 void disconnectTransport();
-// LTE bearer 切断 + modem poweroff（AT+CPOWD=1）+ UART 後処理 + 無応答確認。
+// modem poweroff（AT+CPOWD=1）+ UART 後処理 + 無応答確認。bearer の明示的な切断は行わない（#76）。
 struct LtePoweroffResult {
-  bool bearerDetached = false;
   bool cpowdAccepted = false;
   bool modemSilent = false;
   bool radioOffFallback = false;

@@ -820,16 +820,19 @@ bool powerOffLteModem(LtePoweroffResult* detail) {
     return false;
   }
 
-  Serial.println("powerOffLteModem: detach bearer");
-  r.bearerDetached = detachLteBearer();
-
+  // #76: 以前はここで detachLteBearer()（CNACT=0,0 / CGATT=0）を送っていたが、
+  // CGATT=0 はネットワークからの切り離しを待つため 15s のタイムアウトまで応答が
+  // なく（AT マニュアル上の最大応答時間は 75s）、しかも AT+CPOWD=1 自身が
+  // 電源断の前に同じ切り離しを行うので、約 15s を二重に待っていた。
+  // SIM7080G HW Design §3.2.2 が挙げる正式な電源断（AT+CPOWD=1）だけにする。
   Serial.println("powerOffLteModem: AT+CPOWD=1");
   r.cpowdAccepted = requestModemPowerOff(2);
 
-  // SIM7080 HW Design: shutdown completes in ~1.8 s.
+  // SIM7080 HW Design Table 9: Toff(uart) >= 1.8 s after power-off issue.
   delay(2000);
 
-  r.modemSilent = !modemRespondsToAt(3000);
+  // 電源が切れていれば応答はないので、確認は短い時間で打ち切る（#76）。
+  r.modemSilent = !modemRespondsToAt(500);
   Serial.printf("powerOffLteModem: cpowd=%s modemSilent=%s\n",
                 r.cpowdAccepted ? "yes" : "no",
                 r.modemSilent ? "yes" : "no");
