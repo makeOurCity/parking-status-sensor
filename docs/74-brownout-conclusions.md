@@ -112,6 +112,8 @@ LiPo → SW1 → ETA6003（BATT → SYS）＝ VSYS
 - CloudWatch Logs の `aws logs filter-log-events` を長い期間で 1 回呼ぶと取りこぼしが出たことがある。日単位など短い期間に分けて取得する
 - `tools/power-logger/integrate_mah.py` は、記録ファイルに見出し行（`ms,samples,...`）がないと、高速モードのログのサンプル数の列を電流として足してしまう（**未修正**）。`pio device monitor` をロガーの起動後に始めると見出し行が入らないので、そのときは `current_avg_mA`（7 列目）を直接集計する
 
+- 計測の途中結果（起床ごとの電圧・電流の表、XIAO のシリアルログ）は [tools/power-logger/results/74/](../tools/power-logger/results/74/README.md)。生の CSV は失われた（git の管理外だったため）。今後の生の CSV はリポジトリの外に保存する
+
 ## 6. 関連
 
 - Issue: #74（本調査）、#76（切断処理の約 30s）、#46（リレー）、#40（LoRaWAN 版）、#70（log-viewer の通知）、#77（log-viewer のクエリ量）
