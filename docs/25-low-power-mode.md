@@ -48,6 +48,8 @@ Grove 構成での電源挙動と、PoC 経路選択への含意をまとめる�
 
 ### 1.4 強化 CPOWD シーケンス（2026-07-10 追試 — confirmed）
 
+> **注記（2026-09-29）:** 以下の `CNACT/CGATT` の明示的な切断は、#76 で取りやめた。`CGATT=0` が 15 s のタイムアウトで空振りし、続く `AT+CPOWD=1` も同じ切り離しを待たされて、切断処理に約 30 秒余計にかかっていたため。現在は `AT+CPOWD=1` → 2 s 待機 → AT 無応答 post-check（0.5 s）→ `Serial1.end()`（[firmware/README.md](../firmware/README.md)）。
+
 ファーム改善後（`CNACT/CGATT` 明示切断 → `AT+CPOWD=1` → 2 s 待機 → AT 無応答 post-check → `Serial1.end()`）の `xiao-s3-lte-poweroff-test` 実機結果:
 
 | 項目 | 結果 |

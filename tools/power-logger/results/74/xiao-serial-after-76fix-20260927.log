@@ -1,0 +1,66 @@
+14:18:43.001 ## port lost: read failed: [Errno 6] Device not configured
+14:18:45.516 boot-mode slot=1/5 sample r=221 g=118 b=61 w=344 status=full threshold=30 potRaw=0
+14:18:45.516 transport attempt 1/2
+14:18:45.516 LTE-M connecting
+14:18:52.072 LTE plan-D setup (first boot this power cycle)
+14:18:52.072 configure plan-D (Docomo Cat-M1)...
+14:18:52.577 AT+CBANDCFG?
+14:18:52.577 
+14:18:52.577 +CBANDCFG: "CAT-M",1,19
+14:18:52.577 +CBANDCFG: "NB-IOT",1,2,3,4,5,8,12,13,18,19,20,25,26,28,66,71,85
+14:18:52.577 
+14:18:52.578 OK
+14:18:52.578 
+14:18:55.599 AT+CMNB?
+14:19:01.639 LTE-M connected operator=docomo csq=16
+14:19:01.639 clock set from modem utc=1790486340 tz=9.00
+14:19:01.639 modem TLS certs: skip upload (cached in NVS)
+14:19:03.578 MQTT connected (tcpTls=1610 mqtt=183 total=1793 ms)
+14:19:03.578 publish attempt 1/3
+14:19:03.578 MQTT publish topic=$aws/rules/parking_status_telemetry/parking-status/xiao-e83dc1fb05fc/telemetry confirmed=yes qos=1 bytes=774 ms=242 err=0
+14:19:04.080 {"deviceId":"xiao-e83dc1fb05fc","status":"full","raw":{"red":221,"green":118,"blue":61,"clear":344},"threshold":30,"determinedBy":"device","timestamp":"2026-09-27T05:19:01Z","power":{"bootCount":1,"wakeCause":"power_on","resetReason":"power_on","activeMsBeforePublish":19667,"sleepSeconds":300,"timerWakes":0},"network":{"transport":"lte","fallback":false,"wifiRssi":0,"networkConnectMs":16226,"mqttConnectMs":1793,"tcpTlsConnectMs":1610,"mqttHandshakeMs":183,"publishMs":0,"transportAttempts":1,"mqttQos":1,"publishAttempts":1},"sync":{"lastConfirmedStatus":"full","lastConfirmedBootCount":2,"pending":false,"prevOutcome":"skipped","prevAttempts":0,"prevMqttError":0,"prevActiveMs":1620},"bootMode":{"active":true,"slot":1,"totalSlots":5},"pot":{"enabled":true,"adcRaw":0}}
+14:19:04.080 boot-mode: send 1/5 confirmed
+14:19:45.382 boot-mode slot=2/5 sample r=222 g=117 b=61 w=344 status=full threshold=30 potRaw=0
+14:19:45.382 publish attempt 1/3
+14:19:45.780 MQTT publish topic=$aws/rules/parking_status_telemetry/parking-status/xiao-e83dc1fb05fc/telemetry confirmed=yes qos=1 bytes=778 ms=497 err=0
+14:19:46.285 {"deviceId":"xiao-e83dc1fb05fc","status":"full","raw":{"red":222,"green":117,"blue":61,"clear":344},"threshold":30,"determinedBy":"device","timestamp":"2026-09-27T05:19:43Z","power":{"bootCount":1,"wakeCause":"power_on","resetReason":"power_on","activeMsBeforePublish":1640,"sleepSeconds":300,"timerWakes":0},"network":{"transport":"lte","fallback":false,"wifiRssi":0,"networkConnectMs":16226,"mqttConnectMs":1793,"tcpTlsConnectMs":1610,"mqttHandshakeMs":183,"publishMs":242,"transportAttempts":1,"mqttQos":1,"publishAttempts":1},"sync":{"lastConfirmedStatus":"full","lastConfirmedBootCount":1,"pending":false,"prevOutcome":"confirmed","prevAttempts":1,"prevMqttError":0,"prevActiveMs":19910},"bootMode":{"active":true,"slot":2,"totalSlots":5},"pot":{"enabled":true,"adcRaw":0}}
+14:19:46.285 boot-mode: send 2/5 confirmed
+14:20:45.211 boot-mode slot=3/5 sample r=221 g=117 b=61 w=344 status=full threshold=30 potRaw=0
+14:20:45.713 publish attempt 1/3
+14:20:45.754 MQTT publish topic=$aws/rules/parking_status_telemetry/parking-status/xiao-e83dc1fb05fc/telemetry confirmed=yes qos=1 bytes=777 ms=473 err=0
+14:20:46.258 {"deviceId":"xiao-e83dc1fb05fc","status":"full","raw":{"red":221,"green":117,"blue":61,"clear":344},"threshold":30,"determinedBy":"device","timestamp":"2026-09-27T05:20:43Z","power":{"bootCount":1,"wakeCause":"power_on","resetReason":"power_on","activeMsBeforePublish":1639,"sleepSeconds":300,"timerWakes":0},"network":{"transport":"lte","fallback":false,"wifiRssi":0,"networkConnectMs":16226,"mqttConnectMs":1793,"tcpTlsConnectMs":1610,"mqttHandshakeMs":183,"publishMs":497,"transportAttempts":1,"mqttQos":1,"publishAttempts":1},"sync":{"lastConfirmedStatus":"full","lastConfirmedBootCount":1,"pending":false,"prevOutcome":"confirmed","prevAttempts":1,"prevMqttError":0,"prevActiveMs":2138},"bootMode":{"active":true,"slot":3,"totalSlots":5},"pot":{"enabled":true,"adcRaw":0}}
+14:20:46.258 boot-mode: send 3/5 confirmed
+14:21:45.178 boot-mode slot=4/5 sample r=222 g=117 b=61 w=344 status=full threshold=30 potRaw=0
+14:21:45.684 publish attempt 1/3
+14:21:45.752 MQTT publish topic=$aws/rules/parking_status_telemetry/parking-status/xiao-e83dc1fb05fc/telemetry confirmed=yes qos=1 bytes=777 ms=470 err=0
+14:21:46.257 {"deviceId":"xiao-e83dc1fb05fc","status":"full","raw":{"red":222,"green":117,"blue":61,"clear":344},"threshold":30,"determinedBy":"device","timestamp":"2026-09-27T05:21:43Z","power":{"bootCount":1,"wakeCause":"power_on","resetReason":"power_on","activeMsBeforePublish":1641,"sleepSeconds":300,"timerWakes":0},"network":{"transport":"lte","fallback":false,"wifiRssi":0,"networkConnectMs":16226,"mqttConnectMs":1793,"tcpTlsConnectMs":1610,"mqttHandshakeMs":183,"publishMs":473,"transportAttempts":1,"mqttQos":1,"publishAttempts":1},"sync":{"lastConfirmedStatus":"full","lastConfirmedBootCount":1,"pending":false,"prevOutcome":"confirmed","prevAttempts":1,"prevMqttError":0,"prevActiveMs":2113},"bootMode":{"active":true,"slot":4,"totalSlots":5},"pot":{"enabled":true,"adcRaw":0}}
+14:21:46.258 boot-mode: send 4/5 confirmed
+14:22:43.158 boot-mode slot=5/5 sample r=221 g=117 b=61 w=344 status=full threshold=30 potRaw=0
+14:22:43.663 publish attempt 1/3
+14:22:43.726 MQTT publish topic=$aws/rules/parking_status_telemetry/parking-status/xiao-e83dc1fb05fc/telemetry confirmed=yes qos=1 bytes=777 ms=460 err=0
+14:22:43.728 {"deviceId":"xiao-e83dc1fb05fc","status":"full","raw":{"red":221,"green":117,"blue":61,"clear":344},"threshold":30,"determinedBy":"device","timestamp":"2026-09-27T05:22:43Z","power":{"bootCount":1,"wakeCause":"power_on","resetReason":"power_on","activeMsBeforePublish":1640,"sleepSeconds":300,"timerWakes":0},"network":{"transport":"lte","fallback":false,"wifiRssi":0,"networkConnectMs":16226,"mqttConnectMs":1793,"tcpTlsConnectMs":1610,"mqttHandshakeMs":183,"publishMs":470,"transportAttempts":1,"mqttQos":1,"publishAttempts":1},"sync":{"lastConfirmedStatus":"full","lastConfirmedBootCount":1,"pending":false,"prevOutcome":"confirmed","prevAttempts":1,"prevMqttError":0,"prevActiveMs":2112},"bootMode":{"active":true,"slot":5,"totalSlots":5},"pot":{"enabled":true,"adcRaw":0}}
+14:22:43.728 boot-mode: send 5/5 confirmed
+14:22:43.728 === boot mode complete, resuming normal cadence ===
+14:22:44.233 sleep reason=boot-mode-done seconds=300 active_ms=242109 pending=0
+14:22:44.233 powerOffLteModem: AT+CPOWD=1
+14:22:46.300 ## port lost: read failed: [Errno 6] Device not configured
+14:27:46.117 relay: startup safety RESET already sent before Serial.begin() (t=~0 ms); waitForSerial took 834 ms
+14:27:46.118 watchdog enabled timeout_s=95
+14:27:46.118 sync: loaded ledger lastStatus=full pending=0 prevOutcome=confirmed
+14:27:46.118 hlog: loaded total=1582 capacity=672
+14:27:46.118 deviceId=xiao-e83dc1fb05fc mqttTopic=$aws/rules/parking_status_telemetry/parking-status/xiao-e83dc1fb05fc/telemetry pending=0
+14:27:46.118 board=xiao-s3 boot=2 wake=timer reset=deep_sleep prevOutcome=confirmed pending=0
+14:27:47.124 sample r=133 g=231 b=80 w=312 r-g=-98 status=available threshold=30 potRaw=0
+14:27:47.629 relay: SET (LTE ON) at t=2456 ms
+14:27:47.629 transport attempt 1/2
+14:27:47.630 LTE-M connecting
+14:27:55.191 LTE-M connected operator=docomo csq=15
+14:27:55.191 modem TLS certs: skip upload (cached in NVS)
+14:27:56.599 MQTT connected (tcpTls=1445 mqtt=156 total=1601 ms)
+14:27:56.599 publish attempt 1/3
+14:27:56.599 MQTT publish topic=$aws/rules/parking_status_telemetry/parking-status/xiao-e83dc1fb05fc/telemetry confirmed=yes qos=1 bytes=780 ms=241 err=0
+14:27:56.601 {"deviceId":"xiao-e83dc1fb05fc","status":"available","raw":{"red":133,"green":231,"blue":80,"clear":312},"threshold":30,"determinedBy":"device","timestamp":"2026-09-27T05:27:58Z","power":{"bootCount":2,"wakeCause":"timer","resetReason":"deep_sleep","activeMsBeforePublish":10729,"sleepSeconds":300,"timerWakes":1},"network":{"transport":"lte","fallback":false,"wifiRssi":0,"networkConnectMs":7475,"mqttConnectMs":1601,"tcpTlsConnectMs":1445,"mqttHandshakeMs":156,"publishMs":0,"transportAttempts":1,"mqttQos":1,"publishAttempts":1},"sync":{"lastConfirmedStatus":"full","lastConfirmedBootCount":1,"pending":false,"prevOutcome":"confirmed","prevAttempts":1,"prevMqttError":0,"prevActiveMs":2101},"bootMode":{"active":false,"slot":0,"totalSlots":0},"pot":{"enabled":true,"adcRaw":0}}
+14:27:57.106 cycle active_ms=10972 net=7475 tcpTls=1445 mqtt=156 publish_ms=241 confirmed=true attempts=1
+14:27:57.106 sleep reason=confirmed seconds=300 active_ms=10972 pending=0
+14:27:57.107 powerOffLteModem: AT+CPOWD=1
+14:27:59.175 ## port lost: read failed: [Errno 6] Device not configured

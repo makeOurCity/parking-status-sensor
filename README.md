@@ -2,8 +2,8 @@
 
 > 駐車場の満空表示灯（満／空灯）の発光色をカラーセンサで外付け読み取りし、満車・空車状態をIoTデータとして取得する実証（PoC）の設計書。
 
-- ステータス: PoC設計フェーズ
-- 最終更新: 2026-06-22
+- ステータス: PoC 実証フェーズ（LTE-M 版の試作機で試験中、LoRaWAN 版を実装中）
+- 最終更新: 2026-09-29
 - 管理: GitHub（本設計書・Issues・実装コードを同一リポジトリで管理）
 
 ---
@@ -123,8 +123,6 @@
 
 ### 4.1 信号の流れ
 
-PoC 第1弾（Wi-Fi）の構成:
-
 ```
 [満空灯の発光面] 赤=満 / 緑=空
       │ 光
@@ -132,13 +130,13 @@ PoC 第1弾（Wi-Fi）の構成:
 [センサパッチ]  Grove Color Sensor V3.0 + 黒シート積層固定
       │ Grove I2C ケーブル
       ▼
-[XIAO ESP32S3 + Grove Shield]  赤か緑か判定・MQTT送信   ← 電源（PoCはLiPo電池）
-      │ Wi-Fi / MQTT
+[XIAO ESP32S3 + Grove Shield]  赤か緑か判定・送信   ← 電源: LiPo 電池（§6）
+      │ LTE-M / Wi-Fi: MQTT over TLS      LoRaWAN: AWS IoT Core for LoRaWAN（#40）
       ▼
-[AWS IoT Core]  マネージド MQTT 受け口
-      │ ルールでトリガー
+[AWS IoT Core]  受け口（ルールでトリガー）
+      │
       ▼
-[AWS Lambda]  ブリッジ（ペイロード変換 → NGSIv2 upsert）
+[AWS Lambda]  ブリッジ（ペイロード変換 → NGSIv2 upsert）  ※現在はスタブ（受信ログを CloudWatch Logs に記録するだけ）。本実装は #7
       │
       ▼
 [FIWARE Orion]  満空を登録
@@ -147,7 +145,7 @@ PoC 第1弾（Wi-Fi）の構成:
 [STH-Comet]  履歴蓄積・読み取り精度の検証
 ```
 
-端末は Orion に直接書き込まない。MQTT ペイロードの変換と NGSIv2 への upsert は Lambda（ブリッジ）が担う。接続基盤の詳細は Issue #4 を参照。
+端末は Orion に直接書き込まない。MQTT ペイロードの変換と NGSIv2 への upsert は Lambda（ブリッジ）が担う。
 
 ### 4.2 判定の持たせ方（端末／サーバ両対応）
 
@@ -157,30 +155,17 @@ PoC 第1弾（Wi-Fi）の構成:
 
 ### 4.3 通信方式
 
-PoC は段階的に進める。
+通信モジュールごとに版を分ける。**ビルド環境（PlatformIO env）で版を選び、モジュールの自動判別や共存はしない**（Grove UART ポートを LTE-M と LoRaWAN で排他利用するため）。
 
-- **第1弾（現在）: Wi-Fi + AWS**
-  - ESP32 内蔵 Wi-Fi で MQTT publish。受け口は AWS IoT Core、ブリッジは AWS Lambda（Issue #4）。
-  - 試作1台の部品・配線は [docs/bom.md](docs/bom.md)・[docs/wiring.md](docs/wiring.md) を参照（LTE-M モジュールは対象外）。
-- **将来: LTE-M（型番確定・PoC 第1弾では不採用）**
-  - **M5Stack SIM7080G CAT-M Unit（M5STACK-U128）** … Grove 互換 UART コネクタ付き・SIM7080G 搭載・CAT-M/NB-IoT 対応（[スイッチサイエンス](https://www.switch-science.com/products/11052) ¥6,908）。
-  - **Grove Shield for XIAO** の UART ポートにケーブル1本で接続。
-  - **SORACOM SIM**（plan-D: ドコモ / plan-KM1: KDDI）で動作確認済み。
-  - PoC 第1弾は Wi-Fi 版で動作確認を優先。Wi-Fi が使えない現場が出た時点で追加購入する。
-  - 接続基盤（SORACOM Beam / IoT Core 連携等）は LTE-M 導入時に再検討する。
-- 送信データは判定結果＋生値のみで極小。LTE-M の細い回線・低消費電力とも両立する設計とする。
+| 版 | モジュール | 状況 | 使い分け |
+|---|---|---|---|
+| **LoRaWAN 版** | Grove Wio-E5（STM32WLE5JC、技適付き） | 実装中（#40） | **本流**。現場にゲートウェイを置ける場合。送信が短く電池に有利 |
+| **LTE-M 版** | M5Stack SIM7080G CAT-M Unit（M5STACK-U128）+ SORACOM SIM（plan-D / plan-KM1） | 実装済み・現地試験済み | LoRaWAN でどうしても通信できない場合 |
+| Wi-Fi | ESP32-S3 内蔵 | ファーム対応済み | Wi-Fi を使える環境 |
 
-**通信経路の選択（将来）**
-
-端末はプロビジョニング時に接続モジュールを検出し、優先順位に従って経路を決定する。結果は NVS に保存し、Deep Sleep 起床のたびに再判定しない。
-
-1. LoRaWAN モジュールが応答 → LoRaWAN
-2. なければ LTE-M モジュールが応答 → LTE-M
-3. どちらもなければ → Wi-Fi（内蔵）
-
-LoRaWAN を最優先にしているのは、ゲートウェイが現場にあり得る場合に **電池運用へ最も有利** だからである（§6.2 参照）。LTE-M はキャリア網で到達性が高い一方、1 サイクルあたりの awake が長くなる。
-
-PoC 第1弾（#6）は Wi-Fi 固定。詳細は [firmware/README.md](firmware/README.md) のモジュール構成を参照。
+- LTE-M 版は、送信するときだけラッチングリレーで LTE-M の電源を入れる（#46）。モデム内蔵の TLS で AWS IoT Core に直接つなぐ。
+- 送信データは判定結果＋生値のみで極小（数百バイト程度）。LoRaWAN の典型的なペイロードにも収まる。
+- ファームの env と設定は [firmware/README.md](firmware/README.md) を参照。
 
 ### 4.4 FIWARE連携
 
@@ -197,128 +182,64 @@ PoC 第1弾（#6）は Wi-Fi 固定。詳細は [firmware/README.md](firmware/RE
 
 | 部品 | 型番 | 入手先 | 価格 | 備考 |
 |---|---|---|---|---|
-| マイコン | Seeed XIAO ESP32S3（無印） | 秋月電子 | ¥1,480 | 技適取得済(217-230892)。14μA Deep Sleep。BAT はパッドのみ（JST 非搭載） |
+| マイコン | Seeed XIAO ESP32S3（無印） | 秋月電子 | ¥1,480 | 技適取得済(217-230892)。BAT はパッドのみ（JST 非搭載） |
 | Grove Shield | Grove Shield for XIAO（103020312） | Seeed JP 等 | 約¥700 | 8×Grove（I2C×2・UART×1）。BAT パッド・充電管理付き |
 | カラーセンサ | Grove - I2C Color Sensor V3.0（101021133） | Seeed Studio 等 | 約¥600 | VEML6040 搭載。I2C `0x10`。Grove コネクタ内蔵 |
 | センサ接続 | Grove 4芯ケーブル 50〜100cm | Seeed / Amazon 等 | 約¥200〜400 | 標準配線（ピン入替不要。[wiring.md](docs/wiring.md)） |
-| LTE-Mモジュール | M5Stack SIM7080G CAT-M Unit（M5STACK-U128） | スイッチサイエンス | ¥6,908 | PoC 第1弾対象外。Grove UART 接続 |
-| SIM | SORACOM IoT SIM plan-D / plan-KM1 | SORACOMストア | ¥990（初期）+ ¥192/月〜 | ドコモ / KDDI 回線。LTE-M 導入時 |
+| 閾値調整用ポテンショメーター | Grove - Rotary Angle Sensor | Seeed 等 | — | 現地での判定閾値の調整用（#60）。調整後は外してよい |
 | バッテリー | LiPo 3.7V 4,400mAh 保護回路内蔵 JST-PH | ストロベリーリナックス | ¥550 | Grove Shield の BAT パッドへ JST で接続 |
 | 配線・防水箱・固定材 | Grove ケーブル、IP65 樹脂箱、透明テープ・黒カッティングシート等 | Seeed / ホームセンター | 約¥2,000〜3,000 | 詳細は [docs/hardware.md](docs/hardware.md) 参照 |
 
-- **試作1台 合計: 約1.4〜1.5万円**（SIM初期費用込み、ソーラー除く）。
-- 詳細な選定経緯・調達先URLは [docs/hardware.md](docs/hardware.md) を参照。
+**通信モジュール（版ごとにどちらか）**
+
+| 部品 | 型番 | 入手先 | 価格 | 備考 |
+|---|---|---|---|---|
+| LoRaWAN モジュール | Grove - Wio-E5 | Seeed 等 | — | LoRaWAN 版。Grove UART 接続。常時通電 |
+| LTE-M モジュール | M5Stack SIM7080G CAT-M Unit（M5STACK-U128） | スイッチサイエンス | ¥6,908 | LTE-M 版。Grove UART 接続 |
+| SIM | SORACOM IoT SIM plan-D / plan-KM1 | SORACOMストア | ¥990（初期）+ ¥192/月〜 | LTE-M 版。ドコモ / KDDI 回線 |
+| ラッチングリレー | Grove - 2-Coil Latching Relay（103020010） | 共立エレショップ 等 | ¥1,650 | LTE-M 版。LTE-M の電源を送信時だけ入れる（#46） |
+
+- 詳細な選定経緯・調達先 URL は [docs/hardware.md](docs/hardware.md)・[docs/bom.md](docs/bom.md) を参照。
 
 ### 5.2 部品選定の要点
 
-- **マイコン（PoC 実証機）**: カメラ不要なため無印XIAO ESP32S3で十分（Sense版は不要）。14μAスリープとLiPo充電管理が1枚に載る。
-- **開発方針（2026-07）**: PoC 試作は **XIAO ESP32S3** のみ。DevKit による先行検証は完了済み
-- **センサ**: **Grove - I2C Color Sensor V3.0**（VEML6040 搭載）。Grove ケーブルで接続
-- **接続方式**: センサ〜本体間は **Grove 統一接続**。Grove Shield for XIAO の I2C ポートへケーブル1本（ピン入替・センサ基板へのはんだ不要）。
+- **マイコン**: カメラ不要なため無印 XIAO ESP32S3 で十分（Sense 版は不要）。LiPo 充電管理は Grove Shield 側にある。
+- **センサ**: **Grove - I2C Color Sensor V3.0**（VEML6040 搭載）。
+- **接続方式**: センサ・通信モジュール・リレーはすべて **Grove で接続**する（ピン入替・はんだ付け不要）。汎用性と組み立ての容易さを両立させ、LoRaWAN 版と LTE-M 版で構成を揃える。
 - **バッテリー**: LiPo 電池を **Grove Shield の BAT パッド**に JST で接続（XIAO 本体には JST コネクタ非搭載）。モバイルバッテリーはオートパワーオフおよびパススルー時の瞬断が問題になるため不採用。
 
 ---
 
 ## 6. 電源方針
 
-### 6.1 初期PoC
+### 6.1 電源構成
 
-- **LiPo 電池（3.7V 4,400mAh）**を Grove Shield for XIAO の **BAT パッド**に JST で接続して運用（はんだ付け前にテスターで極性確認）。
-- 電源を引ける現場ではUSB給電でも可。
-- LTE-M送信・15分間隔で約100日稼働（**試算・§6.2 参照、2026-07時点の初期試算**）。2026-09時点の実測ベースの再試算は**§6.2.5**を参照（`#46`リレー・`PSS_CHANGE_ONLY_SEND`導入後は定常運用で100日を上回る見込み）。PoC期間（数週間〜数ヶ月）には十分な見込み。
+- **LiPo 電池（3.7V 4,400mAh、保護回路内蔵）**を Grove Shield for XIAO の **BAT パッド**に JST で接続して運用する（はんだ付け前にテスターで極性を確認）。電源を引ける現場では USB 給電でも可。
+- 電池で動かしているとき、**ESP32-S3 と Grove の各ポート（センサー・LTE-M を含む）は、Shield 上の降圧コンバーター（ETA3410）の 3.3V を共有する**。5V 系統は無効で、昇圧回路は使わない（[docs/hardware.md](docs/hardware.md)）。
+- LTE-M モジュールは、送信するときだけラッチングリレーで通電する（#46）。
+- 起床間隔は 5 分（`PSS_SLEEP_SECONDS=300`）。LTE-M 版は**状態が変わったときだけ送信**し、変わらなければ約 66 分に 1 回だけ定期送信する（`PSS_CHANGE_ONLY_SEND=1`、`PSS_HEARTBEAT_CYCLES=12`）。満空情報に秒単位の即時性は不要なので、この遅延は許容できる。
 
-### 6.2 消費電力・連続稼働の試算
+### 6.2 消費電力と稼働日数（LTE-M 版）
 
-消費電流の目安（ESP32-S3 + Grove Color Sensor V3.0 + SIM7080G）:
-
-| 状態 | 消費電流の目安 | 継続時間（試算時） |
-|---|---|---|
-| Deep Sleep（待機） | 約10〜50µA | 起床間隔のほぼ全部 |
-| 起床＋センサ読み取り | 約40mA | 0.1〜0.5秒 |
-| Wi-Fi接続＋MQTT送信 | 約120〜180mA（ピーク） | 2〜5秒 |
-| LTE-M接続＋送信 | 約100〜250mA（ピーク） | 5〜10秒（**試算時。実測は下記**） |
-
-連続稼働の目安（LiPo 4,400mAh・実効率90%で計算）:
-
-| 条件 | 4,400mAh LiPo（実効3,960mAh） |
-|---|---|
-| 5分間隔・Wi-Fi | 約74日 |
-| 15分間隔・Wi-Fi | 約220日 |
-| 5分間隔・**LTE-M** | **約37日** |
-| 15分間隔・**LTE-M** | **約100日** |
-
-**実測（2026-07-10、#31）:** `xiao-s3-aws-lte`・`PSS_SLEEP_SECONDS=300`・LiPo 直列計測（[docs/power-measurement.md](docs/power-measurement.md)）。定常 1 サイクル **≈2.1 mAh**、スリープ中ベースライン **≈22 mA**（Grove 5V / LTE / センサ白 LED が未切断のため）。同条件の連続稼働目安 **≈7 日**（実効 3,960 mAh）。**#25** で周辺電源 OFF・変化時のみ送信を進める。
-
-**注意:** 上表の LTE-M 行は、active が **5〜10秒** かつ Deep Sleep が **µA 級** であることを前提にした**初期試算**である。AWS IoT Core 向け MQTT over TLS の実機計測（2026-07、#6）では active が **約70秒**、クラウド受信間隔が **約8分** となっており、active は #30 で **約6秒** に改善済みだが、**待機中電流は #31 実測のとおり試算より桁違いに重い**。§6.2.1〜6.2.4 を参照すること。**この待機電流の問題は`#46`（リレーによるLTE-M電源の物理遮断）で根本的に解消済み。2026-09時点の実測ベースの再試算は§6.2.5を参照。**
-
-#### 6.2.1 送信間隔と `PSS_SLEEP_SECONDS`
-
-ファームの `PSS_SLEEP_SECONDS`（初期値 300）は **1 回の送信完了後に Deep Sleep する秒数** であり、クラウドへの受信間隔そのものではない。
-
-```
-受信間隔 ≈ active（起動〜送信完了）+ sleepSeconds + モデム切断待ち
-```
-
-例: `sleepSeconds=300`・active≈70秒 なら、受信間隔は **約6〜8分** 程度になる（モデム `poweroff` の待ち時間でばらつく）。「5分ごとに送る」設定にはなっていない。
-
-#### 6.2.2 LTE-M で 15 分間隔を推奨する根拠
-
-README 記載の推奨は、次の **3 点の組み合わせ** による（「駐車場だから15分」単独ではない）。
-
-1. **バッテリー試算（主因）** … 同一 LiPo で 5 分間隔なら約37日、15 分間隔なら約100日（上表・試算時前提。2026-07時点、`#46`リレー実装前）。PoC を **電池交換なしで数週間〜数ヶ月** 回すには、15 分の方が余裕がある。**2026-09時点の実測ベースでは、5分間隔でも定常運用で約127日と大幅に改善している（§6.2.5）**。
-2. **業務要件** … 満空情報に秒単位の即時性は不要。利用者が駐車場に到着するまでの遅延（数分〜十数分）は許容できる。
-3. **LTE-M の通信コスト** … 1 サイクルあたりの awake・ピーク電流が Wi-Fi より大きい。間隔を詰めるほどサイクル数が増え、電池への負荷が増える。変化時のみ送信（＋heartbeat）も有効（#25）。
-
-**実機（2026-07）の整理:** `sleepSeconds=300` で **約8分間隔** の受信でも、満空監視の PoC 目的としては **問題ない**。active は #30 で約6秒に改善。**電池持ちは #31 実測で待機 ≈22 mA が支配的**となり、初期試算（100日）より **1桁以上短い**（同条件 ≈7 日）。間隔延長・変化時のみ送信・周辺電源 OFF（#25）が主な対策。
-
-#### 6.2.4 #31 実測サマリ（2026-07-10）
-
-| 項目 | 値 |
-|---|---|
-| 環境 | `xiao-s3-aws-lte`、LiPo 4,400mAh、U200-1A 直列 |
-| 定常 active | ≈6 s（`activeMsBeforePublish`） |
-| 定常 1 サイクル | ≈2.1 mAh |
-| スリープ中電流 | ≈22 mA（青 LED 3 s 点滅・白 LED 常時点灯） |
-| 連続稼働目安 | ≈7 日（実効 3,960 mAh） |
-
-詳細: [docs/power-measurement.md](docs/power-measurement.md) §6。対策は #25。
-
-#### 6.2.3 LoRaWAN 運用時の想定（比較）
-
-LoRaWAN はゲートウェイ経由の短い RF パケット送受信が中心で、キャリア網への TLS ハンドシェイクが不要なため、**同じ電池でも LTE-M より間隔を詰めやすい**。
-
-| 観点 | LTE-M（実測ベース） | LoRaWAN（想定） |
-|---|---|---|
-| 1 サイクルの active | 約70秒（TLS+MQTT 含む） | 数百 ms〜数秒（送信中心） |
-| 推奨起床間隔 | **15分**（試算上の電池目安） | **5分** でも現実的 |
-| 変化時のみ送信 | 特に有効 | 有効 |
-| インフラ | SIM + クラウド直結 | **現場にゲートウェイが必要** |
-| 到達性 | セルラー | GW 距離・遮蔽に依存 |
-
-ペイロード（判定結果＋生値・数百バイト程度）は LoRaWAN の典型的なサイズに収まる。現場にゲートウェイを置ける場合は LoRaWAN を優先する（§4.3 の経路選択）。
-
-#### 6.2.5 2026-09-20 実測再試算（`#46` リレー・change-only-send・`#60` ポット反映）
-
-§6.2 冒頭の表・§6.2.1〜6.2.4 はいずれも **`#46`（リレーによるLTE-M電源の物理遮断）実装前**、かつ `PSS_CHANGE_ONLY_SEND`（状態変化時のみ送信）導入前の試算・実測である。当時は待機電流をLTE-Mの待機リーク（実測 ≈22〜23mA）が支配しており、Groveポート上ではVCCを遮断できなかった。`#46` リレー・change-only-send実装後の実機（`xiao-s3-aws-lte-relay`）で改めて実測したところ、前提が根本的に変わっている。
-
-実測値（電源ロガー `tools/power-logger`、詳細: [docs/hardware.md](docs/hardware.md) の稼働日数試算節）:
+実測値（2026-09-29、`xiao-s3-aws-lte-relay-pot`、U200-1A 高速ロガーで約 44.5h 記録。詳細: [docs/74-brownout-conclusions.md](docs/74-brownout-conclusions.md) §4）:
 
 | 項目 | 実測値 |
 |---|---|
-| Deep Sleep待機電流 | **0.45 mA**（`#25` Phase0の22〜23mAから約1/50に低減） |
-| フル送信サイクル（LTE接続+MQTT publish、毎回コールドアタッチ） | 11.2秒 @ 105.2mA平均 = 0.327mAh |
-| スキップサイクル（`PSS_CHANGE_ONLY_SEND`によりLTEに触れずセンサー読取のみ） | 5.07秒 @ 34.3mA平均 = 0.048mAh |
+| Deep Sleep 中の電流 | 0.43 mA |
+| 送信する起床 1 回（起床〜LTE 接続〜MQTT 送信〜切断〜Deep Sleep） | 16.8 秒・0.446 mAh |
+| 送信しない起床 1 回（センサー読み取りのみ） | 4.8 秒・0.0475 mAh |
 
-`PSS_HEARTBEAT_CYCLES=12`・`PSS_SLEEP_SECONDS=300`により、状態変化がなければ実質**1時間に1回**しか送信しない。これを踏まえた稼働日数（LiPo実効3,960mAh、5分間隔固定）:
+稼働日数の目安（LiPo 実効 3,960 mAh = 4,400 mAh × 90%）:
 
 | シナリオ | 稼働日数 |
 |---|---|
-| 定常（状態変化なし、1時間に1回のheartbeatのみ送信） | **約127日** |
-| 毎回変化（worst case、実質毎サイクル送信） | 約38日 |
+| 状態変化なし（約 66 分に 1 回の定期送信のみ） | **約 122 日** |
+| 状態変化 1 日 20 回 | 約 98 日 |
+| 毎回送信（worst case） | 約 29 日 |
 
-§6.2.2の「5分間隔なら約37日、15分間隔なら約100日」という根拠(1)は、`PSS_CHANGE_ONLY_SEND`導入前の「毎サイクル強制送信」を前提にしていたため、上記のworst caseとほぼ一致する（≈38日 vs 37日、たまたま近い数字になっているだけで前提は別物）。実運用で想定される「状態がそう頻繁には変わらない」定常ケースでは、**約127日と3倍以上の差**が出る。
+**電池残量と充電の目安:** LTE-M 版は、電池の電圧が下がると LTE の送信時にブラウンアウトリセットが起き始める。1 回だけなら実害はほぼないが、そのまま放置すると送信できなくなる。**1 回目のブラウンアウト（テレメトリの `resetReason=brownout`）を「すぐ充電」の合図として扱う**。実際に使える日数は、上の表より短くなる（[docs/74-brownout-conclusions.md](docs/74-brownout-conclusions.md) §3.1）。
 
-**`#60`（現地調整用ポテンショメーター）の消費電力への影響:** ポットのVCCをGrove常時通電ラインに直結した場合はDeep Sleep待機電流が0.45mA→0.75mAへ増加し稼働日数が約19%低下するが、**リレー(`#46`)の空きチャンネル経由でLTE-Mと連動させて給電することで、この増加は解消される**ことを実機で確認済み。詳細: [docs/60-potentiometer-threshold-design.md](docs/60-potentiometer-threshold-design.md) §10.2/§10.3/§11。
+**LoRaWAN 版:** 送信が短く、TLS も不要なので、LTE-M 版より消費は小さい見込み（未実測、#40）。ゲートウェイを置ける現場では LoRaWAN を優先する（§4.3）。
 
 ### 6.3 ソーラー併用（将来オプション・PoCでは不採用）
 
@@ -359,7 +280,7 @@ LoRaWAN はゲートウェイ経由の短い RF パケット送受信が中心�
 
 1. **生値の分離**: Grove Color Sensor V3.0（VEML6040）の R/G/B/W 生値が、満（赤）と空（緑）で十分なマージンを持って分離するか。透明カバー越し・拡散材ありの実機で確認。
 2. **2状態以外の表示**: 消灯・点滅・整備中・深夜消灯等が現場にあるか棚卸しし、判定テーブルに「不明」状態を持たせる。
-3. **電源運用**: LiPo 単体運用時の実消費電流・連続稼働時間の実測（§6.2 試算との比較）。LTE-M モジュールへの 5V 給電が LiPo のみで成立するかの確認（要昇圧回路の有無）。
+3. **電源運用**: 電池の電圧が下がったときにブラウンアウトが起き始める残量の確認（LTE-M 版、[docs/74-brownout-conclusions.md](docs/74-brownout-conclusions.md) §2.4）。LoRaWAN 版の消費電力の実測（#40）。
 
 ### 8.2 特許リスク
 
@@ -391,13 +312,13 @@ LoRaWAN はゲートウェイ経由の短い RF パケット送受信が中心�
 
 タスクは GitHub Issues で管理しています。**全体ロードマップは [Issue #22](https://github.com/makeOurCity/parking-status-sensor/issues/22)** を参照。
 
-| Milestone | 内容 |
-|---|---|
-| [M1: 試作1台 通電](https://github.com/makeOurCity/parking-status-sensor/milestone/1) | #16 組み立て → #5 センサ読み取り |
-| [M2: クラウド E2E](https://github.com/makeOurCity/parking-status-sensor/milestone/2) | #6 判定+MQTT → #4 IoT Core → #7 Lambda |
-| [M3: 現場 PoC](https://github.com/makeOurCity/parking-status-sensor/milestone/3) | #8 実機検証、#2 棚卸し |
+| Milestone | 状況 | 残っている主な Issue |
+|---|---|---|
+| [M1: 試作1台 通電](https://github.com/makeOurCity/parking-status-sensor/milestone/1) | 完了 | — |
+| [M2: クラウド E2E](https://github.com/makeOurCity/parking-status-sensor/milestone/2) | 端末 → AWS IoT Core → Lambda（スタブ）まで完了 | #7 Lambda の本実装（NGSIv2）、#27 組織クラウド環境 |
+| [M3: 現場 PoC](https://github.com/makeOurCity/parking-status-sensor/milestone/3) | 進行中 | #8 生値分離テスト、#2 棚卸し、#3 遮光フード |
 
-PoC 試作は **XIAO ESP32S3 のみ**で進める（DevKit 検証は 2026-07 完了）。
+マイルストーン外の主な進行中の作業: #40 LoRaWAN 版、#12 筐体。
 
 ---
 
@@ -406,20 +327,26 @@ PoC 試作は **XIAO ESP32S3 のみ**で進める（DevKit 検証は 2026-07 完
 ```
 parking-status-sensor/
 ├── README.md                  # 本設計書
+├── AGENTS.md                  # 開発運用（GitHub Flow・ドキュメント運用）
 ├── docs/
-│   ├── hardware.md            # 部品選定・設計経緯
+│   ├── hardware.md            # 部品選定・給電経路・稼働日数試算
 │   ├── bom.md                 # 詳細BOM（試作1台）
-│   ├── schematic.md           # 回路図（単線・複線・回路）
+│   ├── schematic.md           # 回路図
 │   ├── wiring.md              # 組み立て手順・実物確認
 │   ├── data-model.md          # NGSIv2 エンティティ設計
-│   ├── iot-core.md            # AWS IoT Core 設計（Issue #4）
-│   └── aws-admin-handoff.md   # AWS 管理者向けセットアップ手順
-├── infra/                     # IoT Core プロビジョニングスクリプト（Issue #4）
-├── firmware/                  # ESP32ファームウェア（PlatformIO・マルチ環境）
-│   ├── README.md              # ボード役割・ビルド手順
-│   ├── devkit-bench.md        # DevKit ベンチ配線（Grove Color Sensor + RGB LED）
-│   ├── include/               # board_xiao.h / sensor.h
-│   ├── src/
-│   └── platformio.ini         # env: xiao-s3
-└── bridge/                    # Lambda ブリッジ（#4 スタブ → #7 本実装）
+│   ├── iot-core.md            # AWS IoT Core 設計（#4）
+│   ├── aws-admin-handoff.md   # AWS 管理者向けセットアップ手順
+│   ├── sync-delivery-design.md # 送信確認・再送（sync ledger）の設計
+│   ├── power-measurement.md   # 消費電力の計測手順
+│   ├── NN-*.md                # Issue ごとの設計・調査（例: 74-brownout-conclusions.md）
+│   └── datasheets/            # 回路図・データシート
+├── firmware/                  # ESP32 ファームウェア（PlatformIO、版ごとの env）
+├── bridge/                    # Lambda ブリッジ（現在はスタブ → #7 で本実装）
+├── infra/                     # AWS IoT Core・Cognito のプロビジョニングスクリプト
+└── tools/
+    ├── power-logger/          # U200-1A 電源ロガー（通常・高速モード）
+    ├── log-viewer/            # CloudWatch Logs 閲覧用 iOS アプリ
+    ├── soracom/               # SORACOM SIM の状態確認
+    ├── mosquitto/             # ローカル MQTT ブローカー（開発用）
+    └── ipad-sign-simulator/   # 満空表示灯を iPad 画面で模擬する検証用アプリ（#54）
 ```

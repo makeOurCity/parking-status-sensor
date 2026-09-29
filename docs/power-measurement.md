@@ -61,7 +61,7 @@ OUT- ──→ [Grove Shield BAT-]
 |---|---|
 | MCU | ESP32 DevKit（GPIO21=SDA, GPIO22=SCL） |
 | I2C | U200-1A @ `0x41` + SSD1306 OLED @ `0x3C`（共有バス） |
-| サンプリング | 15 Hz |
+| サンプリング | 15 Hz（通常モード）。**高速モード（`logger-devkit-fast`、#74/#75）**は電圧を約 0.46 ms 間隔で読み、50 ms ごとに最低電圧・最大電流を出力する。LTE の送信時など ms 単位の電圧低下を見るときは高速モードを使う |
 | Serial | CSV: `ms,current_mA,bus_mV,power_mW` |
 | OLED | 電流・電圧・電力・セッション mAh・ピーク（ライブ表示） |
 | 積算 | ホスト `integrate_mah.py` または OLED 上の目安 |
@@ -76,6 +76,12 @@ OUT- ──→ [Grove Shield BAT-]
 | 積算 mAh（1 サイクル） | README §6.2 更新 |
 | ピーク電流（mA） | LTE 送信・昇圧回路 |
 | バッテリーチェッカー | 長期トレンドの補助のみ |
+
+**電圧を測るときの注意（#74）:**
+
+- **バッテリーチェッカー（Capacity Controller）**で 1S の LiPo を測るときは、**NiCd/NiMH 側の差し込み口**に差す。Li-ion 2S〜7S 側に差すと正しく測れない（電池 #1 で 0.33V 高く表示された）。電圧の基準はテスターにする
+- U200-1A の `bus_mV` は OUT 側（デバイスが受け取る電圧）で、テスターの値と一致することを確認済み（差は 20mV 以内）
+- **電池には個体番号を付けて**、記録に番号を添える
 
 `disconnectTransport` / `poweroff` はファーム未計測。波形上の publish 後〜スリープまでを U200-1A で切り出す。
 
