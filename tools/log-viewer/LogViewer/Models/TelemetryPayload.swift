@@ -71,14 +71,45 @@ struct PowerInfo: Decodable {
     }
 }
 
+/// LoRaWAN-only link quality, from `network` in the bridge-normalized JSON
+/// (bridge/lorawan.py). LTE-M / Wi-Fi payloads carry none of these keys, so
+/// every field is optional and `hasLinkMetrics` is false for them.
+struct NetworkInfo: Decodable {
+    let transport: String?
+    let rssi: Int?
+    let snr: Double?
+    let dataRate: Int?
+    let fCnt: Int?
+
+    var hasLinkMetrics: Bool {
+        rssi != nil || snr != nil || dataRate != nil || fCnt != nil
+    }
+}
+
 /// The JSON telemetry payload embedded in each log line (docs/data-model.md).
 /// Only the fields the dashboard/detail views actually show are decoded;
-/// `network` / `sync` / `bootMode` / `pot` are ignored here.
+/// `sync` / `bootMode` / `pot` / `lorawan` are ignored here.
 struct TelemetryPayload: Decodable {
     let raw: RawColorReading?
     let threshold: Int?
     let determinedBy: String?
     let power: PowerInfo?
+    let network: NetworkInfo?
+
+    private enum CodingKeys: String, CodingKey {
+        case raw, threshold, determinedBy, power, network
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        raw = try container.decodeIfPresent(RawColorReading.self, forKey: .raw)
+        threshold = try container.decodeIfPresent(Int.self, forKey: .threshold)
+        determinedBy = try container.decodeIfPresent(String.self, forKey: .determinedBy)
+        power = try container.decodeIfPresent(PowerInfo.self, forKey: .power)
+        // `network` is purely additive: a shape this app doesn't expect must
+        // not take down the color / power rows that already worked.
+        network = try? container.decodeIfPresent(NetworkInfo.self, forKey: .network)
+    }
 }
 
 extension LogEntry {

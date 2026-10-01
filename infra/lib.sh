@@ -18,7 +18,10 @@ load_config() {
   : "${AWS_PROFILE:=default}"
   : "${IOT_POLICY_NAME:=parking-status-device}"
   : "${IOT_RULE_NAME:=parking_status_telemetry}"
+  : "${IOT_LORAWAN_RULE_NAME:=parking_status_lorawan}"
+  : "${LORAWAN_UPLINK_TOPIC:=lorawan/parking-status/uplink}"
   : "${LAMBDA_FUNCTION_NAME:=parking-status-bridge}"
+  : "${LAMBDA_ROLE_NAME:=parking-status-bridge-lambda-role}"
   : "${MQTT_TOPIC_PREFIX:=parking-status}"
   : "${USE_BASIC_INGEST:=1}"
   : "${COGNITO_USER_POOL_NAME:=parking-status-ios-app}"
@@ -88,4 +91,9 @@ rule_sql() {
   else
     printf "SELECT * FROM '%s/+/telemetry'" "$MQTT_TOPIC_PREFIX"
   fi
+}
+
+# LoRaWAN (#40): AWS IoT Core for LoRaWAN の Destination が publish するトピックを読む。
+lorawan_rule_sql() {
+  printf "SELECT * FROM '%s'" "$LORAWAN_UPLINK_TOPIC"
 }

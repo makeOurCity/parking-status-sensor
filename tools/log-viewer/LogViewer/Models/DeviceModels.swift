@@ -37,8 +37,9 @@ struct DeviceSummary: Identifiable, Equatable {
     let lastSeen: Date
     let bootStatus: BootStatusInfo?
     /// Raw `network.transport` value from the latest telemetry (firmware
-    /// `TransportKind`: currently `"wifi"` / `"lte"` / `"none"`; a LoRaWAN
-    /// build will add `"lora"` once #40's cloud-ingestion follow-up lands).
+    /// `TransportKind`: `"wifi"` / `"lte"` / `"lorawan"` / `"none"`; LoRaWAN
+    /// uplinks are normalized by the bridge Lambda to the same JSON shape,
+    /// with `network.transport = "lorawan"`, see #83).
     let transport: String?
 
     var id: String { deviceId }
@@ -56,7 +57,7 @@ struct DeviceSummary: Identifiable, Equatable {
         switch transport {
         case "lte": return "LTE"
         case "wifi": return "Wi-Fi"
-        case "lora", "lorawan": return "LoRa"
+        case "lorawan": return "LoRa"
         default: return transport.uppercased()
         }
     }

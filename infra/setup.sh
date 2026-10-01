@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Create shared IoT policy, deploy Lambda stub, and create IoT rule.
+# Create shared IoT policy, deploy Lambda stub, and create IoT rules.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
@@ -39,53 +39,70 @@ echo "Deploying Lambda stub: $LAMBDA_FUNCTION_NAME"
 
 LAMBDA_ARN="arn:aws:lambda:${AWS_REGION}:${ACCOUNT_ID}:function:${LAMBDA_FUNCTION_NAME}"
 
-# Allow IoT rule to invoke Lambda
-STATEMENT_ID="iot-rule-${IOT_RULE_NAME}"
-if aws_lambda get-policy --function-name "$LAMBDA_FUNCTION_NAME" 2>/dev/null \
-  | grep -q "$STATEMENT_ID"; then
-  echo "Lambda permission already exists: $STATEMENT_ID"
-else
-  echo "Adding Lambda invoke permission for IoT rule"
-  aws_lambda add-permission \
-    --function-name "$LAMBDA_FUNCTION_NAME" \
-    --statement-id "$STATEMENT_ID" \
-    --action lambda:InvokeFunction \
-    --principal iot.amazonaws.com \
-    --source-arn "arn:aws:iot:${AWS_REGION}:${ACCOUNT_ID}:rule/${IOT_RULE_NAME}" \
-    >/dev/null
-fi
+# Allow an IoT rule to invoke the Lambda (idempotent: skipped if the statement exists).
+allow_rule_to_invoke_lambda() {
+  local rule_name="$1"
+  local statement_id="iot-rule-${rule_name}"
+  if aws_lambda get-policy --function-name "$LAMBDA_FUNCTION_NAME" 2>/dev/null \
+    | grep -qF "$statement_id"; then
+    echo "Lambda permission already exists: $statement_id"
+  else
+    echo "Adding Lambda invoke permission for IoT rule: $rule_name"
+    aws_lambda add-permission \
+      --function-name "$LAMBDA_FUNCTION_NAME" \
+      --statement-id "$statement_id" \
+      --action lambda:InvokeFunction \
+      --principal iot.amazonaws.com \
+      --source-arn "arn:aws:iot:${AWS_REGION}:${ACCOUNT_ID}:rule/${rule_name}" \
+      >/dev/null
+  fi
+}
 
-# --- IoT rule ---
+# Create or replace an IoT rule that forwards to the Lambda.
+upsert_lambda_rule() {
+  local rule_name="$1"
+  local sql="$2"
+  local payload
+  payload="$(mktemp)"
+
+  jq -n \
+    --arg sql "$sql" \
+    --arg arn "$LAMBDA_ARN" \
+    '{
+      sql: $sql,
+      actions: [{lambda: {functionArn: $arn}}],
+      ruleDisabled: false,
+      awsIotSqlVersion: "2016-03-23"
+    }' >"$payload"
+
+  if aws_iot get-topic-rule --rule-name "$rule_name" >/dev/null 2>&1; then
+    echo "Updating IoT rule: $rule_name"
+    aws_iot replace-topic-rule \
+      --rule-name "$rule_name" \
+      --topic-rule-payload "file://$payload" >/dev/null
+  else
+    echo "Creating IoT rule: $rule_name"
+    aws_iot create-topic-rule \
+      --rule-name "$rule_name" \
+      --topic-rule-payload "file://$payload" >/dev/null
+  fi
+  rm -f "$payload"
+}
+
+# --- IoT rules (device telemetry + LoRaWAN uplink) ---
 SQL="$(rule_sql)"
-RULE_PAYLOAD="$(mktemp)"
-trap 'rm -f "$RULE_PAYLOAD"' EXIT
+LORAWAN_SQL="$(lorawan_rule_sql)"
 
-jq -n \
-  --arg sql "$SQL" \
-  --arg arn "$LAMBDA_ARN" \
-  '{
-    sql: $sql,
-    actions: [{lambda: {functionArn: $arn}}],
-    ruleDisabled: false,
-    awsIotSqlVersion: "2016-03-23"
-  }' >"$RULE_PAYLOAD"
-
-if aws_iot get-topic-rule --rule-name "$IOT_RULE_NAME" >/dev/null 2>&1; then
-  echo "Updating IoT rule: $IOT_RULE_NAME"
-  aws_iot replace-topic-rule \
-    --rule-name "$IOT_RULE_NAME" \
-    --topic-rule-payload "file://$RULE_PAYLOAD" >/dev/null
-else
-  echo "Creating IoT rule: $IOT_RULE_NAME"
-  aws_iot create-topic-rule \
-    --rule-name "$IOT_RULE_NAME" \
-    --topic-rule-payload "file://$RULE_PAYLOAD" >/dev/null
-fi
+allow_rule_to_invoke_lambda "$IOT_RULE_NAME"
+allow_rule_to_invoke_lambda "$IOT_LORAWAN_RULE_NAME"
+upsert_lambda_rule "$IOT_RULE_NAME" "$SQL"
+upsert_lambda_rule "$IOT_LORAWAN_RULE_NAME" "$LORAWAN_SQL"
 
 echo ""
 echo "=== setup complete ==="
 echo "MQTT endpoint : $ENDPOINT"
 echo "IoT rule SQL  : $SQL"
+echo "LoRaWAN rule  : $LORAWAN_SQL"
 echo ""
 echo "Next:"
 echo "  ./provision-device.sh <deviceId>   # register a Thing + certs"

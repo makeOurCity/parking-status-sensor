@@ -51,8 +51,9 @@
 |---|---|---|
 | IoT ポリシー | `parking-status-device` | 全端末共通。Thing 名でスコープ制限 |
 | IoT ルール | `parking_status_telemetry` | **ハイフン不可**（アンダースコア） |
+| IoT ルール | `parking_status_lorawan` | LoRaWAN の Destination（`lorawan/parking-status/uplink`）を読む（#83） |
 | Lambda 関数 | `parking-status-bridge` | Python 3.12 スタブ（後で #7 で更新） |
-| Lambda 実行ロール | `parking-status-bridge-lambda-role` | CloudWatch Logs 書き込み |
+| Lambda 実行ロール | `parking-status-bridge-lambda-role` | CloudWatch Logs 書き込み + `iotwireless:GetWirelessDevice`（LoRaWAN、#83） |
 | IoT Thing | `{deviceId}` ごと | 例: `xiao-e83dc1fb05fc`（端末1台＝Thing 1つ） |
 | デバイス証明書 | 端末ごとに1枚 | Thing にアタッチ、ポリシーを紐付け |
 
@@ -123,10 +124,10 @@ parking-status telemetry received: {"deviceId":"xiao-...","status":"available",.
 |---|---|
 | ランタイム | Python 3.12 |
 | ハンドラ | `handler.handler` |
-| コード | [`bridge/handler.py`](../bridge/handler.py) を zip でデプロイ |
-| タイムアウト | 10 秒 |
-| メモリ | 128 MB |
-| 実行ロール | `AWSLambdaBasicExecutionRole`（CloudWatch Logs） |
+| コード | [`bridge/handler.py`](../bridge/handler.py) と [`bridge/lorawan.py`](../bridge/lorawan.py) を zip でデプロイ |
+| タイムアウト | 30 秒（#83: LoRaWAN のコールドスタート対策。10 秒だと余裕が小さかった） |
+| メモリ | 256 MB |
+| 実行ロール | `AWSLambdaBasicExecutionRole`（CloudWatch Logs）+ インラインポリシー `parking-status-bridge-iotwireless-read`（`iotwireless:GetWirelessDevice`、リソースは `arn:aws:iotwireless:<region>:<account>:WirelessDevice/*`） |
 
 ### 4.3 IoT ルール `parking_status_telemetry`
 
@@ -139,6 +140,16 @@ SELECT * FROM '$aws/rules/parking_status_telemetry/parking-status/+/telemetry'
 **アクション**: Lambda `parking-status-bridge` を起動
 
 **Lambda 側のリソースポリシー**: プリンシパル `iot.amazonaws.com` からの `lambda:InvokeFunction` を許可（ソース: 当該 IoT ルール ARN）
+
+### 4.3b IoT ルール `parking_status_lorawan`（LoRaWAN、#83）
+
+**SQL**:
+
+```sql
+SELECT * FROM 'lorawan/parking-status/uplink'
+```
+
+**アクション**: Lambda `parking-status-bridge` を起動。Lambda のリソースポリシーに、このルール ARN からの `lambda:InvokeFunction` も追加する（ステートメント ID は `iot-rule-parking_status_lorawan`）。
 
 ### 4.4 端末（Thing + 証明書）
 
@@ -161,7 +172,7 @@ SELECT * FROM '$aws/rules/parking_status_telemetry/parking-status/+/telemetry'
 |---|---|
 | IoT | `CreatePolicy`, `CreateTopicRule`, `CreateThing`, `CreateKeysAndCertificate`, `AttachPolicy`, `AttachThingPrincipal`, `DescribeEndpoint` |
 | Lambda | `CreateFunction`, `UpdateFunctionCode`, `AddPermission`, `GetFunction` |
-| IAM | `CreateRole`, `AttachRolePolicy`, `GetRole`（Lambda 実行ロール作成） |
+| IAM | `CreateRole`, `AttachRolePolicy`, `PutRolePolicy`, `GetRole`（Lambda 実行ロール作成と、LoRaWAN 用インラインポリシー） |
 | CloudWatch Logs | Lambda 実行ロール経由（マネージドポリシーで可） |
 | STS | `GetCallerIdentity` |
 
@@ -187,6 +198,8 @@ SELECT * FROM '$aws/rules/parking_status_telemetry/parking-status/+/telemetry'
         "iam:CreateRole",
         "iam:GetRole",
         "iam:AttachRolePolicy",
+        "iam:PutRolePolicy",
+        "iam:GetRolePolicy",
         "iam:PassRole",
         "logs:*",
         "sts:GetCallerIdentity"

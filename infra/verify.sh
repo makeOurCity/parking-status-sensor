@@ -34,10 +34,15 @@ check "IoT policy: $IOT_POLICY_NAME" \
   aws_iot get-policy --policy-name "$IOT_POLICY_NAME"
 check "IoT rule: $IOT_RULE_NAME" \
   aws_iot get-topic-rule --rule-name "$IOT_RULE_NAME"
+check "IoT rule: $IOT_LORAWAN_RULE_NAME" \
+  aws_iot get-topic-rule --rule-name "$IOT_LORAWAN_RULE_NAME"
 check "Lambda: $LAMBDA_FUNCTION_NAME" \
   aws_lambda get-function --function-name "$LAMBDA_FUNCTION_NAME"
 check "Lambda invoke permission for IoT rule" \
   aws_lambda get-policy --function-name "$LAMBDA_FUNCTION_NAME"
+check "Lambda role can read Wireless Devices (LoRaWAN)" \
+  aws_iam get-role-policy --role-name "$LAMBDA_ROLE_NAME" \
+    --policy-name parking-status-bridge-iotwireless-read
 
 echo ""
 echo "MQTT endpoint: $ENDPOINT"

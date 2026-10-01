@@ -6,8 +6,11 @@
 ## アーキテクチャ
 
 ```
-ESP32 --Wi-Fi/MQTT/TLS--> AWS IoT Core --ルール--> Lambda（#7）--> FIWARE Orion
+ESP32 --Wi-Fi/LTE-M/MQTT/TLS--> AWS IoT Core --ルール--> Lambda（#7）--> FIWARE Orion
+Wio-E5 --LoRaWAN--> SenseCAP M2 --> IoT Core for LoRaWAN --Destination--> IoT Core --ルール--> Lambda
 ```
+
+LoRaWAN の経路は「LoRaWAN の経路（#40, #83）」を参照。
 
 | コンポーネント | 役割 |
 |---|---|
@@ -23,6 +26,7 @@ ESP32 --Wi-Fi/MQTT/TLS--> AWS IoT Core --ルール--> Lambda（#7）--> FIWARE O
 | Thing | `deviceId` と同一 | `xiao-e83dc1fb05fc` |
 | IoT ポリシー | `parking-status-device`（全端末共通） | — |
 | IoT ルール | `parking_status_telemetry` | — |
+| IoT ルール（LoRaWAN） | `parking_status_lorawan` | #83 |
 | Lambda | `parking-status-bridge` | #7 で本実装、#4 ではスタブ |
 
 `deviceId` はファームウェアの `PSS_DEVICE_ID`（空なら Wi-Fi MAC から `xiao-{mac}`）に合わせる（#14）。
@@ -74,6 +78,54 @@ FROM '$aws/rules/parking_status_telemetry/parking-status/+/telemetry'
 ```
 
 アクション: Lambda `parking-status-bridge` を起動。
+
+## LoRaWAN の経路（#40, #83）
+
+LoRaWAN 端末（Grove Wio-E5）は MQTT を話さない。ゲートウェイ（SenseCAP M2）から AWS IoT Core for LoRaWAN に届いたアップリンクを、Destination `Saga_IoT_Core` が MQTT トピックに publish する。端末側の仕様は [40-lorawan-design.md](40-lorawan-design.md)。
+
+```
+Destination "Saga_IoT_Core" ─▶ lorawan/parking-status/uplink
+  ─▶ IoT ルール parking_status_lorawan ─▶ Lambda parking-status-bridge
+  ─▶ CloudWatch Logs（iOS ログビューア）
+```
+
+| 項目 | 値 |
+|---|---|
+| トピック | `lorawan/parking-status/uplink`（`parking-status/<deviceId>/telemetry` とは別の名前空間） |
+| IoT ルール | `parking_status_lorawan`、SQL は `SELECT * FROM 'lorawan/parking-status/uplink'`、アクションは Lambda `parking-status-bridge` |
+| Lambda 呼び出し許可 | ステートメント ID `iot-rule-parking_status_lorawan`（`infra/setup.sh` が追加） |
+
+Lambda は `WirelessMetadata.LoRaWAN` があるメッセージを LoRaWAN と判断し、次の処理をする（実装は [bridge/lorawan.py](../bridge/lorawan.py)）。
+
+1. 生のメッセージを `lorawan uplink raw: ...` でログに出す（iOS アプリの検索 `telemetry received` には掛からない）
+2. `PayloadData`（base64）を、fPort 1 / ver 1 / 18 バイトのコアペイロードとしてデコードする
+3. `WirelessDeviceId` から `iotwireless:GetWirelessDevice` で Wireless Device の `Name` を引き、deviceId にする（コンテナ内でキャッシュ。Wireless Device 名は deviceId にそろえておく）
+4. LTE-M 版と同じ形の JSON にして、`parking-status telemetry received: <JSON>` で出す
+
+デコードに失敗したメッセージ（fPort・長さ・version の不一致）や、Wireless Device が見つからないメッセージは、`lorawan uplink rejected: ...` をエラーログに残して正常終了する。`telemetry received` の行は出さない。
+
+LoRaWAN 版のテレメトリ JSON は、LTE-M 版（下記）の項目に加えて次を持つ。
+
+```json
+{
+  "deviceId": "xiao-e83dc1fc1aec",
+  "status": "available",
+  "raw": { "red": 12, "green": 18, "blue": 3, "clear": 64 },
+  "threshold": 100,
+  "determinedBy": "device",
+  "timestamp": "2026-10-01T07:47:49Z",
+  "power": { "bootCount": 1, "resetReason": "power_on", "wakeCause": "power_on" },
+  "network": { "transport": "lorawan", "rssi": -46, "snr": 13.25, "dataRate": 5, "fCnt": 3, "frequency": 922600000 },
+  "sync": { "prevOutcome": "none", "prevAttempts": 0, "prevActiveMs": 13000 },
+  "lorawan": { "reason": "state_change", "coldBoot": true, "bootSlot": 1,
+               "wirelessDeviceId": "73742d6b-b4bd-426a-af5b-83412752b8a6", "devEui": "2cf7f1207380e5f9" }
+}
+```
+
+- `timestamp` は Destination のメッセージの `WirelessMetadata.LoRaWAN.Timestamp`（ネットワークサーバーの受信時刻）
+- `network.rssi` / `snr` は `Gateways[0]`。`dataRate` / `frequency`（Hz）は数値にして出す
+- `network` には LTE-M 版のような接続時間（`networkConnectMs` 等）はない
+- `lorawan` は LoRaWAN 固有の項目（送信理由、コールドブート、ブートモードの何回目か、識別子）
 
 ## 端末接続情報（ファームウェア向け）
 

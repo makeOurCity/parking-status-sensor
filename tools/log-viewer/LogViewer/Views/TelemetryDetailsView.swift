@@ -79,6 +79,25 @@ struct TelemetryDetailsView: View {
                         }
                         .font(.caption2.weight(.medium))
                     }
+
+                    if let network = telemetry.network, network.hasLinkMetrics {
+                        HStack(spacing: 10) {
+                            if let rssi = network.rssi {
+                                Label("RSSI \(rssi)", systemImage: "antenna.radiowaves.left.and.right")
+                            }
+                            if let snr = network.snr {
+                                Text("SNR \(snr, specifier: "%.1f")")
+                            }
+                            if let dataRate = network.dataRate {
+                                Text("DR\(dataRate)")
+                            }
+                            if let fCnt = network.fCnt {
+                                Text("FCnt \(fCnt)")
+                            }
+                        }
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(.secondary)
+                    }
                 }
             }
         }
