@@ -32,11 +32,11 @@ chmod +x *.sh lib.sh
 
 | スクリプト | 内容 |
 |---|---|
-| `setup.sh` | 一括セットアップ（ポリシー・ルール・Lambda） |
+| `setup.sh` | 一括セットアップ（ポリシー・ルール 2 本（端末テレメトリ / LoRaWAN）・Lambda）。何度実行しても同じ結果になる |
 | `verify.sh` | セットアップ後のリソース存在確認 |
 | `provision-device.sh` | Thing + 証明書を端末1台分登録 |
 | `test-publish.sh` | AWS CLI からサンプルペイロードを publish |
-| `deploy-bridge-stub.sh` | Lambda スタブのみデプロイ |
+| `deploy-bridge-stub.sh` | Lambda スタブのみデプロイ（`bridge/` のモジュールを zip 化。実行ロールの LoRaWAN 用権限 `iotwireless:GetWirelessDevice` も付与） |
 | `setup-cognito.sh` | iOS ログビューアアプリ向け Cognito User Pool / Identity Pool / IAM ロールを一括作成（[docs/ios-app-cognito.md](../docs/ios-app-cognito.md)） |
 | `verify-cognito.sh` | Cognito セットアップ後のリソース存在確認 |
 

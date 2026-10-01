@@ -16,7 +16,7 @@ Wio-E5 ──LoRaWAN(JP920/AS923-1)──▶ SenseCAP M2 (M2-AS923, Basics Stati
 | Wireless Device | 名前は deviceId（例: `xiao-e83dc1fc1aec`）、OTAA v1.0.x |
 | Destination | `Saga_IoT_Core` → MQTT トピック `lorawan/parking-status/uplink`（Wi-Fi / LTE-M の `parking-status/<deviceId>/telemetry` とは別の名前空間） |
 
-クラウド側（IoT ルール、bridge の LoRaWAN デコーダ、Orion 連携）は別 Issue で扱う。
+クラウド側のうち、IoT ルールと bridge の LoRaWAN デコーダ（iOS ログビューアへの表示）は #83、経路の説明は [iot-core.md](iot-core.md) にある。Orion 連携は #7 で扱う。
 
 ## 2. Wio-E5 の設定
 
