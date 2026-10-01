@@ -280,10 +280,11 @@ bool mustPublish(ParkingStatus status) {
   return syncLedger().skippedSinceConfirmed >= config::kHeartbeatCycles;
 }
 
-// #40: LoRaWAN は JSON を送れない（AS923 DR2 の上限 11 バイト）ため、同じ観測値を
+// #40: LoRaWAN は JSON を送れない（数百バイト。AS923 の低い DR に入らない）ため、同じ観測値を
 // コアペイロードにして送る。JSON は引き続きシリアルログ用に作る。
 bool publishLoRaWanCore(const RawSample& sample, ParkingStatus status,
-                        const BootModeSendInfo& bootModeInfo, TransportMetrics& metrics) {
+                        const BootModeSendInfo& bootModeInfo, const PotReading& potReading,
+                        TransportMetrics& metrics) {
   const SyncLedger& ledger = syncLedger();
   LoRaWanUplinkInput in{};
   in.status = status;
@@ -294,6 +295,7 @@ bool publishLoRaWanCore(const RawSample& sample, ParkingStatus status,
   in.prevAttempts = ledger.prevAttempts;
   in.bootSlot = bootModeInfo.slot;
   in.prevActiveMs = ledger.prevActiveMs;
+  in.threshold = potReading.threshold;
   const LoRaWanCorePayload payload = encodeLoRaWanCore(in);
   return publishUplinkConfirmed(payload.data(), payload.size(), metrics);
 }
@@ -341,7 +343,7 @@ bool publishWithRetry(const RawSample& sample, ParkingStatus status,
     }
 
     const bool confirmed = activeTransportKind() == TransportKind::kLoRaWan
-                               ? publishLoRaWanCore(sample, status, bootModeInfo, metrics)
+                               ? publishLoRaWanCore(sample, status, bootModeInfo, potReading, metrics)
                                : publishTelemetryConfirmed(payload, metrics);
     if (confirmed) {
       result.confirmed = true;
@@ -385,15 +387,16 @@ void runLoRaWanTestCommand(char cmd) {
     case 's': {
       LoRaWanUplinkInput in{};
       in.coldBoot = esp_reset_reason() == ESP_RST_POWERON;
+      in.threshold = config::kStatusThreshold;
       if (initSensor() && readSensor(in.raw)) {
         in.status = classifyStatus(in.raw, config::kStatusThreshold);
       }
       const LoRaWanCorePayload payload = encodeLoRaWanCore(in);
       char hex[kLoRaWanCorePayloadSize * 2 + 1];
       loRaWanToHex(payload.data(), payload.size(), hex, sizeof(hex));
-      Serial.printf("lorawan: status=%s raw=%u,%u,%u,%u payload=%s\n",
+      Serial.printf("lorawan: status=%s raw=%u,%u,%u,%u threshold=%d payload=%s\n",
                     statusToString(in.status), in.raw.red, in.raw.green,
-                    in.raw.blue, in.raw.white, hex);
+                    in.raw.blue, in.raw.white, in.threshold, hex);
       wioE5SendConfirmedHex(hex, 15000);
       break;
     }

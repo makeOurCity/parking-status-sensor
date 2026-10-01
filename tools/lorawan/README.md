@@ -6,8 +6,8 @@ LoRaWAN（Grove Wio-E5、#40）のコアペイロードのデコーダ。バイ�
 
 ```bash
 cd tools/lorawan
-python3 decode.py 5201000C00120003004034            # 16 進
-python3 decode.py --base64 YAAAAAAAAAAAAAA=          # PayloadData
+python3 decode.py 5201000C001200030040340064        # 16 進
+python3 decode.py --base64 UgEADAASAAMAQDQAZA==      # PayloadData
 python3 decode.py --message message.json             # Destination に届いた JSON（- で stdin）
 ```
 

@@ -220,6 +220,9 @@ WioE5Result readUntilDone(const char* prefix, uint32_t timeoutMs, WioE5Result in
     if (strstr(body, "Please join network first") != nullptr) {
       return WioE5Result::kNotJoined;
     }
+    if (strstr(body, "Length error") != nullptr) {
+      return WioE5Result::kError;  // 今の DR の最大ペイロードを超えた（dwell time 有効時の DR2 等）
+    }
     if (classify(body, result)) {
       return result;
     }

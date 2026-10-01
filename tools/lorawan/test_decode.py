@@ -32,13 +32,13 @@ def test_decode_message_envelope():
 
 
 def test_rejects_wrong_length():
-    with pytest.raises(ValueError, match="11 bytes"):
-        decode_core(bytes(12))
+    with pytest.raises(ValueError, match="13 bytes"):
+        decode_core(bytes(11))
 
 
 def test_rejects_unknown_version():
     with pytest.raises(ValueError, match="version"):
-        decode_core(bytes([0x80]) + bytes(10))
+        decode_core(bytes([0x80]) + bytes(12))
 
 
 def test_rejects_other_fport():

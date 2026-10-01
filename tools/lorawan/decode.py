@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""#40: LoRaWAN コアペイロード（fPort 1, ver 1, 11 バイト）のデコーダ。
+"""#40: LoRaWAN コアペイロード（fPort 1, ver 1, 13 バイト）のデコーダ。
 
 バイト配置は docs/40-lorawan-design.md §3。エンコーダは
 firmware/src/lorawan_payload.cpp。AWS IoT Core for LoRaWAN の Destination に届く
 メッセージの PayloadData（base64）か、16 進文字列を渡す。
 
-    python3 decode.py 5A00000C0012000300400034
-    python3 decode.py --base64 WgAADAASAAMAQAA0
+    python3 decode.py 5201000C001200030040340064
+    python3 decode.py --base64 UgEADAASAAMAQDQAZA==
     python3 decode.py --message message.json   # Destination に届いた JSON をそのまま
 """
 
@@ -16,7 +16,7 @@ import json
 import sys
 
 CORE_FPORT = 1
-CORE_SIZE = 11
+CORE_SIZE = 13
 
 STATUS = ["full", "available", "unknown"]
 REASON = ["state_change", "heartbeat", "pending_retry", "boot_mode"]
@@ -56,6 +56,7 @@ def decode_core(payload: bytes) -> dict:
         "bootSlot": b1 & 0x7,
         "raw": {"red": u16(2), "green": u16(4), "blue": u16(6), "white": u16(8)},
         "prevActiveMs": payload[10] * 250,
+        "threshold": u16(11),
     }
 
 

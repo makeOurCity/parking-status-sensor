@@ -1,23 +1,65 @@
 [
   {
     "name": "available / state change / cold boot",
-    "hex": "5201000C00120003004034",
-    "decoded": {"version": 1, "status": "available", "reason": "state_change", "coldBoot": true,
-                "prevOutcome": "none", "prevAttempts": 0, "bootSlot": 1,
-                "raw": {"red": 12, "green": 18, "blue": 3, "white": 64}, "prevActiveMs": 13000}
+    "hex": "5201000C001200030040340064",
+    "decoded": {
+      "version": 1,
+      "status": "available",
+      "reason": "state_change",
+      "coldBoot": true,
+      "prevOutcome": "none",
+      "prevAttempts": 0,
+      "bootSlot": 1,
+      "raw": {
+        "red": 12,
+        "green": 18,
+        "blue": 3,
+        "white": 64
+      },
+      "prevActiveMs": 13000,
+      "threshold": 100
+    }
   },
   {
     "name": "full / heartbeat / raw extremes",
-    "hex": "4428FFFF00000100000113",
-    "decoded": {"version": 1, "status": "full", "reason": "heartbeat", "coldBoot": false,
-                "prevOutcome": "confirmed", "prevAttempts": 1, "bootSlot": 0,
-                "raw": {"red": 65535, "green": 0, "blue": 256, "white": 1}, "prevActiveMs": 4750}
+    "hex": "4428FFFF000001000001133A98",
+    "decoded": {
+      "version": 1,
+      "status": "full",
+      "reason": "heartbeat",
+      "coldBoot": false,
+      "prevOutcome": "confirmed",
+      "prevAttempts": 1,
+      "bootSlot": 0,
+      "raw": {
+        "red": 65535,
+        "green": 0,
+        "blue": 256,
+        "white": 1
+      },
+      "prevActiveMs": 4750,
+      "threshold": 15000
+    }
   },
   {
-    "name": "unknown / boot mode / saturated fields (attempts 5, slot 9, active 100000ms)",
-    "hex": "6EDF03E803E803E803E8FF",
-    "decoded": {"version": 1, "status": "unknown", "reason": "boot_mode", "coldBoot": true,
-                "prevOutcome": "skipped", "prevAttempts": 3, "bootSlot": 7,
-                "raw": {"red": 1000, "green": 1000, "blue": 1000, "white": 1000}, "prevActiveMs": 63750}
+    "name": "unknown / boot mode / saturated fields (attempts 5, slot 9, active 100000ms, threshold 70000)",
+    "hex": "6EDF03E803E803E803E8FFFFFF",
+    "decoded": {
+      "version": 1,
+      "status": "unknown",
+      "reason": "boot_mode",
+      "coldBoot": true,
+      "prevOutcome": "skipped",
+      "prevAttempts": 3,
+      "bootSlot": 7,
+      "raw": {
+        "red": 1000,
+        "green": 1000,
+        "blue": 1000,
+        "white": 1000
+      },
+      "prevActiveMs": 63750,
+      "threshold": 65535
+    }
   }
 ]

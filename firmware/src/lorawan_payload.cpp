@@ -27,6 +27,8 @@ LoRaWanCorePayload encodeLoRaWanCore(const LoRaWanUplinkInput& in) {
   putU16(&out[6], in.raw.blue);
   putU16(&out[8], in.raw.white);
   out[10] = saturate(in.prevActiveMs / 250, 255);
+  const int threshold = in.threshold < 0 ? 0 : (in.threshold > 0xFFFF ? 0xFFFF : in.threshold);
+  putU16(&out[11], static_cast<uint16_t>(threshold));
   return out;
 }
 

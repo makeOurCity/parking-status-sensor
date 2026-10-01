@@ -48,9 +48,35 @@ Wio-E5 ──LoRaWAN(JP920/AS923-1)──▶ SenseCAP M2 (M2-AS923, Basics Stati
 
 LBT（送信前のキャリアセンス）は Wio-E5 に内蔵されていて、しきい値は `AT+LW=THLD` で変えられる。JP920 プランで具体的にどう動くか（キャリアセンスの時間など）は、仕様書に記載がない。
 
-## 3. コアペイロード（fPort 1、ver 1、固定 11 バイト）
+## 3. コアペイロード（fPort 1、ver 1、固定 13 バイト）
 
-JSON（数百バイト）は LoRaWAN では送れない。AS923 で UplinkDwellTime=1 の場合、DR2 の上限は 11 バイト（仕様書 Table 3-20）。今の TPS は `OFF` だが、ネットワークから TxParamSetupReq で有効にされることもあるため、常に 11 バイトに収める（`static_assert` で担保）。
+JSON（数百バイト）は LoRaWAN では送れない。そのため、必要な項目だけを固定長のバイナリにして送る。
+
+### サイズを決めた根拠（dwell time）
+
+AS923 では、1回の送信を 400ms 以内に抑える UplinkDwellTime という設定がある。
+
+- **有効な場合**: DR2（SF10）の上限は 11 バイト（仕様書 Table 3-20）。13 バイトだと送信時間が約 412ms になり、400ms を超える
+- **無効な場合**: DR2 の上限は 51 バイト
+
+この設定は、ネットワークが TxParamSetupReq で指定する。実機で確認した結果は次のとおり。
+
+| タイミング | `AT+LW=TPS`（Uplink dwell, Downlink dwell, MaxEIRP） |
+|---|---|
+| プロビジョニング直後 | `OFF, OFF, 3` |
+| Join と送信3回の後 | `OFF, OFF, 0` |
+
+AWS IoT Core for LoRaWAN（AS923-1）は、MaxEIRP を書き換えたうえで **dwell time を OFF と明示的に指定**してくる。そのため、threshold を載せた 13 バイトにした（`static_assert` で DR2 の 51 バイト以内を担保）。
+
+dwell time が有効なネットワークに移した場合、DR2 での送信は Wio-E5 が `Length error` で拒否する。ファームはこれをエラー（-105）として扱う。
+
+**法令（ARIB STD-T108）について、未確認**:
+
+- 日本の 920MHz 帯では、キャリアセンスの時間によって1回の送信時間の上限が変わる（5ms 以上なら 4 秒、128µs なら 400ms と理解している）
+- Wio-E5 の JP920 のキャリアセンスの時間は、仕様書に記載がない
+- DR2 で 400ms を超えるのは 13 バイトにしたときだけではない。11 バイトでも、MAC コマンドの応答（FOpts）が相乗りすると超える。実測で `FOptLen: 2` のときに約 412ms になっていた
+- 技適はモジュールの送信制御も含めて認証されているので、モジュールが許す範囲は適合していると考えられるが、Seeed に確認する
+- ゲートウェイの近くでは ADR が DR5（SF7）に上げるため、13 バイトでも送信時間は約 60ms
 
 | byte | bit | 内容 |
 |---|---|---|
@@ -64,12 +90,13 @@ JSON（数百バイト）は LoRaWAN では送れない。AS923 で UplinkDwellT
 | 1 | 2:0 | ブートモードの何回目か（0 は通常サイクル、7 で頭打ち） |
 | 2–9 | | raw R / G / B / W（VEML6040、各 uint16 ビッグエンディアン） |
 | 10 | | 前サイクルの起床時間（250ms 単位、255 = 63.75s で頭打ち） |
+| 11–12 | | 判定閾値 threshold（uint16 ビッグエンディアン、0–65535 に収める）。ポテンショメーター有効時は算出値（30–15000） |
 
 載せないもの:
 
 - `deviceId`: Wireless Device 名で分かる
 - `timestamp`: Destination のメッセージの受信時刻を使う
-- `threshold` と診断用の詳細: 必要になれば fPort 2 に拡張形式を作る
+- ポテンショメーターの生の ADC 値（`potRaw`）と診断用の詳細: シリアルのログで確認する
 
 連番は LoRaWAN の FCnt で取れる。
 
@@ -83,7 +110,7 @@ JSON（数百バイト）は LoRaWAN では送れない。AS923 で UplinkDwellT
 |---|---|---|
 | `AT+JOIN`（未 Join） | `+JOIN: Network joined` → `NetID` / `DevAddr` → `Done` | 約 6.0s |
 | `AT+JOIN`（Join 済み） | `+JOIN: Joined already`（無線を使わない） | 約 85ms |
-| `AT+CMSGHEX`（confirmed、11B、DR2） | `Wait ACK` → `ACK Received` → `RXWIN1, RSSI -24, SNR 7.0` → `Done` | 約 1.9s |
+| `AT+CMSGHEX`（confirmed、11B（13B 化の前）、DR2） | `Wait ACK` → `ACK Received` → `RXWIN1, RSSI -24, SNR 7.0` → `Done` | 約 1.9s |
 | `AT+LOWPOWER` → 任意の入力 | `+LOWPOWER: SLEEP` → `+LOWPOWER: WAKEUP`（最初の `AT` は捨てられる） | — |
 
 - Join 済みなら `AT+JOIN` は無線を使わずに返る。そのため Join 済みかを RTC に覚えず、**送信するサイクルで毎回 `AT+JOIN` を送る**
@@ -111,7 +138,7 @@ JSON（数百バイト）は LoRaWAN では送れない。AS923 で UplinkDwellT
 
 ## 6. ファームへの統合（PR3）
 
-env は `xiao-s3-lorawan`（本番）、`xiao-s3-lorawan-pot`（+ ポテンショメーター）、`xiao-s3-lorawan-debug`（Deep Sleep なし）。ラッチングリレー（#46）は使わない（Wio-E5 は 3.3V から常時給電し `AT+LOWPOWER` で寝かせる。要否は PR4 の消費電力の結果で判断する）。閾値はペイロードに載せず、現場ではブートモード中のシリアル（サンプル行と JSON）で確認する。LoRaWAN 版は LoRaWAN だけを使う（README §4.3 の LoRaWAN > LTE > Wi-Fi のフォールバックは将来）。
+env は `xiao-s3-lorawan`（本番）、`xiao-s3-lorawan-pot`（+ ポテンショメーター）、`xiao-s3-lorawan-debug`（Deep Sleep なし）。ラッチングリレー（#46）は使わない（Wio-E5 は 3.3V から常時給電し `AT+LOWPOWER` で寝かせる。要否は PR4 の消費電力の結果で判断する）。閾値はペイロードに載せてクラウドに送る（§3）。ポテンショメーターの生の値は、ブートモード中のシリアル（サンプル行と JSON）で確認する。LoRaWAN 版は LoRaWAN だけを使う（README §4.3 の LoRaWAN > LTE > Wi-Fi のフォールバックは将来）。
 
 ### サイクル
 
@@ -182,4 +209,5 @@ AWS の Destination に届いたメッセージをデコードすると、status
 - 本番 env（Deep Sleep あり）での長時間の連続運用
 - `xiao-s3-lorawan-pot` の実機確認（ポテンショメーターを配線した機体）
 - Deep Sleep 中の GPIO43（TX）の状態で Wio-E5 が起きないか（必要なら `gpio_hold_en`）
-- Device Profile の MaxEirp が 5 と小さい。ベンチでは問題ないが、現場で距離が出ないときの見直し候補
+- Device Profile の MaxEirp が 5 と小さい。AWS は TxParamSetupReq で MaxEIRP を index 0（8 dBm）に下げてくる（JP920 の初期値は index 3 = 13 dBm）。ベンチでは問題ないが、現場で距離が出ないときはまずここを見直す
+- Seeed に、Wio-E5 の JP920 での LBT（キャリアセンスの時間）と送信時間の上限を確認する（§3）
