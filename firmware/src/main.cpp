@@ -17,6 +17,7 @@
 #include "sensor.h"
 #include "sync_ledger.h"
 #include "transport.h"
+#include "wio_e5.h"
 
 namespace {
 
@@ -321,6 +322,35 @@ void runLteTest() {
 
   Serial.println("retry in 30s...");
   delay(30000);
+}
+
+// #40 PR1: 起動後に1回 probe し、以降は USB シリアルと Wio-E5 を素通しにする
+// （手動で AT コマンドを打てる。'~' 1文字の行を送ると probe をやり直す）。
+void probeLoRaWanModule() {
+  wioE5Begin(Serial1, LORAWAN_UART_RX, LORAWAN_UART_TX, LORAWAN_UART_BAUD);
+  wioE5RunProbe();
+}
+
+void runLoRaWanTest() {
+  static bool probed = false;
+  if (!probed) {
+    Serial.printf("board=%s lorawan-test boot=%lu reset=%s\n", BOARD_NAME,
+                  static_cast<unsigned long>(bootCount),
+                  resetReasonToString(esp_reset_reason()));
+    probeLoRaWanModule();
+    Serial.println("passthrough: type AT commands (send '~' to re-run probe)");
+    probed = true;
+  }
+  if (Serial.peek() == '~') {
+    while (Serial.available() > 0) {
+      Serial.read();
+    }
+    wioE5End();
+    probeLoRaWanModule();
+    return;
+  }
+  wioE5PassthroughPoll();
+  delay(1);
 }
 
 void runLtePoweroffTest() {
@@ -741,7 +771,7 @@ void setup() {
                   (long long)wakeDiag.oversleepMs);
   }
 
-#if !PSS_LTE_POWEROFF_TEST_MODE && !PSS_LTE_TEST_MODE
+#if !PSS_LTE_POWEROFF_TEST_MODE && !PSS_LTE_TEST_MODE && !PSS_LORAWAN_TEST_MODE
   // #50: fires at most once per physical reset — setup() itself is only
   // ever called once per reset by the Arduino/ESP32 framework (loop() is
   // what repeats, including in the PSS_DISABLE_DEEP_SLEEP debug build where
@@ -759,6 +789,8 @@ void loop() {
   runLtePoweroffTest();
 #elif PSS_LTE_TEST_MODE
   runLteTest();
+#elif PSS_LORAWAN_TEST_MODE
+  runLoRaWanTest();
 #else
   runCycle();
 #endif

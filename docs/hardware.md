@@ -24,6 +24,7 @@ Issue #1 での検討結果をまとめたドキュメント。
 | カラーセンサ | Grove - I2C Color Sensor V3.0（101021133） | [Seeed Studio](https://www.seeedstudio.com/Grove-Color-Sensor-V3-0-p-5993.html) 等 | 約¥600 |
 | Grove 4芯ケーブル | 50〜100cm（現場ごとに選択） | Seeed / Amazon 等 | 約¥200〜400 |
 | LTE-Mモジュール | M5Stack SIM7080G CAT-M Unit（M5STACK-U128） | [スイッチサイエンス](https://www.switch-science.com/products/11052) | ¥6,908 |
+| LoRaWANモジュール（評価中・#40） | Seeed Grove - Wio-E5（STM32WLE5JC、技適付き。LTE-M とは排他） | [スイッチサイエンス](https://www.switch-science.com/products/9671) | 調達済み（2026-07-10） |
 | SIM | SORACOM IoT SIM plan-D / plan-KM1 | [SORACOMストア](https://soracom.jp/store/13380/) | ¥990初期 + ¥192/月〜 |
 | バッテリー | LiPo 3.7V 4,400mAh 保護回路内蔵 JST-PH | [ストロベリーリナックス](https://strawberry-linux.com/catalog/items?code=15095) | ¥550 |
 | 電解コンデンサ | 470μF 16V（16WXA470MEFC8X9） | [秋月電子](https://akizukidenshi.com/catalog/g/g108426/) | ¥10〜 |

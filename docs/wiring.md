@@ -73,7 +73,7 @@ I2C は Shield 経由で XIAO の **D4（GPIO5 / SDA）**・**D5（GPIO6 / SCL�
 
 | 接続 | 備考 |
 |---|---|
-| Grove UART ポート | LTE-M（M5STACK-U128）導入時に使用 |
+| Grove UART ポート | LTE-M（M5STACK-U128）または LoRaWAN（Grove Wio-E5）を接続する。2つは排他（§9） |
 | その他 Grove ポート | 未使用 |
 
 ### 2.4 はんだ付け位置
@@ -252,3 +252,19 @@ LTE-M 導入時は **M5Stack SIM7080G CAT-M Unit（M5STACK-U128）** を Grove S
 | 判断 | Wi-Fi が使えない現場が出た時点で追加購入 |
 
 詳細は [hardware.md](hardware.md) の通信セクションを参照。
+
+### 9.1 LoRaWAN（Grove Wio-E5、#40 評価中）
+
+**Grove Wio-E5**（STM32WLE5JC、技適付き）を、LTE-M と同じ Grove Shield の **UART ポート**に Grove 4芯ケーブルで接続する。LTE-M と同時には載せない（UART ポートが1つのため。ファームは env で切り替え、同時に有効にするとビルドエラーになる）。
+
+| 項目 | 内容 |
+|---|---|
+| 接続先 | Grove Shield UART ポート |
+| XIAO 側ピン | D6（GPIO43, TX）→ Wio-E5 RX / D7（GPIO44, RX）← Wio-E5 TX |
+| ボーレート | 9600 bps（Wio-E5 の既定値） |
+| 電源 | Shield の 3.3V（GPIO で切れないため、ESP32 の Deep Sleep 中も通電。省電力は `AT+LOWPOWER` で行う） |
+| アンテナ | 基板の IPEX（u.FL）に付属ワイヤアンテナ |
+| ファーム | `board_xiao.h` の `LORAWAN_UART_*`、疎通確認は env `xiao-s3-lorawan-test`（[firmware/README.md](../firmware/README.md)） |
+
+- **アンテナは付属品か Seeed 純正の Wio-E5 向けのものだけを使う**。技適はモジュールとアンテナの組み合わせで取られている可能性が高く、他社製アンテナへの交換は法令上のリスクがある
+- GPIO43 は ESP32-S3 の UART0 TX と同じピンで、起動時の ROM ログが Wio-E5 の RX に流れる。Wio-E5 が誤って起きる・応答が乱れる可能性があるため、ファームは最初に受信を捨ててから `AT` を数回送って同期する

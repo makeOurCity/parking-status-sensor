@@ -132,6 +132,21 @@
 #define PSS_LTE_ONLY 0
 #endif
 
+// #40: Grove Wio-E5（LoRaWAN）。LTE-M と同じ Grove UART ポートを使うため排他。
+#ifndef PSS_LORAWAN_ENABLED
+#define PSS_LORAWAN_ENABLED 0
+#endif
+
+// Debug: Wio-E5 の AT 疎通確認 + USB シリアル素通し（#40 PR1）。
+#ifndef PSS_LORAWAN_TEST_MODE
+#define PSS_LORAWAN_TEST_MODE 0
+#endif
+
+static_assert(!(PSS_LORAWAN_ENABLED && PSS_LTE_ENABLED),
+              "LoRaWAN and LTE-M share the Grove UART port");
+static_assert(!PSS_LORAWAN_TEST_MODE || PSS_LORAWAN_ENABLED,
+              "PSS_LORAWAN_TEST_MODE requires PSS_LORAWAN_ENABLED");
+
 // Debug: skip modem poweroff between cycles (measure warm reconnect only).
 #ifndef PSS_LTE_KEEP_MODEM
 #define PSS_LTE_KEEP_MODEM 0

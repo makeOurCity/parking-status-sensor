@@ -13,6 +13,7 @@ XIAO ESP32S3 向けファームウェア（PlatformIO）。Grove - I2C Color Sen
 | ボード | Seeed XIAO ESP32S3 + Grove Shield for XIAO |
 | センサー | Grove - I2C Color Sensor V3.0（VEML6040、I2C `0x10`、D4=SDA / D5=SCL） |
 | LTE-M 版 | M5Stack SIM7080G CAT-M Unit（Grove UART、D6=TX / D7=RX）+ Grove 2-Coil Latching Relay（D0）で LTE-M の電源を送信時だけ入れる（#46） |
+| LoRaWAN 版（評価中・#40） | Grove Wio-E5（Grove UART、D6=TX / D7=RX、9600bps）。LTE-M とは排他 |
 | 閾値調整 | Grove - Rotary Angle Sensor（D1、#60） |
 | 電源 | LiPo → Shield の BAT パッド（JST）。ESP32-S3 と Grove の各ポートは Shield の 3.3V を共有する |
 
@@ -26,6 +27,7 @@ XIAO ESP32S3 向けファームウェア（PlatformIO）。Grove - I2C Color Sen
 | `sensor.cpp` | VEML6040 の初期化・R/G/B/W 読み取り | #5 |
 | `classify.cpp` | R−G 差による満／空／不明の判定 | #6 |
 | `transport.cpp` | Wi-Fi / LTE-M の接続・MQTT 送信・LTE-M の電源断 | #6, #76 |
+| `wio_e5.cpp` | Grove Wio-E5 の AT コマンド送受信・疎通確認・USB シリアル素通し | #40 |
 | `lte_modem_tls.cpp` | SIM7080G 内蔵 TLS 用の証明書の投入 | #30 |
 | `sync_ledger.cpp` | 送信確認の記録（NVS）。送信するかどうかの判定の元 | #32 |
 | `history_log.cpp` | 毎サイクルの判定結果の履歴（NVS） | #47 |
@@ -89,6 +91,7 @@ XIAO ESP32S3 向けファームウェア（PlatformIO）。Grove - I2C Color Sen
 | `xiao-s3` / `xiao-s3-debug` | Wi-Fi + ローカル MQTT（Mosquitto） |
 | `xiao-s3-lte-test` | LTE-M モジュール単体の接続確認（センサー・MQTT なし） |
 | `xiao-s3-lte-poweroff-test` | LTE-M の電源断・復帰の検証（#25） |
+| `xiao-s3-lorawan-test` | Grove Wio-E5 単体の AT 疎通確認と USB シリアル素通し（センサー・送信なし、#40） |
 
 リレーやポテンショメーターを配線していない機体に、それらが有効な env を書き込まないこと。
 
@@ -137,6 +140,22 @@ pio device monitor -e xiao-s3-lte-test
 - `FAIL: no AT response` … Grove UART ケーブル、モジュール電源、TX/RX
 - `FAIL: not registered` … SIM、アンテナ、電波
 - `FAIL: GPRS attach failed` … APN
+
+### LoRaWAN（Wio-E5）の単体確認（#40）
+
+```bash
+pio run -e xiao-s3-lorawan-test -t upload
+pio device monitor -e xiao-s3-lorawan-test --echo
+```
+
+起動すると AT 応答・`AT+VER`・DevEUI・現在の設定（MODE / DR / ADR / CLASS / RETRY / PORT）を読み、`AT+LOWPOWER` から復帰できるかを試す。AT 応答・VER・DevEUI・スリープと復帰がすべて OK なら `RESULT: PASS`。
+
+- `FAIL no AT response` … Wio-E5 の接続（ケーブルが抜けていると文字化けが出ることがある）、TX/RX、ボーレート（9600）
+
+probe の後は USB シリアルと Wio-E5 の素通しになり、AT コマンドを手で打てる（`~` だけを送ると probe をやり直す）。
+
+- **AppKey を手で入力するときは、ログを保存しない**（`tee` 等でファイルに残さない）。Wio-E5 の応答にもキーが含まれることがある
+- ファームが出す AT ログでは `AT+KEY` と `+KEY:` を伏せ字にしている
 
 ### ローカル Mosquitto（Wi-Fi）
 
