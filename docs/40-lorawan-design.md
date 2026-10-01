@@ -1,6 +1,6 @@
 # LoRaWAN（Grove Wio-E5）設計メモ（#40）
 
-> **作業記録・WIP**: #40 の PR ごとに更新する。現時点は PR2（Join と1パケット送信）まで。ファームの通常サイクルへの統合（PR3）と消費電力の評価（PR4）はまだ。
+> **作業記録・WIP**: #40 の PR ごとに更新する。現時点は PR3（ファームの通常サイクルへの統合）まで。消費電力の評価（PR4）はまだ。
 
 ## 1. 経路
 
@@ -22,7 +22,9 @@ Wio-E5 ──LoRaWAN(JP920/AS923-1)──▶ SenseCAP M2 (M2-AS923, Basics Stati
 
 工場出荷時は **EU868 / LWABP** になっている。**日本ではこのまま送信しない**（868MHz 帯は使えない）。
 
-電源投入時のプロビジョニング（`wioE5ProvisionOtaa()`）で次のように設定する。設定コマンドは Join セッションを消す可能性があるため、電源投入時だけ実行する（PR3 で `ESP_RST_POWERON` 時に限定する）。
+プロビジョニング（`wioE5ProvisionOtaa()`）で次のように設定する。
+
+**設定コマンドは Join セッションを消す**（実機で確認: Join 済みでもプロビジョニング後の `AT+JOIN` は `Network joined` になり、Join し直す）。そのため、毎サイクルではなく **Deep Sleep のタイマー以外で起動した後の最初の接続で1回だけ**実行する（§6）。
 
 | コマンド | 理由 |
 |---|---|
@@ -84,7 +86,7 @@ JSON（数百バイト）は LoRaWAN では送れない。AS923 で UplinkDwellT
 | `AT+CMSGHEX`（confirmed、11B、DR2） | `Wait ACK` → `ACK Received` → `RXWIN1, RSSI -24, SNR 7.0` → `Done` | 約 1.9s |
 | `AT+LOWPOWER` → 任意の入力 | `+LOWPOWER: SLEEP` → `+LOWPOWER: WAKEUP`（最初の `AT` は捨てられる） | — |
 
-- Join 済みなら `AT+JOIN` は無線を使わずに返る。そのため PR3 では Join 済みかを RTC に覚えず、**送信するサイクルで毎回 `AT+JOIN` を送る**
+- Join 済みなら `AT+JOIN` は無線を使わずに返る。そのため Join 済みかを RTC に覚えず、**送信するサイクルで毎回 `AT+JOIN` を送る**
 - `+CMSGHEX: FPENDING` は、ネットワーク側に未送のダウンリンク（MAC コマンド等）があることを示す。次のアップリンクの RX ウィンドウで届く
 
 ## 5. Destination に届くメッセージ
@@ -107,8 +109,77 @@ JSON（数百バイト）は LoRaWAN では送れない。AS923 で UplinkDwellT
 - `PayloadData` は base64 で、`tools/lorawan/decode.py --message` でデコードできる
 - Frequency 922.6MHz は既定の2チャネル以外で、Join のときにネットワークから渡されたチャネルとみられる
 
-## 6. 未確認・今後の課題
+## 6. ファームへの統合（PR3）
 
-- PR3: `transport` への統合、プロビジョニングを電源投入時だけに限る、スキップサイクルで Wio-E5 が起こされたままにならない対策（起動ログの抑止 + 毎サイクル `AT+LOWPOWER`）、時間予算
-- PR4: U200 で待機電流（スキップサイクル後 / 送信サイクル後）、Join 1回、送信1回を計測
+env は `xiao-s3-lorawan`（本番）、`xiao-s3-lorawan-pot`（+ ポテンショメーター）、`xiao-s3-lorawan-debug`（Deep Sleep なし）。ラッチングリレー（#46）は使わない（Wio-E5 は 3.3V から常時給電し `AT+LOWPOWER` で寝かせる。要否は PR4 の消費電力の結果で判断する）。閾値はペイロードに載せず、現場ではブートモード中のシリアル（サンプル行と JSON）で確認する。LoRaWAN 版は LoRaWAN だけを使う（README §4.3 の LoRaWAN > LTE > Wi-Fi のフォールバックは将来）。
+
+### サイクル
+
+```
+起床 → センサー読み取り・判定 → 履歴ログ → 送信するか判定（mustPublish、LTE-M 版と同じ）
+  ├ 送信しない → Wio-E5 に AT+LOWPOWER → Deep Sleep
+  └ 送信する → [未プロビジョニングなら設定] → AT+JOIN → AT+CMSGHEX（confirmed）
+              → Wio-E5 に AT+LOWPOWER → Deep Sleep
+```
+
+- **プロビジョニング**
+  - RTC のフラグ `loRaWanProvisioned` を持つ。Deep Sleep のタイマー以外で起動したとき（電源投入、USB からのリセット、watchdog など）に戻す
+  - 戻した後の最初の接続で、Join の前に実行する。成功するまで Join も送信もしない（工場出荷時の EU868 のまま電波を出さないため）
+  - 計画では `ESP_RST_POWERON` 時だけにする予定だったが、USB からの書き込み直後なども対象にするためこの形にした
+- **Join**: 毎回 `AT+JOIN` を送る（Join 済みなら 85ms）
+- **送信**
+  - `mustPublish()` の判定（変化時、pending の再送、heartbeat）は変えていない
+  - 送信理由は `sendReasonFor()` で同じ順に判定して、ペイロードに載せる
+  - JSON は今までどおりシリアルログに出す（`network.transport = "lorawan"`、`loraAlreadyJoined`）
+- **送信履歴（sync ledger）**
+  - ACK 受信を confirmed として扱う
+  - `prevMqttError` には、`-100 - WioE5Result` のコードを入れる
+
+| コード | 意味 |
+|---|---|
+| -101 | ACK なし |
+| -102 | 未 Join |
+| -103 | Join 失敗 |
+| -104 | busy、またはチャネルが空いていない |
+| -105 | ERROR（プロビジョニングの失敗を含む） |
+| -106 | タイムアウト |
+
+- **ブートモード（#50）**
+  - LoRaWAN でもそのまま使う
+  - 2回目以降のスロットでは、`activeMqttState()` が Join 済みなら 0 を返すので、Join をし直さずに送る
+- **Wio-E5 を寝かせる**
+  - 毎サイクル `disconnectTransport()` で `AT+LOWPOWER` を送る。送信しなかったサイクルも含む
+  - あわせて `esp_deep_sleep_disable_rom_logging()` で、Deep Sleep 復帰時の ROM ログ（GPIO43 → Wio-E5 RX）を止める
+  - 電源投入時の ROM ログは止まらない
+
+### 時間予算（`xiao-s3-lorawan`）
+
+| フラグ | 値 | 根拠 |
+|---|---|---|
+| `PSS_LORAWAN_JOIN_TIMEOUT_MS` | 12000 | Join の実測 約6s |
+| `PSS_LORAWAN_UPLINK_TIMEOUT_MS` | 8000 | ACK 付き送信の実測 約2s。ACK なしでも RX2 まで約3s |
+| `PSS_TRANSPORT_MAX_ATTEMPTS` / `PSS_CONNECT_PHASE_MS` | 3 / 30000 | Join 12s × 3 回 |
+| `PSS_PUBLISH_MAX_ATTEMPTS` / `PSS_PUBLISH_PHASE_MS` | 3 / 25000 | 送信 8s × 3 回 |
+| `PSS_CYCLE_MAX_ACTIVE_MS` | 60000 | watchdog は 80s（+20s） |
+
+最悪の場合でも、サイクル 60s に1コマンド分（最大 12s）を足した値は watchdog の 80s に収まる。
+
+### 実機での確認（`xiao-s3-lorawan-debug`）
+
+| サイクル | 結果 |
+|---|---|
+| 初回の送信 | プロビジョニング → `Network joined`（6.0s）→ ACK 付き送信（1.9s）。サイクル全体 11.2s |
+| 次の heartbeat | `Joined already`（85ms）→ ACK 付き送信（2.0s）。サイクル全体 4.1s |
+| 送信しないサイクル | 毎回 `AT+LOWPOWER` → `+LOWPOWER: SLEEP` |
+| ブートモード（USB 挿し直しで電源投入） | 1分間隔で5回届いた。1回目は約 10.8s（プロビジョニングと Join し直しを含む）。2回目以降は Join し直さず（FCnt が連続）、2.75〜3.5s。全スロットで送信理由 `boot_mode`、coldBoot true、スロット番号 2〜5 を確認（1回目は購読前で、受信統計だけで確認） |
+| ADR | Join 直後は DR2、その後 DR5（SF7）に上がった |
+
+AWS の Destination に届いたメッセージをデコードすると、status・送信理由（heartbeat）・前回の結果（skipped）・raw の値がファームのログと一致した。
+
+## 7. 未確認・今後の課題
+
+- PR4: U200 で待機電流（送信しないサイクルの後 / 送信サイクルの後）、Join 1回、送信1回を計測する。ROM ログの抑止と `AT+LOWPOWER` の効果もここで見る
+- 本番 env（Deep Sleep あり）での長時間の連続運用
+- `xiao-s3-lorawan-pot` の実機確認（ポテンショメーターを配線した機体）
+- Deep Sleep 中の GPIO43（TX）の状態で Wio-E5 が起きないか（必要なら `gpio_hold_en`）
 - Device Profile の MaxEirp が 5 と小さい。ベンチでは問題ないが、現場で距離が出ないときの見直し候補

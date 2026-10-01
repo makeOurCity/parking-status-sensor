@@ -1,11 +1,13 @@
 #pragma once
 
+#include <stddef.h>
 #include <stdint.h>
 
 enum class TransportKind {
   kNone,
   kWifi,
   kLte,
+  kLoRaWan,  // #40: Grove Wio-E5
 };
 
 struct TransportMetrics {
@@ -18,6 +20,11 @@ struct TransportMetrics {
   uint32_t mqttHandshakeMs = 0;
   uint32_t publishMs = 0;
   uint8_t transportAttempts = 0;
+  // #40: LoRaWAN のみ。ACK を受けた RX ウィンドウの RSSI / SNR（hasLoRaRx のとき有効）。
+  bool loraAlreadyJoined = false;
+  bool hasLoRaRx = false;
+  int16_t loraRssi = 0;
+  float loraSnr = 0.0f;
 };
 
 struct PublishResult {
@@ -45,6 +52,9 @@ bool probeLteModem(LteProbeResult& result);
 void printLteProbeResult(const LteProbeResult& result);
 bool syncClock(uint32_t timeoutMs);
 bool publishTelemetryConfirmed(const char* payload, TransportMetrics& metrics);
+// #40: LoRaWAN の confirmed アップリンク（バイナリ、fPort はプロビジョニング時に設定）。
+// ACK 受信で true。
+bool publishUplinkConfirmed(const uint8_t* data, size_t len, TransportMetrics& metrics);
 int activeMqttState();
 int activeMqttLastError();
 TransportKind activeTransportKind();
@@ -62,3 +72,6 @@ bool radioOffLteModem();
 bool probeLteModemAt(uint32_t timeoutMs = 2000);
 const char* transportName(TransportKind transport);
 void resetLteRadioCache();
+// #40: 次の LoRaWAN 接続の前に Wio-E5 のプロビジョニングをやり直させる
+// （Deep Sleep のタイマー以外で起動したとき）。
+void resetLoRaWanCache();

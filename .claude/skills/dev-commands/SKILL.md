@@ -25,6 +25,9 @@ pio device monitor -e <env>
 | `xiao-s3-debug` | 開発用。Deep Sleepなし、短間隔で連続送信 |
 | `xiao-s3-lte-test` | LTE-Mモジュール単体の疎通確認（センサー/MQTT不使用） |
 | `xiao-s3-lte-poweroff-test` | モデム poweroff/復帰のみ検証（#25 Phase 0） |
+| `xiao-s3-lorawan` | #40 Grove Wio-E5 の LoRaWAN 版（状態変化時のみ送信 + heartbeat） |
+| `xiao-s3-lorawan-pot` | 上記 + ポテンショメーター（#60） |
+| `xiao-s3-lorawan-debug` | LoRaWAN版 + Deep Sleepなし |
 | `xiao-s3-lorawan-test` | Grove Wio-E5 の AT 疎通確認・Join・1パケット送信（`~p`/`~c`/`~j`/`~s`、#40） |
 | `xiao-s3-aws` | AWS IoT Core向け（Wi-Fi、TLS） |
 | `xiao-s3-aws-debug` | 上記 + Deep Sleepなし |

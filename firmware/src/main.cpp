@@ -144,6 +144,11 @@ void sleepNow(const char* reason, uint32_t activeMs) {
 
   esp_sleep_enable_timer_wakeup(
       static_cast<uint64_t>(config::kSleepSeconds) * 1000000ULL);
+  if (config::kLoRaWanEnabled) {
+    // #40: 復帰時の ROM ログを止める。GPIO43（UART0 TX）は Wio-E5 の RX につながって
+    // いて、ログで Wio-E5 が LOWPOWER から起こされるため。電源投入時のログは止まらない。
+    esp_deep_sleep_disable_rom_logging();
+  }
   esp_deep_sleep_start();
 }
 
@@ -212,6 +217,13 @@ void buildPayload(const RawSample& sample, ParkingStatus status,
   network["transportAttempts"] = transportMetrics.transportAttempts;
   network["mqttQos"] = config::kMqttQos;
   network["publishAttempts"] = publishAttempts;
+  if (transportMetrics.transport == TransportKind::kLoRaWan) {
+    network["loraAlreadyJoined"] = transportMetrics.loraAlreadyJoined;
+    if (transportMetrics.hasLoRaRx) {
+      network["loraRssi"] = transportMetrics.loraRssi;
+      network["loraSnr"] = transportMetrics.loraSnr;
+    }
+  }
 
   // Delivery/diagnostic ledger reflecting state up to the previous cycle.
   // deliveryConfirmed is intentionally omitted: QoS1 cannot rewrite an
@@ -241,6 +253,18 @@ void buildPayload(const RawSample& sample, ParkingStatus status,
   serializeJson(doc, out, outSize);
 }
 
+// #40: 送信理由（LoRaWAN のコアペイロードに載せる）。mustPublish() と同じ判定順。
+SendReason sendReasonFor(ParkingStatus status) {
+  const SyncLedger& ledger = syncLedger();
+  if (ledger.pendingValid) {
+    return SendReason::kPendingRetry;  // retry the undelivered observation this cycle
+  }
+  if (status != ledger.lastConfirmedStatus) {
+    return SendReason::kStateChange;
+  }
+  return SendReason::kHeartbeat;
+}
+
 // PoC keeps full transmission (always publish) unless PSS_CHANGE_ONLY_SEND is
 // enabled (#25/#46), in which case LTE-M is only powered up on state change,
 // undelivered retry, or heartbeat — see docs/25-low-power-phase2-hardware-cutoff.md §2.5.
@@ -250,14 +274,28 @@ bool mustPublish(ParkingStatus status) {
     return true;  // PoC: full transmission every cycle
   }
 
+  if (sendReasonFor(status) != SendReason::kHeartbeat) {
+    return true;  // pending retry or state change
+  }
+  return syncLedger().skippedSinceConfirmed >= config::kHeartbeatCycles;
+}
+
+// #40: LoRaWAN は JSON を送れない（AS923 DR2 の上限 11 バイト）ため、同じ観測値を
+// コアペイロードにして送る。JSON は引き続きシリアルログ用に作る。
+bool publishLoRaWanCore(const RawSample& sample, ParkingStatus status,
+                        const BootModeSendInfo& bootModeInfo, TransportMetrics& metrics) {
   const SyncLedger& ledger = syncLedger();
-  if (ledger.pendingValid) {
-    return true;  // retry the undelivered observation this cycle
-  }
-  if (status != ledger.lastConfirmedStatus) {
-    return true;  // state change
-  }
-  return ledger.skippedSinceConfirmed >= config::kHeartbeatCycles;
+  LoRaWanUplinkInput in{};
+  in.status = status;
+  in.reason = bootModeInfo.active ? SendReason::kBootMode : sendReasonFor(status);
+  in.coldBoot = esp_reset_reason() == ESP_RST_POWERON;
+  in.raw = sample;
+  in.prevOutcome = ledger.prevOutcome;
+  in.prevAttempts = ledger.prevAttempts;
+  in.bootSlot = bootModeInfo.slot;
+  in.prevActiveMs = ledger.prevActiveMs;
+  const LoRaWanCorePayload payload = encodeLoRaWanCore(in);
+  return publishUplinkConfirmed(payload.data(), payload.size(), metrics);
 }
 
 // Publish the current observation with bounded retries inside the publish-phase
@@ -302,7 +340,10 @@ bool publishWithRetry(const RawSample& sample, ParkingStatus status,
       continue;
     }
 
-    if (publishTelemetryConfirmed(payload, metrics)) {
+    const bool confirmed = activeTransportKind() == TransportKind::kLoRaWan
+                               ? publishLoRaWanCore(sample, status, bootModeInfo, metrics)
+                               : publishTelemetryConfirmed(payload, metrics);
+    if (confirmed) {
       result.confirmed = true;
       return true;
     }
@@ -793,6 +834,7 @@ void setup() {
     consecutiveTimerWakes = 0;
     lastSleepEntryUs = 0;
     resetLteRadioCache();
+    resetLoRaWanCache();
   }
   // #47: dump on a non-timer wake (power-on / USB reset) — the moment
   // someone is plugged in via USB during normal (timer-wake) deep-sleep
