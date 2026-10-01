@@ -12,6 +12,7 @@
 #include "config.h"
 #include "device_id.h"
 #include "history_log.h"
+#include "lorawan_payload.h"
 #include "potentiometer.h"
 #include "relay.h"
 #include "sensor.h"
@@ -324,11 +325,41 @@ void runLteTest() {
   delay(30000);
 }
 
-// #40 PR1: 起動後に1回 probe し、以降は USB シリアルと Wio-E5 を素通しにする
-// （手動で AT コマンドを打てる。'~' 1文字の行を送ると probe をやり直す）。
-void probeLoRaWanModule() {
-  wioE5Begin(Serial1, LORAWAN_UART_RX, LORAWAN_UART_TX, LORAWAN_UART_BAUD);
-  wioE5RunProbe();
+// #40: 起動後に1回 probe し、以降は USB シリアルと Wio-E5 を素通しにする
+// （AT コマンドを手で打てる）。'~' + 1文字でテスト用コマンドを実行する:
+//   ~p probe / ~c 電源投入時のプロビジョニング / ~j AT+JOIN / ~s センサー値を
+//   コアペイロードにして confirmed 送信
+void runLoRaWanTestCommand(char cmd) {
+  switch (cmd) {
+    case 'p':
+      wioE5RunProbe();
+      break;
+    case 'c':
+      wioE5ProvisionOtaa(config::kLoRaWanAppEui, config::kLoRaWanAppKey,
+                         kLoRaWanCoreFPort);
+      break;
+    case 'j':
+      wioE5Join(15000);
+      break;
+    case 's': {
+      LoRaWanUplinkInput in{};
+      in.coldBoot = esp_reset_reason() == ESP_RST_POWERON;
+      if (initSensor() && readSensor(in.raw)) {
+        in.status = classifyStatus(in.raw, config::kStatusThreshold);
+      }
+      const LoRaWanCorePayload payload = encodeLoRaWanCore(in);
+      char hex[kLoRaWanCorePayloadSize * 2 + 1];
+      loRaWanToHex(payload.data(), payload.size(), hex, sizeof(hex));
+      Serial.printf("lorawan: status=%s raw=%u,%u,%u,%u payload=%s\n",
+                    statusToString(in.status), in.raw.red, in.raw.green,
+                    in.raw.blue, in.raw.white, hex);
+      wioE5SendConfirmedHex(hex, 15000);
+      break;
+    }
+    default:
+      Serial.printf("unknown command ~%c (p/c/j/s)\n", cmd);
+      break;
+  }
 }
 
 void runLoRaWanTest() {
@@ -337,16 +368,23 @@ void runLoRaWanTest() {
     Serial.printf("board=%s lorawan-test boot=%lu reset=%s\n", BOARD_NAME,
                   static_cast<unsigned long>(bootCount),
                   resetReasonToString(esp_reset_reason()));
-    probeLoRaWanModule();
-    Serial.println("passthrough: type AT commands (send '~' to re-run probe)");
+    wioE5Begin(Serial1, LORAWAN_UART_RX, LORAWAN_UART_TX, LORAWAN_UART_BAUD);
+    wioE5RunProbe();
+    Serial.println("passthrough: type AT commands (~p probe, ~c provision, ~j join, ~s send)");
     probed = true;
   }
   if (Serial.peek() == '~') {
-    while (Serial.available() > 0) {
-      Serial.read();
+    Serial.read();
+    const uint32_t start = millis();
+    while (Serial.available() <= 0 && millis() - start < 500) {
+      delay(1);
     }
-    wioE5End();
-    probeLoRaWanModule();
+    const char cmd = Serial.available() > 0 ? static_cast<char>(Serial.read()) : 'p';
+    delay(20);
+    while (Serial.available() > 0) {
+      Serial.read();  // 改行を捨てる
+    }
+    runLoRaWanTestCommand(cmd);
     return;
   }
   wioE5PassthroughPoll();

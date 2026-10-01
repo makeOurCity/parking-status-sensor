@@ -27,7 +27,8 @@ XIAO ESP32S3 向けファームウェア（PlatformIO）。Grove - I2C Color Sen
 | `sensor.cpp` | VEML6040 の初期化・R/G/B/W 読み取り | #5 |
 | `classify.cpp` | R−G 差による満／空／不明の判定 | #6 |
 | `transport.cpp` | Wi-Fi / LTE-M の接続・MQTT 送信・LTE-M の電源断 | #6, #76 |
-| `wio_e5.cpp` | Grove Wio-E5 の AT コマンド送受信・疎通確認・USB シリアル素通し | #40 |
+| `wio_e5.cpp` | Grove Wio-E5 の AT コマンド送受信・プロビジョニング・Join・confirmed 送信・疎通確認 | #40 |
+| `lorawan_payload.cpp` | LoRaWAN の 11 バイトのコアペイロードのエンコード | #40 |
 | `lte_modem_tls.cpp` | SIM7080G 内蔵 TLS 用の証明書の投入 | #30 |
 | `sync_ledger.cpp` | 送信確認の記録（NVS）。送信するかどうかの判定の元 | #32 |
 | `history_log.cpp` | 毎サイクルの判定結果の履歴（NVS） | #47 |
@@ -91,7 +92,7 @@ XIAO ESP32S3 向けファームウェア（PlatformIO）。Grove - I2C Color Sen
 | `xiao-s3` / `xiao-s3-debug` | Wi-Fi + ローカル MQTT（Mosquitto） |
 | `xiao-s3-lte-test` | LTE-M モジュール単体の接続確認（センサー・MQTT なし） |
 | `xiao-s3-lte-poweroff-test` | LTE-M の電源断・復帰の検証（#25） |
-| `xiao-s3-lorawan-test` | Grove Wio-E5 単体の AT 疎通確認と USB シリアル素通し（センサー・送信なし、#40） |
+| `xiao-s3-lorawan-test` | Grove Wio-E5 単体の AT 疎通確認・Join・1パケット送信（手動コマンド、Deep Sleep なし、#40） |
 
 リレーやポテンショメーターを配線していない機体に、それらが有効な env を書き込まないこと。
 
@@ -152,7 +153,16 @@ pio device monitor -e xiao-s3-lorawan-test --echo
 
 - `FAIL no AT response` … Wio-E5 の接続（ケーブルが抜けていると文字化けが出ることがある）、TX/RX、ボーレート（9600）
 
-probe の後は USB シリアルと Wio-E5 の素通しになり、AT コマンドを手で打てる（`~` だけを送ると probe をやり直す）。
+probe の後は USB シリアルと Wio-E5 の素通しになり、AT コマンドを手で打てる。`~` に続けて1文字送ると、テスト用のコマンドを実行する。
+
+| コマンド | 内容 |
+|---|---|
+| `~p` | probe をやり直す |
+| `~c` | プロビジョニング（JP920 / LWOTAA / RETRY 1 / PORT 1、`secrets.h` の AppEUI / AppKey を書き込む）。**送信する前に必ず1回実行する**（工場出荷時は EU868） |
+| `~j` | `AT+JOIN`（Join 済みなら `Joined already`） |
+| `~s` | センサー値を 11 バイトのコアペイロードにして confirmed 送信 |
+
+`secrets.h` に `PSS_LORAWAN_APP_EUI` / `PSS_LORAWAN_APP_KEY` を設定する（AWS IoT Core for LoRaWAN の Wireless Device の値。名前は deviceId に揃える）。LTE-M 版の `secrets.h` を流用する場合は、`PSS_LTE_ENABLED` を `secrets.h` から外す（LoRaWAN env と排他で、ビルドエラーになる）。設定値、ペイロード、届くメッセージの形式は [docs/40-lorawan-design.md](../docs/40-lorawan-design.md)、デコードは [tools/lorawan](../tools/lorawan/README.md)。
 
 - **AppKey を手で入力するときは、ログを保存しない**（`tee` 等でファイルに残さない）。Wio-E5 の応答にもキーが含まれることがある
 - ファームが出す AT ログでは `AT+KEY` と `+KEY:` を伏せ字にしている

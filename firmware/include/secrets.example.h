@@ -40,6 +40,12 @@
 #define PSS_LTE_USER "sora"
 #define PSS_LTE_PASSWORD "sora"
 
+// LoRaWAN (Grove Wio-E5, #40): OTAA keys from the AWS IoT Core for LoRaWAN
+// Wireless Device (name it after the deviceId). DevEUI is read from the module.
+// Never paste AppKey into logs or issue comments.
+#define PSS_LORAWAN_APP_EUI ""
+#define PSS_LORAWAN_APP_KEY ""
+
 // MQTT publish / transport retry (optional overrides)
 // #define PSS_TRANSPORT_MAX_ATTEMPTS 3
 // #define PSS_PUBLISH_MAX_ATTEMPTS 3

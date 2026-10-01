@@ -142,8 +142,18 @@
 #define PSS_LORAWAN_TEST_MODE 0
 #endif
 
+// OTAA の JoinEUI(AppEUI) / AppKey（16 進文字列、secrets.h で設定）。
+// 空なら Wio-E5 に保存済みの値を使う（電源投入時のプロビジョニングで書き込まない）。
+#ifndef PSS_LORAWAN_APP_EUI
+#define PSS_LORAWAN_APP_EUI ""
+#endif
+
+#ifndef PSS_LORAWAN_APP_KEY
+#define PSS_LORAWAN_APP_KEY ""
+#endif
+
 static_assert(!(PSS_LORAWAN_ENABLED && PSS_LTE_ENABLED),
-              "LoRaWAN and LTE-M share the Grove UART port");
+              "LoRaWAN and LTE-M share the Grove UART port (check PSS_LTE_ENABLED in secrets.h)");
 static_assert(!PSS_LORAWAN_TEST_MODE || PSS_LORAWAN_ENABLED,
               "PSS_LORAWAN_TEST_MODE requires PSS_LORAWAN_ENABLED");
 
@@ -327,6 +337,8 @@ constexpr bool kLteTestMode = PSS_LTE_TEST_MODE;
 constexpr bool kLtePoweroffTestMode = PSS_LTE_POWEROFF_TEST_MODE;
 constexpr uint32_t kLtePoweroffObserveMs = PSS_LTE_POWEROFF_OBSERVE_MS;
 constexpr bool kLteOnly = PSS_LTE_ONLY;
+constexpr const char* kLoRaWanAppEui = PSS_LORAWAN_APP_EUI;
+constexpr const char* kLoRaWanAppKey = PSS_LORAWAN_APP_KEY;
 constexpr bool kLteKeepModem = PSS_LTE_KEEP_MODEM;
 constexpr bool kLteModemTls = PSS_LTE_MODEM_TLS;
 

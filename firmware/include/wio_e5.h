@@ -26,6 +26,42 @@ bool wioE5Command(const char* cmd, const char* expectPrefix, uint32_t timeoutMs,
 // AT+LOWPOWER（次の UART 入力まで無期限スリープ）。
 bool wioE5Sleep();
 
+// 電源投入時だけ呼ぶ（設定コマンドは Join セッションを消す可能性があるため）。
+// JP920(AS923 互換) / LWOTAA / Class A / ADR ON / RETRY 1（再送なし） / PORT を設定し、appEui / appKey が
+// 空でなければ書き込む（空ならモジュールに保存済みの値を使う）。
+bool wioE5ProvisionOtaa(const char* appEui, const char* appKey, uint8_t fport);
+
+enum class WioE5Result : uint8_t {
+  kOk,         // Join: 新規 Join または Joined already / 送信: ACK 受信
+  kNoAck,      // confirmed 送信したが ACK なし
+  kNotJoined,  // "Please join network first"
+  kJoinFailed,
+  kBusy,       // "LoRaWAN modem is busy" / "No free channel" / "No band"
+  kError,
+  kTimeout,
+};
+
+const char* wioE5ResultToString(WioE5Result result);
+
+struct WioE5JoinInfo {
+  bool alreadyJoined = false;
+  uint32_t elapsedMs = 0;
+};
+
+struct WioE5UplinkInfo {
+  bool hasRx = false;  // ACK 受信時の RSSI / SNR が取れたか
+  int16_t rssi = 0;
+  float snr = 0.0f;
+  uint32_t elapsedMs = 0;
+};
+
+// AT+JOIN。Join 済みなら無線を使わず "+JOIN: Joined already" が返る。
+WioE5Result wioE5Join(uint32_t timeoutMs, WioE5JoinInfo* info = nullptr);
+
+// AT+CMSGHEX（confirmed）。"+CMSGHEX: Done" まで待つ。
+WioE5Result wioE5SendConfirmedHex(const char* hex, uint32_t timeoutMs,
+                                  WioE5UplinkInfo* info = nullptr);
+
 // PR1 疎通確認: AT 応答・バージョン・ID・各種設定の読み出しと LOWPOWER 復帰を
 // 試し、結果をシリアルに出す。全項目 OK なら true。
 bool wioE5RunProbe();
