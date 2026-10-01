@@ -13,6 +13,7 @@ XIAO ESP32S3 向けファームウェア（PlatformIO）。Grove - I2C Color Sen
 | ボード | Seeed XIAO ESP32S3 + Grove Shield for XIAO |
 | センサー | Grove - I2C Color Sensor V3.0（VEML6040、I2C `0x10`、D4=SDA / D5=SCL） |
 | LTE-M 版 | M5Stack SIM7080G CAT-M Unit（Grove UART、D6=TX / D7=RX）+ Grove 2-Coil Latching Relay（D0）で LTE-M の電源を送信時だけ入れる（#46） |
+| LoRaWAN 版（評価中・#40） | Grove Wio-E5（Grove UART、D6=TX / D7=RX、9600bps）。LTE-M とは排他 |
 | 閾値調整 | Grove - Rotary Angle Sensor（D1、#60） |
 | 電源 | LiPo → Shield の BAT パッド（JST）。ESP32-S3 と Grove の各ポートは Shield の 3.3V を共有する |
 
@@ -25,7 +26,9 @@ XIAO ESP32S3 向けファームウェア（PlatformIO）。Grove - I2C Color Sen
 | `main.cpp` | 起床〜判定〜送信〜Deep Sleep のサイクル、ブートモード | #6, #50 |
 | `sensor.cpp` | VEML6040 の初期化・R/G/B/W 読み取り | #5 |
 | `classify.cpp` | R−G 差による満／空／不明の判定 | #6 |
-| `transport.cpp` | Wi-Fi / LTE-M の接続・MQTT 送信・LTE-M の電源断 | #6, #76 |
+| `transport.cpp` | Wi-Fi / LTE-M / LoRaWAN の接続・送信・LTE-M の電源断 | #6, #76, #40 |
+| `wio_e5.cpp` | Grove Wio-E5 の AT コマンド送受信・プロビジョニング・Join・confirmed 送信・疎通確認 | #40 |
+| `lorawan_payload.cpp` | LoRaWAN の 18 バイトのコアペイロードのエンコード | #40 |
 | `lte_modem_tls.cpp` | SIM7080G 内蔵 TLS 用の証明書の投入 | #30 |
 | `sync_ledger.cpp` | 送信確認の記録（NVS）。送信するかどうかの判定の元 | #32 |
 | `history_log.cpp` | 毎サイクルの判定結果の履歴（NVS） | #47 |
@@ -87,8 +90,12 @@ XIAO ESP32S3 向けファームウェア（PlatformIO）。Grove - I2C Color Sen
 | `xiao-s3-aws-lte` / `xiao-s3-aws-lte-debug` | LTE-M・リレーなし（毎サイクル送信） |
 | `xiao-s3-aws` / `xiao-s3-aws-debug` | Wi-Fi + AWS IoT Core（TLS） |
 | `xiao-s3` / `xiao-s3-debug` | Wi-Fi + ローカル MQTT（Mosquitto） |
+| `xiao-s3-lorawan` | LoRaWAN 版（Grove Wio-E5、状態変化時のみ送信、#40） |
+| `xiao-s3-lorawan-pot` | LoRaWAN 版 + ポテンショメーター（#60） |
+| `xiao-s3-lorawan-debug` | LoRaWAN 版の Deep Sleep なし版 |
 | `xiao-s3-lte-test` | LTE-M モジュール単体の接続確認（センサー・MQTT なし） |
 | `xiao-s3-lte-poweroff-test` | LTE-M の電源断・復帰の検証（#25） |
+| `xiao-s3-lorawan-test` | Grove Wio-E5 単体の AT 疎通確認・Join・1パケット送信（手動コマンド、Deep Sleep なし、#40） |
 
 リレーやポテンショメーターを配線していない機体に、それらが有効な env を書き込まないこと。
 
@@ -137,6 +144,43 @@ pio device monitor -e xiao-s3-lte-test
 - `FAIL: no AT response` … Grove UART ケーブル、モジュール電源、TX/RX
 - `FAIL: not registered` … SIM、アンテナ、電波
 - `FAIL: GPRS attach failed` … APN
+
+### LoRaWAN 版（#40）
+
+```bash
+pio run -e xiao-s3-lorawan -t upload
+```
+
+- `secrets.h` に `PSS_LORAWAN_APP_EUI` / `PSS_LORAWAN_APP_KEY` を書く（AWS IoT Core for LoRaWAN の Wireless Device の値。名前は deviceId に揃える）。LTE-M 版の `secrets.h` を流用する場合は、`PSS_LTE_ENABLED` を外す（LoRaWAN env と排他で、ビルドエラーになる）
+- 送信するかの判定（状態変化時、pending の再送、heartbeat）とブートモードは LTE-M 版と同じ。送るのは JSON ではなく 18 バイトのコアペイロード（status、RGBW、threshold、bootCount、resetReason など。`lorawan/parking-status/uplink` に届く）
+- Deep Sleep のタイマー以外で起動した後の最初の接続で、Wio-E5 を JP920 / OTAA に設定してから Join する。Join 済みなら毎回の `AT+JOIN` はすぐ返る
+- threshold と RGBW はペイロードでクラウドにも届く。ポテンショメーターの生の値（`potRaw`）はシリアルのサンプル行（`boot-mode slot=… sample r=… g=… b=… w=… status=… threshold=… potRaw=…`）と JSON ログで確認する。現場では、PC につないだ状態で電源を入れ、ブートモード中のシリアルを記録する（モニタを先に起動しておく）
+- 詳細（ペイロード、時間予算、エラーコード）は [docs/40-lorawan-design.md](../docs/40-lorawan-design.md)
+
+### LoRaWAN（Wio-E5）の単体確認（#40）
+
+```bash
+pio run -e xiao-s3-lorawan-test -t upload
+pio device monitor -e xiao-s3-lorawan-test --echo
+```
+
+起動すると AT 応答・`AT+VER`・DevEUI・現在の設定（MODE / DR / ADR / CLASS / RETRY / PORT）を読み、`AT+LOWPOWER` から復帰できるかを試す。AT 応答・VER・DevEUI・スリープと復帰がすべて OK なら `RESULT: PASS`。
+
+- `FAIL no AT response` … Wio-E5 の接続（ケーブルが抜けていると文字化けが出ることがある）、TX/RX、ボーレート（9600）
+
+probe の後は USB シリアルと Wio-E5 の素通しになり、AT コマンドを手で打てる。`~` に続けて1文字送ると、テスト用のコマンドを実行する。
+
+| コマンド | 内容 |
+|---|---|
+| `~p` | probe をやり直す |
+| `~c` | プロビジョニング（JP920 / LWOTAA / RETRY 1 / PORT 1、`secrets.h` の AppEUI / AppKey を書き込む）。**送信する前に必ず1回実行する**（工場出荷時は EU868） |
+| `~j` | `AT+JOIN`（Join 済みなら `Joined already`） |
+| `~s` | センサー値を 18 バイトのコアペイロードにして confirmed 送信 |
+
+`secrets.h` に `PSS_LORAWAN_APP_EUI` / `PSS_LORAWAN_APP_KEY` を設定する（AWS IoT Core for LoRaWAN の Wireless Device の値。名前は deviceId に揃える）。LTE-M 版の `secrets.h` を流用する場合は、`PSS_LTE_ENABLED` を `secrets.h` から外す（LoRaWAN env と排他で、ビルドエラーになる）。設定値、ペイロード、届くメッセージの形式は [docs/40-lorawan-design.md](../docs/40-lorawan-design.md)、デコードは [tools/lorawan](../tools/lorawan/README.md)。
+
+- **AppKey を手で入力するときは、ログを保存しない**（`tee` 等でファイルに残さない）。Wio-E5 の応答にもキーが含まれることがある
+- ファームが出す AT ログでは `AT+KEY` と `+KEY:` を伏せ字にしている
 
 ### ローカル Mosquitto（Wi-Fi）
 

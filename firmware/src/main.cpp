@@ -12,11 +12,13 @@
 #include "config.h"
 #include "device_id.h"
 #include "history_log.h"
+#include "lorawan_payload.h"
 #include "potentiometer.h"
 #include "relay.h"
 #include "sensor.h"
 #include "sync_ledger.h"
 #include "transport.h"
+#include "wio_e5.h"
 
 namespace {
 
@@ -105,6 +107,41 @@ const char* resetReasonToString(esp_reset_reason_t reason) {
   }
 }
 
+// #40: LoRaWAN のペイロード用。上の文字列と同じ並び（lorawan_payload.h）。
+LoRaWanWakeCause wakeCauseCode(esp_sleep_wakeup_cause_t cause) {
+  switch (cause) {
+    case ESP_SLEEP_WAKEUP_TIMER:
+      return LoRaWanWakeCause::kTimer;
+    case ESP_SLEEP_WAKEUP_UNDEFINED:
+      return LoRaWanWakeCause::kPowerOn;
+    default:
+      return LoRaWanWakeCause::kOther;
+  }
+}
+
+LoRaWanResetReason resetReasonCode(esp_reset_reason_t reason) {
+  switch (reason) {
+    case ESP_RST_POWERON:
+      return LoRaWanResetReason::kPowerOn;
+    case ESP_RST_BROWNOUT:
+      return LoRaWanResetReason::kBrownout;
+    case ESP_RST_DEEPSLEEP:
+      return LoRaWanResetReason::kDeepSleep;
+    case ESP_RST_SW:
+      return LoRaWanResetReason::kSoftware;
+    case ESP_RST_PANIC:
+      return LoRaWanResetReason::kPanic;
+    case ESP_RST_TASK_WDT:
+      return LoRaWanResetReason::kTaskWdt;
+    case ESP_RST_INT_WDT:
+      return LoRaWanResetReason::kIntWdt;
+    case ESP_RST_WDT:
+      return LoRaWanResetReason::kWdt;
+    default:
+      return LoRaWanResetReason::kOther;
+  }
+}
+
 bool formatTimestamp(char* out, size_t outSize) {
   time_t now = time(nullptr);
   if (now <= 1700000000) {
@@ -142,6 +179,11 @@ void sleepNow(const char* reason, uint32_t activeMs) {
 
   esp_sleep_enable_timer_wakeup(
       static_cast<uint64_t>(config::kSleepSeconds) * 1000000ULL);
+  if (config::kLoRaWanEnabled) {
+    // #40: 復帰時の ROM ログを止める。GPIO43（UART0 TX）は Wio-E5 の RX につながって
+    // いて、ログで Wio-E5 が LOWPOWER から起こされるため。電源投入時のログは止まらない。
+    esp_deep_sleep_disable_rom_logging();
+  }
   esp_deep_sleep_start();
 }
 
@@ -210,6 +252,13 @@ void buildPayload(const RawSample& sample, ParkingStatus status,
   network["transportAttempts"] = transportMetrics.transportAttempts;
   network["mqttQos"] = config::kMqttQos;
   network["publishAttempts"] = publishAttempts;
+  if (transportMetrics.transport == TransportKind::kLoRaWan) {
+    network["loraAlreadyJoined"] = transportMetrics.loraAlreadyJoined;
+    if (transportMetrics.hasLoRaRx) {
+      network["loraRssi"] = transportMetrics.loraRssi;
+      network["loraSnr"] = transportMetrics.loraSnr;
+    }
+  }
 
   // Delivery/diagnostic ledger reflecting state up to the previous cycle.
   // deliveryConfirmed is intentionally omitted: QoS1 cannot rewrite an
@@ -239,6 +288,18 @@ void buildPayload(const RawSample& sample, ParkingStatus status,
   serializeJson(doc, out, outSize);
 }
 
+// #40: 送信理由（LoRaWAN のコアペイロードに載せる）。mustPublish() と同じ判定順。
+SendReason sendReasonFor(ParkingStatus status) {
+  const SyncLedger& ledger = syncLedger();
+  if (ledger.pendingValid) {
+    return SendReason::kPendingRetry;  // retry the undelivered observation this cycle
+  }
+  if (status != ledger.lastConfirmedStatus) {
+    return SendReason::kStateChange;
+  }
+  return SendReason::kHeartbeat;
+}
+
 // PoC keeps full transmission (always publish) unless PSS_CHANGE_ONLY_SEND is
 // enabled (#25/#46), in which case LTE-M is only powered up on state change,
 // undelivered retry, or heartbeat — see docs/25-low-power-phase2-hardware-cutoff.md §2.5.
@@ -248,14 +309,33 @@ bool mustPublish(ParkingStatus status) {
     return true;  // PoC: full transmission every cycle
   }
 
+  if (sendReasonFor(status) != SendReason::kHeartbeat) {
+    return true;  // pending retry or state change
+  }
+  return syncLedger().skippedSinceConfirmed >= config::kHeartbeatCycles;
+}
+
+// #40: LoRaWAN は JSON を送れない（数百バイト。AS923 の低い DR に入らない）ため、同じ観測値を
+// コアペイロードにして送る。JSON は引き続きシリアルログ用に作る。
+bool publishLoRaWanCore(const RawSample& sample, ParkingStatus status,
+                        const BootModeSendInfo& bootModeInfo, const PotReading& potReading,
+                        TransportMetrics& metrics) {
   const SyncLedger& ledger = syncLedger();
-  if (ledger.pendingValid) {
-    return true;  // retry the undelivered observation this cycle
-  }
-  if (status != ledger.lastConfirmedStatus) {
-    return true;  // state change
-  }
-  return ledger.skippedSinceConfirmed >= config::kHeartbeatCycles;
+  LoRaWanUplinkInput in{};
+  in.status = status;
+  in.reason = bootModeInfo.active ? SendReason::kBootMode : sendReasonFor(status);
+  in.coldBoot = esp_reset_reason() == ESP_RST_POWERON;
+  in.raw = sample;
+  in.prevOutcome = ledger.prevOutcome;
+  in.prevAttempts = ledger.prevAttempts;
+  in.bootSlot = bootModeInfo.slot;
+  in.prevActiveMs = ledger.prevActiveMs;
+  in.threshold = potReading.threshold;
+  in.bootCount = bootCount;
+  in.resetReasonCode = static_cast<uint8_t>(resetReasonCode(esp_reset_reason()));
+  in.wakeCauseCode = static_cast<uint8_t>(wakeCauseCode(esp_sleep_get_wakeup_cause()));
+  const LoRaWanCorePayload payload = encodeLoRaWanCore(in);
+  return publishUplinkConfirmed(payload.data(), payload.size(), metrics);
 }
 
 // Publish the current observation with bounded retries inside the publish-phase
@@ -300,7 +380,10 @@ bool publishWithRetry(const RawSample& sample, ParkingStatus status,
       continue;
     }
 
-    if (publishTelemetryConfirmed(payload, metrics)) {
+    const bool confirmed = activeTransportKind() == TransportKind::kLoRaWan
+                               ? publishLoRaWanCore(sample, status, bootModeInfo, potReading, metrics)
+                               : publishTelemetryConfirmed(payload, metrics);
+    if (confirmed) {
       result.confirmed = true;
       return true;
     }
@@ -321,6 +404,76 @@ void runLteTest() {
 
   Serial.println("retry in 30s...");
   delay(30000);
+}
+
+// #40: 起動後に1回 probe し、以降は USB シリアルと Wio-E5 を素通しにする
+// （AT コマンドを手で打てる）。'~' + 1文字でテスト用コマンドを実行する:
+//   ~p probe / ~c 電源投入時のプロビジョニング / ~j AT+JOIN / ~s センサー値を
+//   コアペイロードにして confirmed 送信
+void runLoRaWanTestCommand(char cmd) {
+  switch (cmd) {
+    case 'p':
+      wioE5RunProbe();
+      break;
+    case 'c':
+      wioE5ProvisionOtaa(config::kLoRaWanAppEui, config::kLoRaWanAppKey,
+                         kLoRaWanCoreFPort);
+      break;
+    case 'j':
+      wioE5Join(15000);
+      break;
+    case 's': {
+      LoRaWanUplinkInput in{};
+      in.coldBoot = esp_reset_reason() == ESP_RST_POWERON;
+      in.threshold = config::kStatusThreshold;
+      in.bootCount = bootCount;
+      in.resetReasonCode = static_cast<uint8_t>(resetReasonCode(esp_reset_reason()));
+      in.wakeCauseCode = static_cast<uint8_t>(wakeCauseCode(esp_sleep_get_wakeup_cause()));
+      if (initSensor() && readSensor(in.raw)) {
+        in.status = classifyStatus(in.raw, config::kStatusThreshold);
+      }
+      const LoRaWanCorePayload payload = encodeLoRaWanCore(in);
+      char hex[kLoRaWanCorePayloadSize * 2 + 1];
+      loRaWanToHex(payload.data(), payload.size(), hex, sizeof(hex));
+      Serial.printf("lorawan: status=%s raw=%u,%u,%u,%u threshold=%d payload=%s\n",
+                    statusToString(in.status), in.raw.red, in.raw.green,
+                    in.raw.blue, in.raw.white, in.threshold, hex);
+      wioE5SendConfirmedHex(hex, 15000);
+      break;
+    }
+    default:
+      Serial.printf("unknown command ~%c (p/c/j/s)\n", cmd);
+      break;
+  }
+}
+
+void runLoRaWanTest() {
+  static bool probed = false;
+  if (!probed) {
+    Serial.printf("board=%s lorawan-test boot=%lu reset=%s\n", BOARD_NAME,
+                  static_cast<unsigned long>(bootCount),
+                  resetReasonToString(esp_reset_reason()));
+    wioE5Begin(Serial1, LORAWAN_UART_RX, LORAWAN_UART_TX, LORAWAN_UART_BAUD);
+    wioE5RunProbe();
+    Serial.println("passthrough: type AT commands (~p probe, ~c provision, ~j join, ~s send)");
+    probed = true;
+  }
+  if (Serial.peek() == '~') {
+    Serial.read();
+    const uint32_t start = millis();
+    while (Serial.available() <= 0 && millis() - start < 500) {
+      delay(1);
+    }
+    const char cmd = Serial.available() > 0 ? static_cast<char>(Serial.read()) : 'p';
+    delay(20);
+    while (Serial.available() > 0) {
+      Serial.read();  // 改行を捨てる
+    }
+    runLoRaWanTestCommand(cmd);
+    return;
+  }
+  wioE5PassthroughPoll();
+  delay(1);
 }
 
 void runLtePoweroffTest() {
@@ -725,6 +878,7 @@ void setup() {
     consecutiveTimerWakes = 0;
     lastSleepEntryUs = 0;
     resetLteRadioCache();
+    resetLoRaWanCache();
   }
   // #47: dump on a non-timer wake (power-on / USB reset) — the moment
   // someone is plugged in via USB during normal (timer-wake) deep-sleep
@@ -741,7 +895,7 @@ void setup() {
                   (long long)wakeDiag.oversleepMs);
   }
 
-#if !PSS_LTE_POWEROFF_TEST_MODE && !PSS_LTE_TEST_MODE
+#if !PSS_LTE_POWEROFF_TEST_MODE && !PSS_LTE_TEST_MODE && !PSS_LORAWAN_TEST_MODE
   // #50: fires at most once per physical reset — setup() itself is only
   // ever called once per reset by the Arduino/ESP32 framework (loop() is
   // what repeats, including in the PSS_DISABLE_DEEP_SLEEP debug build where
@@ -759,6 +913,8 @@ void loop() {
   runLtePoweroffTest();
 #elif PSS_LTE_TEST_MODE
   runLteTest();
+#elif PSS_LORAWAN_TEST_MODE
+  runLoRaWanTest();
 #else
   runCycle();
 #endif

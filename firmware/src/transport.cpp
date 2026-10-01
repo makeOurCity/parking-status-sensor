@@ -21,9 +21,17 @@
 #include "board.h"
 #include "config.h"
 #include "device_id.h"
+#include "lorawan_payload.h"
+#include "wio_e5.h"
 
 RTC_DATA_ATTR static bool ltePlanDReady = false;
 static bool lteUartStarted = false;
+// #40: この起動でプロビジョニング（JP920 等）に成功したか。成功するまで Join・送信
+// しない（工場出荷時の EU868 のまま電波を出さないため）。Deep Sleep をまたいで保持し、
+// タイマー以外の起動では resetLoRaWanCache() で戻す。
+RTC_DATA_ATTR static bool loRaWanProvisioned = false;
+static bool loRaWanJoined = false;
+static WioE5Result loRaWanLastResult = WioE5Result::kOk;
 
 namespace {
 
@@ -560,7 +568,46 @@ bool connectLte(TransportMetrics& metrics) {
   return true;
 }
 
+void beginLoRaWanUart() {
+  if (!wioE5Started()) {
+    wioE5Begin(Serial1, LORAWAN_UART_RX, LORAWAN_UART_TX, LORAWAN_UART_BAUD);
+  }
+}
+
+// 送信するサイクルで毎回 AT+JOIN を送る。Join 済みなら Wio-E5 は無線を使わずに
+// "Joined already" を返す（約 85ms）ので、Join 状態を ESP32 側に持たない。
+bool connectLoRaWan(TransportMetrics& metrics) {
+  beginLoRaWanUart();
+  const uint32_t start = millis();
+  if (!loRaWanProvisioned) {
+    loRaWanProvisioned = wioE5ProvisionOtaa(config::kLoRaWanAppEui,
+                                            config::kLoRaWanAppKey, kLoRaWanCoreFPort);
+    if (!loRaWanProvisioned) {
+      Serial.println("LoRaWAN provisioning failed; not joining");
+      loRaWanLastResult = WioE5Result::kError;
+      loRaWanJoined = false;
+      return false;
+    }
+  }
+
+  WioE5JoinInfo join{};
+  loRaWanLastResult = wioE5Join(config::kLoRaWanJoinTimeoutMs, &join);
+  loRaWanJoined = loRaWanLastResult == WioE5Result::kOk;
+  metrics.networkConnectMs = millis() - start;
+  metrics.loraAlreadyJoined = join.alreadyJoined;
+  if (!loRaWanJoined) {
+    return false;
+  }
+  metrics.transport = TransportKind::kLoRaWan;
+  activeTransport = TransportKind::kLoRaWan;
+  return true;
+}
+
 bool reconnectTransport(TransportMetrics& metrics) {
+  if (activeTransport == TransportKind::kLoRaWan) {
+    return connectLoRaWan(metrics);
+  }
+
   if (activeTransport == TransportKind::kWifi &&
       WiFi.status() == WL_CONNECTED && activeMqtt == &wifiMqtt) {
     if (activeMqtt->connected()) {
@@ -598,12 +645,22 @@ void resetLteRadioCache() {
   ltePlanDReady = false;
 }
 
+void resetLoRaWanCache() {
+  loRaWanProvisioned = false;
+}
+
 bool connectTransport(TransportMetrics& metrics) {
   const uint8_t savedAttempts = metrics.transportAttempts;
   metrics = TransportMetrics{};
   metrics.transportAttempts = savedAttempts;
   activeMqtt = nullptr;
   activeTransport = TransportKind::kNone;
+
+  // #40: LoRaWAN env は LoRaWAN のみ（README §4.3 の LoRaWAN > LTE > Wi-Fi の
+  // フォールバックは将来。LTE とは Grove UART を共有するため同時には有効にできない）。
+  if (config::kLoRaWanEnabled) {
+    return connectLoRaWan(metrics);
+  }
 
   const bool wifiConfigured = hasText(config::kWifiSsid);
   if (!config::kLteOnly && wifiConfigured && connectWifi(metrics)) {
@@ -786,7 +843,35 @@ bool publishTelemetryConfirmed(const char* payload, TransportMetrics& metrics) {
   return confirmed;
 }
 
+bool publishUplinkConfirmed(const uint8_t* data, size_t len, TransportMetrics& metrics) {
+  if (activeTransport != TransportKind::kLoRaWan || !loRaWanJoined) {
+    Serial.println("LoRaWAN is not joined");
+    return false;
+  }
+  char hex[kLoRaWanCorePayloadSize * 2 + 1];
+  if (len > kLoRaWanCorePayloadSize) {
+    Serial.printf("LoRaWAN payload too long: %u\n", static_cast<unsigned>(len));
+    return false;
+  }
+  loRaWanToHex(data, len, hex, sizeof(hex));
+
+  WioE5UplinkInfo info{};
+  loRaWanLastResult =
+      wioE5SendConfirmedHex(hex, config::kLoRaWanUplinkTimeoutMs, &info);
+  if (loRaWanLastResult == WioE5Result::kNotJoined) {
+    loRaWanJoined = false;  // 次の試行の reconnectActiveTransport() で Join し直す
+  }
+  metrics.publishMs = info.elapsedMs;
+  metrics.hasLoRaRx = info.hasRx;
+  metrics.loraRssi = info.rssi;
+  metrics.loraSnr = info.snr;
+  return loRaWanLastResult == WioE5Result::kOk;
+}
+
 int activeMqttState() {
+  if (activeTransport == TransportKind::kLoRaWan) {
+    return loRaWanJoined ? 0 : -2;  // ブートモードの「接続を使い回すか」の判定用
+  }
   if (activeMqtt == nullptr) {
     return -1;
   }
@@ -794,6 +879,12 @@ int activeMqttState() {
 }
 
 int activeMqttLastError() {
+  if (config::kLoRaWanEnabled) {
+    // #40: sync ledger の prevMqttError に入れる。-100 - WioE5Result（ok は 0）。
+    return loRaWanLastResult == WioE5Result::kOk
+               ? 0
+               : -100 - static_cast<int>(loRaWanLastResult);
+  }
   if (activeMqtt == nullptr) {
     return 0;
   }
@@ -893,6 +984,20 @@ bool probeLteModemAt(uint32_t timeoutMs) {
 void disconnectTransport() {
   wifiMqtt.disconnect();
 
+  if (config::kLoRaWanEnabled) {
+    // #40: 送信しなかったサイクルでも毎回 Wio-E5 を AT+LOWPOWER で寝かせる。
+    // Deep Sleep 復帰時の ROM ログ（GPIO43 = Wio-E5 RX）などで起こされたまま
+    // 次のサイクルまで待機電流が増えるのを防ぐ（docs/40-lorawan-design.md §6）。
+    beginLoRaWanUart();
+    const bool slept = wioE5Wake(3) && wioE5Sleep();
+    if (!slept) {
+      Serial.println("LoRaWAN: Wio-E5 did not enter LOWPOWER");
+    }
+    wioE5End();
+    activeTransport = TransportKind::kNone;
+    return;
+  }
+
   if (activeTransport == TransportKind::kWifi) {
     wifiClient.stop();
     wifiSecureClient.stop();
@@ -930,6 +1035,8 @@ const char* transportName(TransportKind transport) {
       return "wifi";
     case TransportKind::kLte:
       return "lte";
+    case TransportKind::kLoRaWan:
+      return "lorawan";
     case TransportKind::kNone:
     default:
       return "none";

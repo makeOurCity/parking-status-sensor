@@ -132,6 +132,41 @@
 #define PSS_LTE_ONLY 0
 #endif
 
+// #40: Grove Wio-E5（LoRaWAN）。LTE-M と同じ Grove UART ポートを使うため排他。
+#ifndef PSS_LORAWAN_ENABLED
+#define PSS_LORAWAN_ENABLED 0
+#endif
+
+// Debug: Wio-E5 の AT 疎通確認 + USB シリアル素通し（#40 PR1）。
+#ifndef PSS_LORAWAN_TEST_MODE
+#define PSS_LORAWAN_TEST_MODE 0
+#endif
+
+// 1 回の AT+JOIN / AT+CMSGHEX の待ち上限（実測: Join 約6s、ACK 付き送信 約2s。
+// docs/40-lorawan-design.md §4）。リトライ回数と予算は PSS_TRANSPORT_MAX_ATTEMPTS 等で。
+#ifndef PSS_LORAWAN_JOIN_TIMEOUT_MS
+#define PSS_LORAWAN_JOIN_TIMEOUT_MS 12000
+#endif
+
+#ifndef PSS_LORAWAN_UPLINK_TIMEOUT_MS
+#define PSS_LORAWAN_UPLINK_TIMEOUT_MS 8000
+#endif
+
+// OTAA の JoinEUI(AppEUI) / AppKey（16 進文字列、secrets.h で設定）。
+// 空なら Wio-E5 に保存済みの値を使う（電源投入時のプロビジョニングで書き込まない）。
+#ifndef PSS_LORAWAN_APP_EUI
+#define PSS_LORAWAN_APP_EUI ""
+#endif
+
+#ifndef PSS_LORAWAN_APP_KEY
+#define PSS_LORAWAN_APP_KEY ""
+#endif
+
+static_assert(!(PSS_LORAWAN_ENABLED && PSS_LTE_ENABLED),
+              "LoRaWAN and LTE-M share the Grove UART port (check PSS_LTE_ENABLED in secrets.h)");
+static_assert(!PSS_LORAWAN_TEST_MODE || PSS_LORAWAN_ENABLED,
+              "PSS_LORAWAN_TEST_MODE requires PSS_LORAWAN_ENABLED");
+
 // Debug: skip modem poweroff between cycles (measure warm reconnect only).
 #ifndef PSS_LTE_KEEP_MODEM
 #define PSS_LTE_KEEP_MODEM 0
@@ -312,6 +347,11 @@ constexpr bool kLteTestMode = PSS_LTE_TEST_MODE;
 constexpr bool kLtePoweroffTestMode = PSS_LTE_POWEROFF_TEST_MODE;
 constexpr uint32_t kLtePoweroffObserveMs = PSS_LTE_POWEROFF_OBSERVE_MS;
 constexpr bool kLteOnly = PSS_LTE_ONLY;
+constexpr bool kLoRaWanEnabled = PSS_LORAWAN_ENABLED;
+constexpr uint32_t kLoRaWanJoinTimeoutMs = PSS_LORAWAN_JOIN_TIMEOUT_MS;
+constexpr uint32_t kLoRaWanUplinkTimeoutMs = PSS_LORAWAN_UPLINK_TIMEOUT_MS;
+constexpr const char* kLoRaWanAppEui = PSS_LORAWAN_APP_EUI;
+constexpr const char* kLoRaWanAppKey = PSS_LORAWAN_APP_KEY;
 constexpr bool kLteKeepModem = PSS_LTE_KEEP_MODEM;
 constexpr bool kLteModemTls = PSS_LTE_MODEM_TLS;
 
