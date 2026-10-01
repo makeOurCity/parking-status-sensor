@@ -9,7 +9,7 @@
 #include "sensor.h"
 #include "sync_ledger.h"
 
-// #40: LoRaWAN アップリンクのペイロード（fPort 1, ver 1, 固定 13 バイト）。
+// #40: LoRaWAN アップリンクのペイロード（fPort 1, ver 1, 固定 18 バイト）。
 // バイト配置は docs/40-lorawan-design.md §3。デコーダは tools/lorawan/decode.py。
 // deviceId / timestamp は載せない（クラウド側で Wireless Device 名と受信時刻から補う）。
 
@@ -18,7 +18,7 @@
 // docs/40-lorawan-design.md §3）。dwell が有効なネットワークでは DR2 の上限は 11 バイトで、
 // その場合 DR2 の送信は Wio-E5 が "Length error" で拒否する。
 constexpr size_t kAs923Dr2MaxPayload = 51;
-constexpr size_t kLoRaWanCorePayloadSize = 13;
+constexpr size_t kLoRaWanCorePayloadSize = 18;
 static_assert(kLoRaWanCorePayloadSize <= kAs923Dr2MaxPayload,
               "core uplink must fit AS923 DR2 (dwell time off)");
 
@@ -42,6 +42,29 @@ struct LoRaWanUplinkInput {
   uint8_t bootSlot = 0;       // 0 = 通常サイクル、1-7 = ブートモードの何回目か
   uint32_t prevActiveMs = 0;  // 250ms 単位、255（63.75s）で頭打ち
   int threshold = 0;          // 判定閾値（ポテンショメーター有効時は算出値）。0-65535 に収める
+  uint32_t bootCount = 0;     // RTC の bootCount（LTE-M 版 JSON の power.bootCount と同じ）
+  uint8_t resetReasonCode = 0;  // LoRaWanResetReason（4bit）
+  uint8_t wakeCauseCode = 0;    // LoRaWanWakeCause（4bit）
+};
+
+// power.resetReason / power.wakeCause の文字列（main.cpp の resetReasonToString /
+// wakeCauseToString）と同じ並び。デコーダ（tools/lorawan/decode.py）も同じ表を持つ。
+enum class LoRaWanResetReason : uint8_t {
+  kOther = 0,
+  kPowerOn,
+  kBrownout,
+  kDeepSleep,
+  kSoftware,
+  kPanic,
+  kTaskWdt,
+  kIntWdt,
+  kWdt,
+};
+
+enum class LoRaWanWakeCause : uint8_t {
+  kOther = 0,
+  kTimer,
+  kPowerOn,
 };
 
 using LoRaWanCorePayload = std::array<uint8_t, kLoRaWanCorePayloadSize>;

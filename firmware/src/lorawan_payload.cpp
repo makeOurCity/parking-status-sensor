@@ -29,6 +29,11 @@ LoRaWanCorePayload encodeLoRaWanCore(const LoRaWanUplinkInput& in) {
   out[10] = saturate(in.prevActiveMs / 250, 255);
   const int threshold = in.threshold < 0 ? 0 : (in.threshold > 0xFFFF ? 0xFFFF : in.threshold);
   putU16(&out[11], static_cast<uint16_t>(threshold));
+  out[13] = static_cast<uint8_t>(in.bootCount >> 24);
+  out[14] = static_cast<uint8_t>(in.bootCount >> 16);
+  out[15] = static_cast<uint8_t>(in.bootCount >> 8);
+  out[16] = static_cast<uint8_t>(in.bootCount & 0xFF);
+  out[17] = static_cast<uint8_t>((in.wakeCauseCode & 0xF) << 4 | (in.resetReasonCode & 0xF));
   return out;
 }
 

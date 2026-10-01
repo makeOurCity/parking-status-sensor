@@ -48,7 +48,7 @@ Wio-E5 ──LoRaWAN(JP920/AS923-1)──▶ SenseCAP M2 (M2-AS923, Basics Stati
 
 LBT（送信前のキャリアセンス）は Wio-E5 に内蔵されていて、しきい値は `AT+LW=THLD` で変えられる。JP920 プランで具体的にどう動くか（キャリアセンスの時間など）は、仕様書に記載がない。
 
-## 3. コアペイロード（fPort 1、ver 1、固定 13 バイト）
+## 3. コアペイロード（fPort 1、ver 1、固定 18 バイト）
 
 JSON（数百バイト）は LoRaWAN では送れない。そのため、必要な項目だけを固定長のバイナリにして送る。
 
@@ -56,7 +56,7 @@ JSON（数百バイト）は LoRaWAN では送れない。そのため、必要�
 
 AS923 では、1回の送信を 400ms 以内に抑える UplinkDwellTime という設定がある。
 
-- **有効な場合**: DR2（SF10）の上限は 11 バイト（仕様書 Table 3-20）。13 バイトだと送信時間が約 412ms になり、400ms を超える
+- **有効な場合**: DR2（SF10）の上限は 11 バイト（仕様書 Table 3-20）。13 バイトで約 412ms、18 バイトで約 452ms になり、400ms を超える
 - **無効な場合**: DR2 の上限は 51 バイト
 
 この設定は、ネットワークが TxParamSetupReq で指定する。実機で確認した結果は次のとおり。
@@ -66,7 +66,7 @@ AS923 では、1回の送信を 400ms 以内に抑える UplinkDwellTime とい�
 | プロビジョニング直後 | `OFF, OFF, 3` |
 | Join と送信3回の後 | `OFF, OFF, 0` |
 
-AWS IoT Core for LoRaWAN（AS923-1）は、MaxEIRP を書き換えたうえで **dwell time を OFF と明示的に指定**してくる。そのため、threshold を載せた 13 バイトにした（`static_assert` で DR2 の 51 バイト以内を担保）。
+AWS IoT Core for LoRaWAN（AS923-1）は、MaxEIRP を書き換えたうえで **dwell time を OFF と明示的に指定**してくる。そのため、threshold と、iOS ログビューアが使う `power.bootCount` / `resetReason` / `wakeCause` を載せた 18 バイトにした（`static_assert` で DR2 の 51 バイト以内を担保）。
 
 dwell time が有効なネットワークに移した場合、DR2 での送信は Wio-E5 が `Length error` で拒否する。ファームはこれをエラー（-105）として扱う。
 
@@ -74,9 +74,9 @@ dwell time が有効なネットワークに移した場合、DR2 での送信�
 
 - 日本の 920MHz 帯では、キャリアセンスの時間によって1回の送信時間の上限が変わる（5ms 以上なら 4 秒、128µs なら 400ms と理解している）
 - Wio-E5 の JP920 のキャリアセンスの時間は、仕様書に記載がない
-- DR2 で 400ms を超えるのは 13 バイトにしたときだけではない。11 バイトでも、MAC コマンドの応答（FOpts）が相乗りすると超える。実測で `FOptLen: 2` のときに約 412ms になっていた
+- DR2 で 400ms を超えるのは、11 バイトを超えたときだけではない。11 バイトでも、MAC コマンドの応答（FOpts）が相乗りすると超える。実測で `FOptLen: 2` のときに約 412ms になっていた
 - 技適はモジュールの送信制御も含めて認証されているので、モジュールが許す範囲は適合していると考えられるが、Seeed に確認する
-- ゲートウェイの近くでは ADR が DR5（SF7）に上げるため、13 バイトでも送信時間は約 60ms
+- ゲートウェイの近くでは ADR が DR5（SF7）に上げるため、18 バイトでも送信時間は約 72ms
 
 | byte | bit | 内容 |
 |---|---|---|
@@ -91,6 +91,11 @@ dwell time が有効なネットワークに移した場合、DR2 での送信�
 | 2–9 | | raw R / G / B / W（VEML6040、各 uint16 ビッグエンディアン） |
 | 10 | | 前サイクルの起床時間（250ms 単位、255 = 63.75s で頭打ち） |
 | 11–12 | | 判定閾値 threshold（uint16 ビッグエンディアン、0–65535 に収める）。ポテンショメーター有効時は算出値（30–15000） |
+| 13–16 | | bootCount（uint32 ビッグエンディアン。RTC の起床回数で、LTE-M 版 JSON の `power.bootCount` と同じ。電源投入で 1 から） |
+| 17 | 7:4 | wakeCause（0 other / 1 timer / 2 power_on。`wakeCauseToString` と同じ文字列） |
+| 17 | 3:0 | resetReason（0 other / 1 power_on / 2 brownout / 3 deep_sleep / 4 software / 5 panic / 6 task_wdt / 7 int_wdt / 8 wdt。`resetReasonToString` と同じ文字列） |
+
+デコーダは bootCount / resetReason / wakeCause を、LTE-M 版 JSON と同じ `power` オブジェクトの形（`{"bootCount", "resetReason", "wakeCause"}`）で出す。クラウド側では、これを LTE-M 版と同じ形の JSON に揃えやすくするため（iOS ログビューアはブート回数とリセット検知にこれを使う）。
 
 載せないもの:
 
@@ -110,7 +115,7 @@ dwell time が有効なネットワークに移した場合、DR2 での送信�
 |---|---|---|
 | `AT+JOIN`（未 Join） | `+JOIN: Network joined` → `NetID` / `DevAddr` → `Done` | 約 6.0s |
 | `AT+JOIN`（Join 済み） | `+JOIN: Joined already`（無線を使わない） | 約 85ms |
-| `AT+CMSGHEX`（confirmed、11B（13B 化の前）、DR2） | `Wait ACK` → `ACK Received` → `RXWIN1, RSSI -24, SNR 7.0` → `Done` | 約 1.9s |
+| `AT+CMSGHEX`（confirmed、11B（18B 化の前）、DR2） | `Wait ACK` → `ACK Received` → `RXWIN1, RSSI -24, SNR 7.0` → `Done` | 約 1.9s |
 | `AT+LOWPOWER` → 任意の入力 | `+LOWPOWER: SLEEP` → `+LOWPOWER: WAKEUP`（最初の `AT` は捨てられる） | — |
 
 - Join 済みなら `AT+JOIN` は無線を使わずに返る。そのため Join 済みかを RTC に覚えず、**送信するサイクルで毎回 `AT+JOIN` を送る**

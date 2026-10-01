@@ -107,6 +107,41 @@ const char* resetReasonToString(esp_reset_reason_t reason) {
   }
 }
 
+// #40: LoRaWAN のペイロード用。上の文字列と同じ並び（lorawan_payload.h）。
+LoRaWanWakeCause wakeCauseCode(esp_sleep_wakeup_cause_t cause) {
+  switch (cause) {
+    case ESP_SLEEP_WAKEUP_TIMER:
+      return LoRaWanWakeCause::kTimer;
+    case ESP_SLEEP_WAKEUP_UNDEFINED:
+      return LoRaWanWakeCause::kPowerOn;
+    default:
+      return LoRaWanWakeCause::kOther;
+  }
+}
+
+LoRaWanResetReason resetReasonCode(esp_reset_reason_t reason) {
+  switch (reason) {
+    case ESP_RST_POWERON:
+      return LoRaWanResetReason::kPowerOn;
+    case ESP_RST_BROWNOUT:
+      return LoRaWanResetReason::kBrownout;
+    case ESP_RST_DEEPSLEEP:
+      return LoRaWanResetReason::kDeepSleep;
+    case ESP_RST_SW:
+      return LoRaWanResetReason::kSoftware;
+    case ESP_RST_PANIC:
+      return LoRaWanResetReason::kPanic;
+    case ESP_RST_TASK_WDT:
+      return LoRaWanResetReason::kTaskWdt;
+    case ESP_RST_INT_WDT:
+      return LoRaWanResetReason::kIntWdt;
+    case ESP_RST_WDT:
+      return LoRaWanResetReason::kWdt;
+    default:
+      return LoRaWanResetReason::kOther;
+  }
+}
+
 bool formatTimestamp(char* out, size_t outSize) {
   time_t now = time(nullptr);
   if (now <= 1700000000) {
@@ -296,6 +331,9 @@ bool publishLoRaWanCore(const RawSample& sample, ParkingStatus status,
   in.bootSlot = bootModeInfo.slot;
   in.prevActiveMs = ledger.prevActiveMs;
   in.threshold = potReading.threshold;
+  in.bootCount = bootCount;
+  in.resetReasonCode = static_cast<uint8_t>(resetReasonCode(esp_reset_reason()));
+  in.wakeCauseCode = static_cast<uint8_t>(wakeCauseCode(esp_sleep_get_wakeup_cause()));
   const LoRaWanCorePayload payload = encodeLoRaWanCore(in);
   return publishUplinkConfirmed(payload.data(), payload.size(), metrics);
 }
@@ -388,6 +426,9 @@ void runLoRaWanTestCommand(char cmd) {
       LoRaWanUplinkInput in{};
       in.coldBoot = esp_reset_reason() == ESP_RST_POWERON;
       in.threshold = config::kStatusThreshold;
+      in.bootCount = bootCount;
+      in.resetReasonCode = static_cast<uint8_t>(resetReasonCode(esp_reset_reason()));
+      in.wakeCauseCode = static_cast<uint8_t>(wakeCauseCode(esp_sleep_get_wakeup_cause()));
       if (initSensor() && readSensor(in.raw)) {
         in.status = classifyStatus(in.raw, config::kStatusThreshold);
       }

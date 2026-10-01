@@ -28,7 +28,7 @@ XIAO ESP32S3 向けファームウェア（PlatformIO）。Grove - I2C Color Sen
 | `classify.cpp` | R−G 差による満／空／不明の判定 | #6 |
 | `transport.cpp` | Wi-Fi / LTE-M / LoRaWAN の接続・送信・LTE-M の電源断 | #6, #76, #40 |
 | `wio_e5.cpp` | Grove Wio-E5 の AT コマンド送受信・プロビジョニング・Join・confirmed 送信・疎通確認 | #40 |
-| `lorawan_payload.cpp` | LoRaWAN の 13 バイトのコアペイロードのエンコード | #40 |
+| `lorawan_payload.cpp` | LoRaWAN の 18 バイトのコアペイロードのエンコード | #40 |
 | `lte_modem_tls.cpp` | SIM7080G 内蔵 TLS 用の証明書の投入 | #30 |
 | `sync_ledger.cpp` | 送信確認の記録（NVS）。送信するかどうかの判定の元 | #32 |
 | `history_log.cpp` | 毎サイクルの判定結果の履歴（NVS） | #47 |
@@ -152,7 +152,7 @@ pio run -e xiao-s3-lorawan -t upload
 ```
 
 - `secrets.h` に `PSS_LORAWAN_APP_EUI` / `PSS_LORAWAN_APP_KEY` を書く（AWS IoT Core for LoRaWAN の Wireless Device の値。名前は deviceId に揃える）。LTE-M 版の `secrets.h` を流用する場合は、`PSS_LTE_ENABLED` を外す（LoRaWAN env と排他で、ビルドエラーになる）
-- 送信するかの判定（状態変化時、pending の再送、heartbeat）とブートモードは LTE-M 版と同じ。送るのは JSON ではなく 13 バイトのコアペイロード（status、RGBW、threshold など。`lorawan/parking-status/uplink` に届く）
+- 送信するかの判定（状態変化時、pending の再送、heartbeat）とブートモードは LTE-M 版と同じ。送るのは JSON ではなく 18 バイトのコアペイロード（status、RGBW、threshold、bootCount、resetReason など。`lorawan/parking-status/uplink` に届く）
 - Deep Sleep のタイマー以外で起動した後の最初の接続で、Wio-E5 を JP920 / OTAA に設定してから Join する。Join 済みなら毎回の `AT+JOIN` はすぐ返る
 - threshold と RGBW はペイロードでクラウドにも届く。ポテンショメーターの生の値（`potRaw`）はシリアルのサンプル行（`boot-mode slot=… sample r=… g=… b=… w=… status=… threshold=… potRaw=…`）と JSON ログで確認する。現場では、PC につないだ状態で電源を入れ、ブートモード中のシリアルを記録する（モニタを先に起動しておく）
 - 詳細（ペイロード、時間予算、エラーコード）は [docs/40-lorawan-design.md](../docs/40-lorawan-design.md)
@@ -175,7 +175,7 @@ probe の後は USB シリアルと Wio-E5 の素通しになり、AT コマン�
 | `~p` | probe をやり直す |
 | `~c` | プロビジョニング（JP920 / LWOTAA / RETRY 1 / PORT 1、`secrets.h` の AppEUI / AppKey を書き込む）。**送信する前に必ず1回実行する**（工場出荷時は EU868） |
 | `~j` | `AT+JOIN`（Join 済みなら `Joined already`） |
-| `~s` | センサー値を 13 バイトのコアペイロードにして confirmed 送信 |
+| `~s` | センサー値を 18 バイトのコアペイロードにして confirmed 送信 |
 
 `secrets.h` に `PSS_LORAWAN_APP_EUI` / `PSS_LORAWAN_APP_KEY` を設定する（AWS IoT Core for LoRaWAN の Wireless Device の値。名前は deviceId に揃える）。LTE-M 版の `secrets.h` を流用する場合は、`PSS_LTE_ENABLED` を `secrets.h` から外す（LoRaWAN env と排他で、ビルドエラーになる）。設定値、ペイロード、届くメッセージの形式は [docs/40-lorawan-design.md](../docs/40-lorawan-design.md)、デコードは [tools/lorawan](../tools/lorawan/README.md)。
 

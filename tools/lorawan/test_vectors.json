@@ -1,7 +1,7 @@
 [
   {
     "name": "available / state change / cold boot",
-    "hex": "5201000C001200030040340064",
+    "hex": "5201000C0012000300403400640000000121",
     "decoded": {
       "version": 1,
       "status": "available",
@@ -17,12 +17,17 @@
         "white": 64
       },
       "prevActiveMs": 13000,
-      "threshold": 100
+      "threshold": 100,
+      "power": {
+        "bootCount": 1,
+        "resetReason": "power_on",
+        "wakeCause": "power_on"
+      }
     }
   },
   {
     "name": "full / heartbeat / raw extremes",
-    "hex": "4428FFFF000001000001133A98",
+    "hex": "4428FFFF000001000001133A98FFFFFFFF13",
     "decoded": {
       "version": 1,
       "status": "full",
@@ -38,12 +43,17 @@
         "white": 1
       },
       "prevActiveMs": 4750,
-      "threshold": 15000
+      "threshold": 15000,
+      "power": {
+        "bootCount": 4294967295,
+        "resetReason": "deep_sleep",
+        "wakeCause": "timer"
+      }
     }
   },
   {
     "name": "unknown / boot mode / saturated fields (attempts 5, slot 9, active 100000ms, threshold 70000)",
-    "hex": "6EDF03E803E803E803E8FFFFFF",
+    "hex": "6EDF03E803E803E803E8FFFFFF1234567802",
     "decoded": {
       "version": 1,
       "status": "unknown",
@@ -59,7 +69,12 @@
         "white": 1000
       },
       "prevActiveMs": 63750,
-      "threshold": 65535
+      "threshold": 65535,
+      "power": {
+        "bootCount": 305419896,
+        "resetReason": "brownout",
+        "wakeCause": "other"
+      }
     }
   }
 ]
