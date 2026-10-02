@@ -13,6 +13,14 @@ VEML6040 sensor;
 constexpr uint8_t kVemlIntegration =
     VEML6040_IT_40MS | VEML6040_AF_AUTO | VEML6040_SD_ENABLE;
 
+// #94: setConfiguration() 後に最初の有効な測定値が出るまでの待ち。
+// 実測（コールドブート、満・空 各3回）では、書込み後 約37 ms で G/B/W、
+// 約46 ms で R が有効になり、それ以前は全チャネル 0 を返す（積分時間 40 ms と
+// 整合）。約2.2倍の余裕を見て 100 ms とする。
+// Deep Sleep 中もセンサーは測定を続けるため、タイマー復帰では書込み直後から
+// 有効値が読める（実測）。電源投入直後だけがこの待ちを必要とする。
+constexpr uint32_t kSettleMs = 100;
+
 }  // namespace
 
 bool initSensor() {
@@ -24,8 +32,7 @@ bool initSensor() {
     return false;
   }
   sensor.setConfiguration(kVemlIntegration);
-  // Seeed Wiki サンプルに合わせ、初回測定の安定待ち
-  delay(1500);
+  delay(kSettleMs);
   return true;
 }
 

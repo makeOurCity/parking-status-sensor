@@ -59,13 +59,18 @@ void computeWakeDiagnostics() {
 }
 
 void waitForSerial() {
-  const uint32_t start = millis();
-  while (!Serial && (millis() - start) < kSerialWaitMs) {
-    delay(10);
+  // #94: 電池駆動では USB が無く `Serial` は真にならないため、タイマー復帰の
+  // たびに kSerialWaitMs を使い切っていた（起床1回あたり約3秒・約36mA）。
+  // USB の接続待ちは電源投入・USB リセット時だけに限る。
+  if (esp_sleep_get_wakeup_cause() != ESP_SLEEP_WAKEUP_TIMER) {
+    const uint32_t start = millis();
+    while (!Serial && (millis() - start) < kSerialWaitMs) {
+      delay(10);
+    }
   }
-  // #47: non-blocking check within the existing wait window — adds no new
-  // delay. 'h' forces a history dump in setup() even on a timer wake (e.g.
-  // a bench debug build with Deep Sleep disabled).
+  // #47: non-blocking check — adds no new delay (and is the only thing run
+  // on a timer wake, see #94). 'h' forces a history dump in setup() even on
+  // a timer wake (e.g. a bench debug build with Deep Sleep disabled).
   while (Serial.available()) {
     if (Serial.read() == 'h') {
       forceHistoryDump = true;
