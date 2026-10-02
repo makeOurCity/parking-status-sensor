@@ -31,10 +31,11 @@ pio device monitor -e <env>
 | `xiao-s3-lorawan-test` | Grove Wio-E5 の AT 疎通確認・Join・1パケット送信（`~p`/`~c`/`~j`/`~s`、#40） |
 | `xiao-s3-aws` | AWS IoT Core向け（Wi-Fi、TLS） |
 | `xiao-s3-aws-debug` | 上記 + Deep Sleepなし |
-| `xiao-s3-aws-lte` | AWS IoT Core + LTE-M（推奨PoC経路）。本番運用 |
+| `xiao-s3-aws-lte` | AWS IoT Core + LTE-M・リレーなし（毎サイクル送信）。ベンチ・通信パイプライン検証用 |
 | `xiao-s3-aws-lte-debug` | 上記 + Deep Sleepなし（開発） |
-| `xiao-s3-aws-lte-relay` | #46 Grove 2-Coilラッチングリレーで LTE-M 電源を物理遮断する版 |
+| `xiao-s3-aws-lte-relay` | #46 Grove 2-Coilラッチングリレーで LTE-M 電源を物理遮断する版（ポテンショメーターなし） |
 | `xiao-s3-aws-lte-relay-debug` | 上記のベンチ検証用。Deep Sleep無効化 |
+| `xiao-s3-aws-lte-relay-pot` | **LTE-M 版の本番機**（リレー・状態変化時のみ送信・ポテンショメーター。`firmware/README.md` と同じ位置づけ） |
 
 poweroff-test はログを power-logger のログディレクトリへ保存する運用:
 
