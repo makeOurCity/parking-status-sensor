@@ -260,8 +260,8 @@ PotReading readPotentiometerThresholdLive() {
   for (uint8_t i = 0; i < config::kPotSampleCount; ++i) {
     sum += analogRead(POT_ADC_PIN);
     if (i + 1 < config::kPotSampleCount) {
-      // ADC自体のノイズとワイパー接触ノイズの平滑化用。VEML6040の1500ms
-      // 安定待ち(sensor.cpp)に比べ無視できる遅延(§2.4参照)。
+      // ADC自体のノイズとワイパー接触ノイズの平滑化用。VEML6040の100ms
+      // 安定待ち(sensor.cpp、#94で1500msから短縮)に比べ小さい遅延(§2.4参照)。
       delay(2);
     }
   }
@@ -330,7 +330,7 @@ pot["adcRaw"] = potReading.raw;
 
 `initPotentiometer()`(アッテネーション設定)は`setup()`から`initRelay()`と同様、
 起床のたびに(Deep Sleep復帰は`setup()`ごと再実行されるため)毎回呼ぶ。VEML6040のような
-外部I2Cペリフェラルの電源投入直後の安定待ち(`sensor.cpp`の`delay(1500)`)とは異なり、
+外部I2Cペリフェラルの電源投入直後の安定待ち(`sensor.cpp`の`delay(kSettleMs)`。100ms、#94で1500msから短縮)とは異なり、
 内蔵ADCは電源投入直後から即座に読み取り可能であり、**専用の安定待ちは不要**と判断する。
 `readPotentiometerThresholdLive()`(v5、ブートモード専用)内の8回×2ms=16ms程度の
 サンプリング間隔は、ノイズ平滑化目的の遅延であってハードウェア安定待ちではない。
@@ -338,7 +338,7 @@ pot["adcRaw"] = potReading.raw;
 発生しない。
 
 `kPotSampleCount=8`回の`analogRead()`自体は1回あたりマイクロ秒オーダーであり、
-`initSensor()`の1500ms安定待ちや、LTE接続フェーズ(数秒〜数十秒)と比べて無視できるコスト
+`initSensor()`の100ms安定待ち(#94で1500msから短縮)や、LTE接続フェーズ(数秒〜数十秒)と比べて無視できるコスト
 増分である。Issueの「消費電力への影響はほぼ無視できる」という見立ては、**ADC読み取り自体の
 所要時間**については実機でも妥当と確認された(§10.2)。
 
