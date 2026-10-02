@@ -10,7 +10,7 @@ struct DeviceDetailView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
+            LazyVStack(alignment: .leading, spacing: 12) {
                 if let errorMessage = viewModel.errorMessage {
                     Text(errorMessage)
                         .font(.callout)
