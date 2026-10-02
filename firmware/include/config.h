@@ -230,7 +230,8 @@ static_assert(!PSS_LORAWAN_TEST_MODE || PSS_LORAWAN_ENABLED,
 #define PSS_LTE_POWER_RELAY_ENABLED 0
 #endif
 
-// Set/Reset パルス幅。仕様上5ms以下で切り替わるが、余裕を見て既定20ms。
+// Set/Reset パルス幅。SIGのレベルを保持する時間で、コイルの通電幅は決めない
+// （通電幅は基板側のRC回路で決まる。relay.h の注意を参照）。既定20ms。
 #ifndef PSS_RELAY_PULSE_MS
 #define PSS_RELAY_PULSE_MS 20
 #endif
