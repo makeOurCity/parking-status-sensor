@@ -36,5 +36,8 @@ firmware/certs/*
 infra/config.env
 bridge/dist/
 
+# Power logger raw captures (tools/power-logger; results/ 配下は追跡対象)
+tools/power-logger/power-log-*.csv
+
 # Editor settings
 # .vscode/
