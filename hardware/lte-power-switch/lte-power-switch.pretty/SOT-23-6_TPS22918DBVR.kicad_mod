@@ -1,0 +1,168 @@
+(footprint "SOT-23-6_TPS22918DBVR"
+	(version 20260206)
+	(generator "pcbnew")
+	(generator_version "10.0")
+	(layer "F.Cu")
+	(descr "SOT-23-6 (TI DBV) for TPS22918DBVR, LCSC C131941. Pad geometry from the LCSC/EasyEDA library (easyeda2kicad). Pin 1 at +X,+Y at rotation 0 (JLCPCB/EasyEDA reference orientation).")
+	(tags "SOT-23-6 TPS22918 load switch C131941")
+	(property "Reference" "REF**"
+		(at 0 -2.9 0)
+		(layer "F.SilkS")
+		(uuid "d3db27ff-7b46-4e83-bc66-ec6a305799ce")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Value" "TPS22918DBVR"
+		(at 0 2.9 0)
+		(layer "F.Fab")
+		(uuid "481519b2-0a69-448d-95bf-dd07de5d6d9c")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Datasheet" "https://www.ti.com/lit/ds/symlink/tps22918.pdf"
+		(at 0 0 0)
+		(layer "F.Fab")
+		(hide yes)
+		(uuid "f1c9093e-a4b5-4f34-965b-1c2b7ffd4f3a")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Description" ""
+		(at 0 0 0)
+		(layer "F.Fab")
+		(hide yes)
+		(uuid "e1a6ea17-4b16-4ebd-a275-0a7fd28ee935")
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+		)
+	)
+	(attr smd)
+	(duplicate_pad_numbers_are_jumpers no)
+	(fp_line
+		(start -0.8 -1.6)
+		(end 0.8 -1.6)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "574c35d9-b02f-4910-9491-53c78ebb4d7d")
+	)
+	(fp_line
+		(start -0.8 1.6)
+		(end 0.8 1.6)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "4431b4cb-106c-498d-a422-29678724712b")
+	)
+	(fp_circle
+		(center 2.3 0.95)
+		(end 2.45 0.95)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(fill yes)
+		(layer "F.SilkS")
+		(uuid "b3c33f66-648a-485d-9894-f8e2778d80c2")
+	)
+	(fp_rect
+		(start -2 -1.4)
+		(end 2 1.4)
+		(stroke
+			(width 0.05)
+			(type solid)
+		)
+		(fill no)
+		(layer "F.CrtYd")
+		(uuid "0024abac-1ac6-456c-8609-28230f1a0d9d")
+	)
+	(fp_rect
+		(start -0.8 -1.45)
+		(end 0.8 1.45)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(fill no)
+		(layer "F.Fab")
+		(uuid "7e634ddc-bdbf-4a54-ac48-26c13e9939c3")
+	)
+	(fp_poly
+		(pts
+			(xy 0.8 0.5) (xy 0.3 0.95) (xy 0.8 1.45)
+		)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(fill no)
+		(layer "F.Fab")
+		(uuid "3a024060-4425-4f2a-8829-cc61ba774a06")
+	)
+	(pad "1" smd rect
+		(at 1.35 0.95)
+		(size 1.1 0.6)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+		(uuid "df5c7456-c5dc-4822-84dd-84ba3c00b50a")
+	)
+	(pad "2" smd rect
+		(at 1.35 0)
+		(size 1.1 0.6)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+		(uuid "570c8374-5545-493d-b8ce-2fdf3e392d14")
+	)
+	(pad "3" smd rect
+		(at 1.35 -0.95)
+		(size 1.1 0.6)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+		(uuid "9a782ad6-3931-4972-b64a-4a86ab6b5931")
+	)
+	(pad "4" smd rect
+		(at -1.35 -0.95)
+		(size 1.1 0.6)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+		(uuid "1d6e742f-df97-4ad9-93a5-379fa1caa3f5")
+	)
+	(pad "5" smd rect
+		(at -1.35 0)
+		(size 1.1 0.6)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+		(uuid "0c635249-04d6-4a95-bbc4-3f837c57570c")
+	)
+	(pad "6" smd rect
+		(at -1.35 0.95)
+		(size 1.1 0.6)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+		(uuid "2bb65c08-3921-436c-b96b-3ef49a6dfbac")
+	)
+	(embedded_fonts no)
+	(model "${KIPRJMOD}/3dmodels/SOT-23-6_L2.9-W1.6-H1.5-LS2.8-P0.95.wrl"
+		(offset
+			(xyz 0 0 0)
+		)
+		(scale
+			(xyz 1 1 1)
+		)
+		(rotate
+			(xyz 0 0 180)
+		)
+	)
+)
