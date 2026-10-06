@@ -16,7 +16,7 @@
 |---|---|---|
 | `id` | String | `urn:ngsi:ParkingStatusSensor:<deviceId>` |
 | `type` | String | `ParkingStatusSensor` |
-| `name` | Text | 利用者に見せる名称（駐車場名＋表示面）。例: 「サンプル駐車場 1階」 |
+| `name` | Text | 利用者に見せる名称（駐車場名＋表示面）。例: 「佐賀市役所第1駐車場」 |
 | `status` | Text | 満空判定結果。値は下表参照 |
 | `status.metadata.label` | Text | ステータスの日本語ラベル |
 | `rawSensor.red` | Number | カラーセンサ赤チャンネル生値（VEML6040 R） |
@@ -47,7 +47,7 @@
 {
   "id": "urn:ngsi:ParkingStatusSensor:xiao-e83dc1fb05fc",
   "type": "ParkingStatusSensor",
-  "name": { "type": "Text", "value": "サンプル駐車場 1階" },
+  "name": { "type": "Text", "value": "佐賀市役所第1駐車場" },
   "status": {
     "type": "Text",
     "value": "open",
@@ -69,7 +69,7 @@
   "deviceId":     { "type": "Text", "value": "xiao-e83dc1fb05fc" },
   "location": {
     "type": "geo:json",
-    "value": { "type": "Point", "coordinates": [140.869, 38.268] }
+    "value": { "type": "Point", "coordinates": [130.3008, 33.2629] }
   },
   "dateObserved": { "type": "DateTime", "value": "2026-06-17T12:00:00Z" }
 }
