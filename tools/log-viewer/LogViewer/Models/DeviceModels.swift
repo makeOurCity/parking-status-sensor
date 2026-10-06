@@ -3,13 +3,21 @@ import SwiftUI
 /// Mirrors the `status` field in the telemetry payload (docs/data-model.md).
 enum DeviceOperationalStatus: String {
     case full
-    case available
+    case open
     case unknown
+
+    /// Parses a telemetry `status` string. `available` is the pre-#99 name of
+    /// `open`: devices that haven't been reflashed yet still send it, and
+    /// CloudWatch history keeps it. Use this instead of `init(rawValue:)` for
+    /// anything read from logs or persisted state.
+    static func parse(_ raw: String) -> DeviceOperationalStatus? {
+        raw == "available" ? .open : DeviceOperationalStatus(rawValue: raw)
+    }
 
     var label: String {
         switch self {
         case .full: return "満"
-        case .available: return "空"
+        case .open: return "空"
         case .unknown: return "不明"
         }
     }
@@ -17,7 +25,7 @@ enum DeviceOperationalStatus: String {
     var color: Color {
         switch self {
         case .full: return Theme.full
-        case .available: return Theme.available
+        case .open: return Theme.available
         case .unknown: return Theme.unknown
         }
     }
@@ -25,7 +33,7 @@ enum DeviceOperationalStatus: String {
     var icon: String {
         switch self {
         case .full: return "car.fill"
-        case .available: return "checkmark.circle.fill"
+        case .open: return "checkmark.circle.fill"
         case .unknown: return "questionmark.circle.fill"
         }
     }
@@ -102,7 +110,7 @@ struct LogEntry: Identifiable, Equatable {
         self.id = "\(timestampString)|\(message)"
         self.timestamp = date
         self.deviceId = row["deviceId"]
-        self.status = row["status"].flatMap(DeviceOperationalStatus.init(rawValue:))
+        self.status = row["status"].flatMap(DeviceOperationalStatus.parse)
         self.message = message
     }
 

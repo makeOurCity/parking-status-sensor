@@ -123,7 +123,7 @@ def test_build_telemetry_shape():
 
     assert telemetry == {
         "deviceId": DEVICE_NAME,
-        "status": "available",
+        "status": "open",
         "raw": {"red": 12, "green": 18, "blue": 3, "clear": 64},
         "threshold": 100,
         "determinedBy": "device",
@@ -170,7 +170,7 @@ def test_handler_logs_telemetry_line(fake_client, caplog):
     assert json.loads(result["body"]) == {
         "ok": True,
         "deviceId": DEVICE_NAME,
-        "status": "available",
+        "status": "open",
         "message": "stub handler — Orion upsert is Issue #7",
     }
     lines = telemetry_lines(caplog)
@@ -204,7 +204,7 @@ def test_handler_log_line_parses_like_ios_app(fake_client, caplog):
         return match.group(1) if match else None
 
     assert first(r'"deviceId":\s*"([^"]+)"') == DEVICE_NAME
-    assert first(r'"status":\s*"([^"]+)"') == "available"
+    assert first(r'"status":\s*"([^"]+)"') == "open"
     assert first(r'"bootCount":\s*(\d+)') == "1"
     assert first(r'"transport":\s*"([^"]+)"') == "lorawan"
     # TelemetryPayload が読むキー

@@ -43,7 +43,7 @@
 | offset | フィールド | 型 | 説明 |
 |---|---|---|---|
 | 0-3 | `timestampEpoch` | u32 (LE) | UTC unix time。`0` = 未同期 |
-| 4 | `status` | u8 | そのサイクルで観測した `ParkingStatus`(0=full, 1=available, 2=unknown) |
+| 4 | `status` | u8 | そのサイクルで観測した `ParkingStatus`(0=full, 1=open, 2=unknown。#99 で `available` から改名。保存値は数値なので変わらない) |
 | 5 | `flags` | u8 | bit0 = 時刻同期済みフラグ。bit1-7予備(常に0) |
 | 6 | `bootCountLo8` | u8 | `bootCount & 0xFF`(下位8bit) |
 | 7 | (予備) | u8 | 未使用。将来項目用に確保 |
@@ -243,7 +243,7 @@ if (cause == ESP_SLEEP_WAKEUP_TIMER) {
 history: count=672 capacity=672 (full)
 [0] boot=142 2026-09-19T08:15:03Z status=full   r=812 g=201 b=340 w=1500
 [1] boot=142 <unsynced>          status=full   r=805 g=198 b=335 w=1490
-[2] boot=141 2026-09-19T08:10:02Z status=available r=120 g=610 b=95  w=980
+[2] boot=141 2026-09-19T08:10:02Z status=open      r=120 g=610 b=95  w=980
 ...
 ```
 

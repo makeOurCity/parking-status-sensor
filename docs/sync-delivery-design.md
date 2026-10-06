@@ -274,7 +274,7 @@ SyncLedger の `prevOutcome = skipped` を記録してスリープする。
 
 ```json
 "sync": {
-  "lastConfirmedStatus": "available",
+  "lastConfirmedStatus": "open",
   "lastConfirmedBootCount": 41,
   "pending": false,
   "prevOutcome": "confirmed",

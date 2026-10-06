@@ -1,10 +1,10 @@
 [
   {
-    "name": "available / state change / cold boot",
+    "name": "open / state change / cold boot",
     "hex": "5201000C0012000300403400640000000121",
     "decoded": {
       "version": 1,
-      "status": "available",
+      "status": "open",
       "reason": "state_change",
       "coldBoot": true,
       "prevOutcome": "none",
