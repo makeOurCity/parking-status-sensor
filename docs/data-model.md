@@ -5,7 +5,7 @@
 - エンティティタイプ: `ParkingStatusSensor`（NGSIv2）
 - 粒度: **センサ1台 = エンティティ1件**。満空灯1面が判定対象1つに対応する
 - 集約なし: 1階・2階など表示対象が異なる場合は別エンティティとして独立させる
-- PoC段階は `ParkingStatusSensor` 単体で完結させ、`OffStreetParking`（FIWARE Smart Data Models）へのマッピングは将来フェーズで対応する
+- PoC段階は `ParkingStatusSensor` 単体で完結させる
 - 駐車場の名前と設置位置は `name` / `location` に入っている。利用側は端末（`deviceId`）を意識せず、これらを読めばよい
 
 ## エンティティ: ParkingStatusSensor
@@ -39,7 +39,7 @@
 | `open` | 空 | 空車（緑が支配的: G - R ≥ threshold） |
 | `unknown` | 不明 | 消灯・遷移中など判定不能（差が threshold 未満） |
 
-`full` / `open` は FIWARE Smart Data Models の `OffStreetParking.status` の値と同じ（下記「将来対応」）。
+`full` / `open` は FIWARE Smart Data Models の `OffStreetParking.status` の値と同じ。
 
 ### エンティティ例
 
@@ -74,15 +74,3 @@
   "dateObserved": { "type": "DateTime", "value": "2026-06-17T12:00:00Z" }
 }
 ```
-
-## 将来対応: OffStreetParking へのマッピング
-
-FIWARE Smart Data Models の [`OffStreetParking`](https://github.com/smart-data-models/dataModel.Parking/tree/master/OffStreetParking) は駐車場の標準エンティティ。PoC 完了後にブリッジ層へ変換ロジックを追加し、`ParkingStatusSensor` の `status` を `OffStreetParking` の属性へマッピングする。
-
-| ParkingStatusSensor.status | OffStreetParking.status | 備考 |
-|---|---|---|
-| `full` | `full` | 満車 |
-| `open` | `open` | 空車（台数は不明のため availableSpotNumber は設定しない） |
-| `unknown` | — | マッピングしない |
-
-`ParkingStatusSensor` と `OffStreetParking` は `refParkingLot` Relationship で紐付ける予定。
