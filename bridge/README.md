@@ -47,7 +47,43 @@ AWS には接続しない（`GetWirelessDevice` はモック）。
 
 - `raw` → `rawSensor`、`timestamp` → `dateObserved` 等の変換
 - `POST /v2/entities?options=upsert` で Orion 更新
-- エンティティ ID は PoC 段階でファーム側ハードコード前提（#14）
+- エンティティ ID は `deviceId` から生成する（`urn:ngsi:ParkingStatusSensor:<deviceId>`）。`name` / `location` は下記の **デバイスマスター** から引いて埋め込む（#14）
+- 端末が送る値は旧値 `available` を `open` に正規化してから書く（下記「`status` の旧値」）
+- Orion に送るのは [docs/data-model.md](../docs/data-model.md) のエンティティ項目だけ。診断項目（`sync.*` / `network.*` / `bootMode.*` / `pot.*`）は送らない。CloudWatch Logs には従来どおり全項目を出す
+- Orion への書き込みに失敗しても例外は投げず、エラーログ（`orion upsert failed: ...`）を残して正常終了する（例外にすると IoT ルールが Lambda を再実行し、`telemetry received` の行が重複して iOS ログビューアに二重に出る）。満空状態は最新値の上書きなので、取りこぼしても次の送信で追いつく
+
+### デバイスマスター（#7, #14）
+
+`name` と `location` は端末が持たず、`deviceId` をキーにした対応表（デバイスマスター）で管理する。Lambda が Orion に書く直前に引いて、エンティティへ埋め込む。端末のファームは駐車場の情報を持たない。
+
+| 項目 | 内容 |
+|---|---|
+| `deviceId`（キー） | 端末の識別子。Thing 名・MQTT の `deviceId`・LoRaWAN の Wireless Device 名と同じ |
+| `name` | → エンティティの `name` |
+| `lat` / `lon` | → エンティティの `location`。数値で持ち、Lambda が GeoJSON（`[lon, lat]`）に組み立てる（経度・緯度の順の取り違えを防ぐ） |
+| `enabled` | `false` なら Orion に書かない（一時停止・撤去済みの端末など） |
+
+Lambda の動作:
+
+- **未登録の `deviceId` と `enabled=false` は Orion に書かない**。警告ログ（`orion skipped: ...`）を残す。`infra/test-publish.sh` などのテスト送信が Orion にエンティティを作らないようにするため
+- マスターは数分キャッシュする。取得に失敗したら古いキャッシュを使い、キャッシュも無ければ Orion への書き込みだけ諦める（CloudWatch Logs への出力には影響させない）
+- マスターを更新しても、Orion に反映されるのはその端末の次の送信（状態変化、または 1 時間ごとのハートビート）
+- 保管先は暫定で DynamoDB（テーブル `parking-status-device-master`、`deviceId` がパーティションキー）。Lambda は読み取りのみ、編集は開発者がコンソールか CLI で行う。保管先は #7 で確定する
+- 連絡先は持たない。必要になったら、Orion に出さない内部専用の項目として足す。`address`・`description` も必要になった時点で足す
+
+### `status` の旧値
+
+値は `full` / `open` / `unknown`（#99 で `available` を `open` に改名）。再書き込み前の LTE-M 端末は `available` を送り続け、CloudWatch Logs の過去ログにも残る。Orion に書くときは `open` に正規化する。LoRaWAN は無線上の値（0/1/2 の番号）が変わらないので、`lorawan.py` の変換表が `open` を返す。
+
+### MQTT ペイロードの診断項目（`sync.*` / `network.*` / `bootMode.*`）
+
+ファームは満空状態のほかに、送信サイクルの診断情報を MQTT ペイロードに含める（[sync-delivery-design.md](../docs/sync-delivery-design.md)）。
+
+- `network.*`（`transport`、接続時間、`publishAttempts` 等）と `sync.*`（`prevOutcome`、`pending`、`lastConfirmedStatus` 等）は **端末の運用診断専用**
+- `bootMode.*`（`active`・`slot`・`totalSlots`。#50「電源投入直後のブートモード」）も同様に **端末の運用診断専用**。電源投入(コールドブート)直後の無条件連続送信中かどうか、その何回目の送信かを示す。通常サイクルでは常に `active=false`・`slot=0`・`totalSlots=0`（詳細: [50-boot-mode-design.md](../docs/50-boot-mode-design.md)）
+- `pot.*`（`enabled`・`adcRaw`。#60「現地調整用ポテンショメーター」）も同様に **端末の運用診断専用**。`enabled` はポット機能のビルド時有効/無効、`adcRaw` は平均済みの生ADC値（0〜4095）。ポット無効機体では常に `enabled=false`・`adcRaw=0` で、`threshold` は従来通りの固定値のまま（詳細: [60-potentiometer-threshold-design.md](../docs/60-potentiometer-threshold-design.md)）
+- これらは **Orion（NGSIv2）エンティティにはマップしない**。bridge（#7）の変換対象外。CloudWatch Logs には従来どおり出す
+- 送達確認は `network.deliveryConfirmed`（廃止済み）ではなく、**次サイクルの `sync.prevOutcome == confirmed`** と `sync.lastConfirmedBootCount` で判断する
 
 設計: [docs/data-model.md](../docs/data-model.md)、[docs/iot-core.md](../docs/iot-core.md)
 
