@@ -2,10 +2,19 @@
 
 AWS IoT Core からルールでトリガーされ、MQTT ペイロードを FIWARE Orion へ NGSIv2 upsert する。
 
-## 現状（Issue #4, #83）
+## 現状（Issue #4, #83, #7）
 
-`handler.py` は **疎通確認用スタブ**。受信ペイロードを `parking-status telemetry received: <JSON>` で CloudWatch Logs に記録するだけ（iOS ログビューアがこの行を読む）。  
-デプロイは `infra/deploy-bridge-stub.sh`（`infra/setup.sh` から呼ばれる）。zip には `handler.py` と `lorawan.py` が入る（モジュールを足したら同スクリプトの `BRIDGE_MODULES` に追記）。
+`handler.py` は、受信ペイロードを `parking-status telemetry received: <JSON>` で CloudWatch Logs に記録し（iOS ログビューアがこの行を読む）、続けて Orion に upsert する。Orion への送信は環境変数 `ORION_URL` を設定したときだけ有効（未設定なら `orion disabled` をログに出して何もしない）。  
+デプロイは `infra/deploy-bridge-stub.sh`（`infra/setup.sh` から呼ばれる。名前は #4 のスタブ時代のまま）。zip には `handler.py` ほか `BRIDGE_MODULES` に並べたモジュールが入る（モジュールを足したら同スクリプトの `BRIDGE_MODULES` に追記）。Lambda の環境変数は `infra/config.env` から作る。
+
+| モジュール | 内容 |
+|---|---|
+| `handler.py` | 入口。ログ出力 → Orion への upsert。Orion 側の失敗は例外にしない |
+| `lorawan.py` | LoRaWAN の正規化（下記） |
+| `ngsi.py` | テレメトリ → NGSIv2 エンティティの変換（純粋関数） |
+| `cognito_auth.py` | Orion 用のトークンを Cognito User Pool から取得する（送るたびにログイン） |
+| `orion.py` | Orion への `POST /v2/entities?options=upsert`（urllib。タイムアウト 5 秒、ネットワーク障害・5xx は即時リトライ 1 回、4xx は再試行しない） |
+| `device_master.py` | デバイスマスター（DynamoDB）の参照とキャッシュ |
 
 入口は 2 つ。
 
@@ -16,7 +25,7 @@ AWS IoT Core からルールでトリガーされ、MQTT ペイロードを FIWA
 
 ### `lorawan.py`
 
-LoRaWAN の正規化。ログ出力から切り離した関数にしてあり、#7（Orion upsert）でもそのまま使う。
+LoRaWAN の正規化。ログ出力から切り離した関数にしてあり、Orion upsert（#7）でもそのまま使う。
 
 | 関数 | 内容 |
 |---|---|
@@ -41,16 +50,37 @@ python3 -m venv .venv
 ./.venv/bin/python -m pytest
 ```
 
-AWS には接続しない（`GetWirelessDevice` はモック）。
+AWS と Orion には接続しない（`GetWirelessDevice`・DynamoDB・`urlopen` はモック）。
 
-## 本実装（Issue #7）
+## Orion への upsert（Issue #7）
 
-- `raw` → `rawSensor`、`timestamp` → `dateObserved` 等の変換
-- `POST /v2/entities?options=upsert` で Orion 更新
+- `raw` → `rawSensor`、`timestamp` → `dateObserved` 等の変換（`ngsi.py`）。`timestamp` が無い（LoRaWAN でゲートウェイの時刻が無いなど）ときは Lambda の受信時刻
+- `POST /v2/entities?options=upsert` で Orion 更新（`orion.py`）
 - エンティティ ID は `deviceId` から生成する（`urn:ngsi:ParkingStatusSensor:<deviceId>`）。`name` / `location` は下記の **デバイスマスター** から引いて埋め込む（#14）
 - 端末が送る値は旧値 `available` を `open` に正規化してから書く（下記「`status` の旧値」）
 - Orion に送るのは [docs/data-model.md](../docs/data-model.md) のエンティティ項目だけ。診断項目（`sync.*` / `network.*` / `bootMode.*` / `pot.*`）は送らない。CloudWatch Logs には従来どおり全項目を出す
+- 処理の順序は **ログ出力 → Orion への upsert**。ログを先に出し、Orion 側の失敗でログが欠けないようにする
 - Orion への書き込みに失敗しても例外は投げず、エラーログ（`orion upsert failed: ...`）を残して正常終了する（例外にすると IoT ルールが Lambda を再実行し、`telemetry received` の行が重複して iOS ログビューアに二重に出る）。満空状態は最新値の上書きなので、取りこぼしても次の送信で追いつく
+
+### Lambda の環境変数（`infra/config.env` → `deploy-bridge-stub.sh`）
+
+| 変数 | 内容 |
+|---|---|
+| `ORION_URL` | Orion のベース URL。**未設定なら Orion には送らない**（ログ出力のみ） |
+| `ORION_FIWARE_SERVICE` / `ORION_FIWARE_SERVICEPATH` | あれば `Fiware-Service` / `Fiware-ServicePath` ヘッダに付ける |
+| `ORION_COGNITO_USER_POOL_ID` / `_CLIENT_ID` / `_USERNAME` / `_PASSWORD` | Orion のトークンは有効期限があるため、**Orion に送るたびに** Cognito User Pool にユーザー名・パスワードでログイン（SRP）してトークンを取り、`Authorization: Bearer <token>` に付ける（リフレッシュはしない）。4 つそろえて設定する（一部だけなら設定ミスとして `orion upsert failed` にする）。リージョンは User Pool ID（`ap-northeast-1_xxxxxxxxx`）の先頭から決まる。すべて空なら認証ヘッダなしで送る |
+| `ORION_COGNITO_CLIENT_SECRET` / `_TOKEN_TYPE` | 省略可。クライアントシークレット付き App Client のとき（`SECRET_HASH` を付ける）／Orion が受け取るトークン（`id` か `access`。既定 `id`） |
+| `DEVICE_MASTER_TABLE` | デバイスマスターの DynamoDB テーブル名（既定 `parking-status-device-master`） |
+
+`deploy-bridge-stub.sh` は環境変数を `config.env` の内容で作り直す（空の項目は設定しない）。
+
+### Cognito ログイン（`cognito_auth.py`）
+
+- ログインするのは、デバイスマスターに登録済みで有効な端末を実際に Orion へ送るときだけ（スキップする端末のためにはログインしない）。1 回の送信ごとに `InitiateAuth` を 1 回呼ぶ。Orion への即時リトライはそのトークンを使い回す
+- ログインは SRP（`USER_SRP_AUTH`）で、`InitiateAuth` → `RespondToAuthChallenge(PASSWORD_VERIFIER)` の 2 往復。パスワードそのものは送らない。SRP の計算は標準ライブラリだけで実装している（3072 ビットの冪剰余を使うので、Lambda 上で 1 回のログインに 0.1〜1 秒ほどかかる）。どちらも認証前に呼ぶ API なので、AWS の署名も IAM 権限も要らない
+- ログインに失敗したら Orion には送らず、`orion upsert failed: cognito login failed: HTTP 400 NotAuthorizedException ...` を残して正常終了する（ユーザー名・パスワード違いは再試行しない。ネットワーク障害・5xx は即時リトライ 1 回）
+- パスワードとトークンはログ・例外メッセージに出さない
+- 前提（Orion 側の Cognito。管理者に確認）: App Client で `ALLOW_USER_SRP_AUTH` が有効／確認済みの専用ユーザーで MFA なし（`NEW_PASSWORD_REQUIRED` などのチャレンジには対応しない）／Orion が受け取るのが ID トークンかアクセストークンか
 
 ### デバイスマスター（#7, #14）
 
@@ -66,9 +96,10 @@ AWS には接続しない（`GetWirelessDevice` はモック）。
 Lambda の動作:
 
 - **未登録の `deviceId` と `enabled=false` は Orion に書かない**。警告ログ（`orion skipped: ...`）を残す。`infra/test-publish.sh` などのテスト送信が Orion にエンティティを作らないようにするため
-- マスターは数分キャッシュする。取得に失敗したら古いキャッシュを使い、キャッシュも無ければ Orion への書き込みだけ諦める（CloudWatch Logs への出力には影響させない）
+- マスターは 5 分間キャッシュする（未登録の結果もキャッシュする）。取得に失敗したら古いキャッシュを使い、キャッシュも無ければ Orion への書き込みだけ諦める（`orion skipped: device master lookup failed: ...`。CloudWatch Logs への出力には影響させない）
+- 登録内容が不正（`name` が空、`lat` / `lon` が数値でない・範囲外）のときも、同じく Orion には書かず `orion skipped` をエラーログに残す
 - マスターを更新しても、Orion に反映されるのはその端末の次の送信（状態変化、または 1 時間ごとのハートビート）
-- 保管先は暫定で DynamoDB（テーブル `parking-status-device-master`、`deviceId` がパーティションキー）。Lambda は読み取りのみ、編集は開発者がコンソールか CLI で行う。保管先は #7 で確定する
+- 保管先は DynamoDB（テーブル `parking-status-device-master`、`deviceId`（文字列）がパーティションキー）。テーブルは `infra/setup-device-master.sh` で作る（プロビジョンド 1 RCU / 1 WCU。DynamoDB の無料枠に収まる）。Lambda は読み取り（`dynamodb:GetItem`）のみ。編集は開発者が `infra/device-master.sh`（`put` / `list` / `get` / `delete`）かコンソールで行う
 - 連絡先は持たない。必要になったら、Orion に出さない内部専用の項目として足す。`address`・`description` も必要になった時点で足す
 
 ### `status` の旧値
