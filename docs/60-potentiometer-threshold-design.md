@@ -731,7 +731,7 @@ v5では`currentPotThreshold()`(`runCycle()`から呼ばれる)がNVSにキャ�
 10. 現場設置後に同envの実機で§8テスト項目7を実施し、`PSS_POT_THRESHOLD_MIN`/`MAX`の
     妥当性を再検討する(§6 #1参照)。
 11. `docs/data-model.md`の`threshold`フィールド説明・`sync.*`/`network.*`/`bootMode.*`の
-    診断フィールド節(`docs/data-model.md:83`付近)に`pot.*`(`enabled`/`adcRaw`)を追記する。
+    診断項目の節(`bridge/README.md` の「MQTT ペイロードの診断項目」。旧 `docs/data-model.md` の診断フィールド節)に`pot.*`(`enabled`/`adcRaw`)を追記する。
 
 ### レビュー観点(実装レビュー時に確認すること)
 

@@ -75,6 +75,16 @@ Lambda の動作:
 
 値は `full` / `open` / `unknown`（#99 で `available` を `open` に改名）。再書き込み前の LTE-M 端末は `available` を送り続け、CloudWatch Logs の過去ログにも残る。Orion に書くときは `open` に正規化する。LoRaWAN は無線上の値（0/1/2 の番号）が変わらないので、`lorawan.py` の変換表が `open` を返す。
 
+### MQTT ペイロードの診断項目（`sync.*` / `network.*` / `bootMode.*`）
+
+ファームは満空状態のほかに、送信サイクルの診断情報を MQTT ペイロードに含める（[sync-delivery-design.md](../docs/sync-delivery-design.md)）。
+
+- `network.*`（`transport`、接続時間、`publishAttempts` 等）と `sync.*`（`prevOutcome`、`pending`、`lastConfirmedStatus` 等）は **端末の運用診断専用**
+- `bootMode.*`（`active`・`slot`・`totalSlots`。#50「電源投入直後のブートモード」）も同様に **端末の運用診断専用**。電源投入(コールドブート)直後の無条件連続送信中かどうか、その何回目の送信かを示す。通常サイクルでは常に `active=false`・`slot=0`・`totalSlots=0`（詳細: [50-boot-mode-design.md](../docs/50-boot-mode-design.md)）
+- `pot.*`（`enabled`・`adcRaw`。#60「現地調整用ポテンショメーター」）も同様に **端末の運用診断専用**。`enabled` はポット機能のビルド時有効/無効、`adcRaw` は平均済みの生ADC値（0〜4095）。ポット無効機体では常に `enabled=false`・`adcRaw=0` で、`threshold` は従来通りの固定値のまま（詳細: [60-potentiometer-threshold-design.md](../docs/60-potentiometer-threshold-design.md)）
+- これらは **Orion（NGSIv2）エンティティにはマップしない**。bridge（#7）の変換対象外。CloudWatch Logs には従来どおり出す
+- 送達確認は `network.deliveryConfirmed`（廃止済み）ではなく、**次サイクルの `sync.prevOutcome == confirmed`** と `sync.lastConfirmedBootCount` で判断する
+
 設計: [docs/data-model.md](../docs/data-model.md)、[docs/iot-core.md](../docs/iot-core.md)
 
 ## ログ確認

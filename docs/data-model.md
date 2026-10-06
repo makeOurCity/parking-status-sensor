@@ -86,13 +86,3 @@ FIWARE Smart Data Models の [`OffStreetParking`](https://github.com/smart-data-
 | `unknown` | — | マッピングしない |
 
 `ParkingStatusSensor` と `OffStreetParking` は `refParkingLot` Relationship で紐付ける予定。
-
-## MQTT ペイロードの診断フィールド（`sync.*` / `network.*` / `bootMode.*`）
-
-ファームは満空状態のほかに、送信サイクルの診断情報を MQTT ペイロードに含める（[sync-delivery-design.md](sync-delivery-design.md)）。
-
-- `network.*`（`transport`、接続時間、`publishAttempts` 等）と `sync.*`（`prevOutcome`、`pending`、`lastConfirmedStatus` 等）は **端末の運用診断専用**
-- `bootMode.*`（`active`・`slot`・`totalSlots`。#50「電源投入直後のブートモード」）も同様に **端末の運用診断専用**。電源投入(コールドブート)直後の無条件連続送信中かどうか、その何回目の送信かを示す。通常サイクルでは常に `active=false`・`slot=0`・`totalSlots=0`（詳細: [50-boot-mode-design.md](50-boot-mode-design.md)）
-- `pot.*`（`enabled`・`adcRaw`。#60「現地調整用ポテンショメーター」）も同様に **端末の運用診断専用**。`enabled` はポット機能のビルド時有効/無効、`adcRaw` は平均済みの生ADC値（0〜4095）。ポット無効機体では常に `enabled=false`・`adcRaw=0` で、`threshold` は従来通りの固定値のまま（詳細: [60-potentiometer-threshold-design.md](60-potentiometer-threshold-design.md)）
-- これらは **Orion（NGSIv2）エンティティにはマップしない**。bridge（#7）の変換対象外
-- 送達確認は `network.deliveryConfirmed`（廃止済み）ではなく、**次サイクルの `sync.prevOutcome == confirmed`** と `sync.lastConfirmedBootCount` で判断する
