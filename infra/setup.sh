@@ -10,7 +10,7 @@ load_config
 require_aws
 
 echo "=== parking-status IoT Core setup ==="
-echo "region=$AWS_REGION profile=$AWS_PROFILE"
+echo "region=$AWS_REGION profile=$(profile_label)"
 
 ACCOUNT_ID="$(account_id)"
 ENDPOINT="$(iot_endpoint)"

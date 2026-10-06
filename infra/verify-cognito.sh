@@ -10,7 +10,7 @@ load_config
 require_aws
 
 echo "=== verify parking-status iOS app Cognito setup ==="
-echo "region=$AWS_REGION profile=$AWS_PROFILE"
+echo "region=$AWS_REGION profile=$(profile_label)"
 echo ""
 
 fail=0

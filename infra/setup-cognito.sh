@@ -3,7 +3,26 @@
 # app (Issue #68). Scopes the authenticated IAM role to read-only access on
 # a single CloudWatch Logs log group so the app never needs long-lived AWS
 # access keys.
+#
+# Usage:
+#   ./setup-cognito.sh               # User Pool / Identity Pool / IAM ロールまで作る
+#   ./setup-cognito.sh --pools-only  # IAM ロールは作らず Identity Pool までで止める
+#
+# Power User 権限ではロールを作れない（#98）。その場合は --pools-only で Identity Pool を
+# 作り、表示された Identity Pool ID とトラストポリシーを管理者に渡してロールを作ってもらう。
+# ロールができたら config.env の COGNITO_AUTH_ROLE_ARN に ARN を設定して、
+# 引数なしで再実行する（Identity Pool へのロール割り当てだけが行われる）。
 set -euo pipefail
+
+POOLS_ONLY=0
+case "${1:-}" in
+  "") ;;
+  --pools-only) POOLS_ONLY=1 ;;
+  *)
+    echo "Usage: $0 [--pools-only]" >&2
+    exit 1
+    ;;
+esac
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck disable=SC1091
@@ -23,7 +42,7 @@ if [[ -z "$IOS_APP_USER_EMAIL" ]]; then
 fi
 
 echo "=== parking-status iOS app Cognito setup ==="
-echo "region=$AWS_REGION profile=$AWS_PROFILE"
+echo "region=$AWS_REGION profile=$(profile_label)"
 
 ACCOUNT_ID="$(account_id)"
 echo "account=$ACCOUNT_ID"
@@ -132,25 +151,57 @@ sed -e "s|__REGION__|${AWS_REGION}|" \
     -e "s|__LOG_GROUP_NAME__|${CLOUDWATCH_LOG_GROUP_NAME}|" \
   "$ROOT/cognito-logs-readonly-policy.json.tmpl" >"$LOGS_POLICY"
 
-if aws_iam get-role --role-name "$COGNITO_AUTH_ROLE_NAME" >/dev/null 2>&1; then
-  echo "IAM role exists: $COGNITO_AUTH_ROLE_NAME (updating trust + policy)"
-  aws_iam update-assume-role-policy \
-    --role-name "$COGNITO_AUTH_ROLE_NAME" \
-    --policy-document "file://$TRUST_POLICY" >/dev/null
-else
-  echo "Creating IAM role: $COGNITO_AUTH_ROLE_NAME"
-  aws_iam create-role \
-    --role-name "$COGNITO_AUTH_ROLE_NAME" \
-    --assume-role-policy-document "file://$TRUST_POLICY" \
-    --description "Authenticated role for the parking-status iOS log-viewer app (CloudWatch Logs read-only, Issue #68)" >/dev/null
+print_new_password() {
+  if [[ "${USER_PASSWORD_SET:-0}" == "1" ]]; then
+    echo ""
+    echo "Temporary/permanent password (shown once, store in a password manager):"
+    echo "  $GENERATED_PASSWORD"
+  fi
+}
+
+if [[ "$POOLS_ONLY" == "1" ]]; then
+  echo ""
+  echo "=== pools created (IAM role not created: --pools-only) ==="
+  echo "User Pool ID    : $USER_POOL_ID"
+  echo "App Client ID   : $CLIENT_ID"
+  echo "Identity Pool ID: $IDENTITY_POOL_ID"
+  echo "Region          : $AWS_REGION"
+  print_new_password
+  echo ""
+  echo "Ask the AWS administrator to create the IAM role '$COGNITO_AUTH_ROLE_NAME' with:"
+  echo "  trust policy:"
+  cat "$TRUST_POLICY"
+  echo "  inline policy 'cloudwatch-logs-readonly':"
+  cat "$LOGS_POLICY"
+  echo ""
+  echo "Then set COGNITO_AUTH_ROLE_ARN in config.env and run ./setup-cognito.sh again."
+  exit 0
 fi
 
-ROLE_ARN="$(aws_iam get-role --role-name "$COGNITO_AUTH_ROLE_NAME" --query 'Role.Arn' --output text)"
+if [[ -n "$COGNITO_AUTH_ROLE_ARN" ]]; then
+  echo "Using existing IAM role (not managed by this script): $COGNITO_AUTH_ROLE_ARN"
+  ROLE_ARN="$COGNITO_AUTH_ROLE_ARN"
+else
+  if aws_iam get-role --role-name "$COGNITO_AUTH_ROLE_NAME" >/dev/null 2>&1; then
+    echo "IAM role exists: $COGNITO_AUTH_ROLE_NAME (updating trust + policy)"
+    aws_iam update-assume-role-policy \
+      --role-name "$COGNITO_AUTH_ROLE_NAME" \
+      --policy-document "file://$TRUST_POLICY" >/dev/null
+  else
+    echo "Creating IAM role: $COGNITO_AUTH_ROLE_NAME"
+    aws_iam create-role \
+      --role-name "$COGNITO_AUTH_ROLE_NAME" \
+      --assume-role-policy-document "file://$TRUST_POLICY" \
+      --description "Authenticated role for the parking-status iOS log-viewer app (CloudWatch Logs read-only, Issue #68)" >/dev/null
+  fi
 
-aws_iam put-role-policy \
-  --role-name "$COGNITO_AUTH_ROLE_NAME" \
-  --policy-name "cloudwatch-logs-readonly" \
-  --policy-document "file://$LOGS_POLICY" >/dev/null
+  ROLE_ARN="$(aws_iam get-role --role-name "$COGNITO_AUTH_ROLE_NAME" --query 'Role.Arn' --output text)"
+
+  aws_iam put-role-policy \
+    --role-name "$COGNITO_AUTH_ROLE_NAME" \
+    --policy-name "cloudwatch-logs-readonly" \
+    --policy-document "file://$LOGS_POLICY" >/dev/null
+fi
 
 # --- Attach role to Identity Pool ---
 aws_cognito_identity set-identity-pool-roles \
@@ -166,11 +217,7 @@ echo "IAM role ARN    : $ROLE_ARN"
 echo "Log group       : $CLOUDWATCH_LOG_GROUP_NAME"
 echo "Region          : $AWS_REGION"
 echo "Login username  : $IOS_APP_USER_EMAIL"
-if [[ "${USER_PASSWORD_SET:-0}" == "1" ]]; then
-  echo ""
-  echo "Temporary/permanent password (shown once, store in a password manager):"
-  echo "  $GENERATED_PASSWORD"
-fi
+print_new_password
 echo ""
 echo "Next:"
 echo "  ./verify-cognito.sh   # confirm resources"
