@@ -37,6 +37,21 @@ load_config() {
   : "${LAMBDA_FUNCTION_NAME:=parking-status-bridge}"
   : "${LAMBDA_ROLE_NAME:=parking-status-bridge-lambda-role}"
   : "${MQTT_TOPIC_PREFIX:=parking-status}"
+  # デバイスマスター（#7, #14）: deviceId → name / location。DynamoDB のテーブル名。
+  : "${DEVICE_MASTER_TABLE:=parking-status-device-master}"
+  # Orion 接続（#7）。ORION_URL が空なら Lambda は Orion に送らない（ログ出力のみ）。
+  # 値は Lambda の環境変数に入る（deploy-bridge-stub.sh）。空の項目は設定しない。
+  : "${ORION_URL:=}"
+  : "${ORION_FIWARE_SERVICE:=}"
+  : "${ORION_FIWARE_SERVICEPATH:=}"
+  # Orion のトークンは有効期限があるので、Lambda が送るたびに Cognito でログインして取る（bridge/cognito_auth.py）。
+  # 4 つ（USER_POOL_ID / CLIENT_ID / USERNAME / PASSWORD）そろえて設定する。すべて空なら認証ヘッダなしで送る。
+  : "${ORION_COGNITO_USER_POOL_ID:=}"
+  : "${ORION_COGNITO_CLIENT_ID:=}"
+  : "${ORION_COGNITO_USERNAME:=}"
+  : "${ORION_COGNITO_PASSWORD:=}"
+  : "${ORION_COGNITO_CLIENT_SECRET:=}"
+  : "${ORION_COGNITO_TOKEN_TYPE:=}"
   : "${USE_BASIC_INGEST:=1}"
   : "${COGNITO_USER_POOL_NAME:=parking-status-ios-app}"
   : "${COGNITO_CLIENT_NAME:=parking-status-ios-client}"
@@ -123,6 +138,10 @@ aws_iam() {
 
 aws_iotwireless() {
   aws iotwireless "$@"
+}
+
+aws_dynamodb() {
+  aws dynamodb "$@"
 }
 
 iot_endpoint() {

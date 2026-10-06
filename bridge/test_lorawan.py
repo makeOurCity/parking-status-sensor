@@ -64,13 +64,6 @@ class FakeIotWireless:
         return {"Name": self.name} if self.name is not None else {}
 
 
-@pytest.fixture(autouse=True)
-def fresh_cache():
-    lorawan.clear_device_cache()
-    yield
-    lorawan.clear_device_cache()
-
-
 @pytest.fixture
 def fake_client(monkeypatch):
     client = FakeIotWireless()
@@ -171,7 +164,7 @@ def test_handler_logs_telemetry_line(fake_client, caplog):
         "ok": True,
         "deviceId": DEVICE_NAME,
         "status": "open",
-        "message": "stub handler — Orion upsert is Issue #7",
+        "orion": "disabled",
     }
     lines = telemetry_lines(caplog)
     assert len(lines) == 1
@@ -304,12 +297,12 @@ def test_lte_event_is_logged_unchanged(caplog, monkeypatch):
     assert caplog.records[0].getMessage() == "parking-status telemetry received: " + json.dumps(
         LTE_EVENT, ensure_ascii=False
     )
-    assert len(caplog.records) == 1
+    assert len(telemetry_lines(caplog)) == 1
     assert json.loads(result["body"]) == {
         "ok": True,
         "deviceId": "xiao-e83dc1fb05fc",
         "status": "full",
-        "message": "stub handler — Orion upsert is Issue #7",
+        "orion": "disabled",
     }
 
 

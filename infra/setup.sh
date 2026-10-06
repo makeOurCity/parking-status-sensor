@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Create shared IoT policy, deploy Lambda stub, and create IoT rules.
+# Create shared IoT policy, device master table, deploy Lambda, and create IoT rules.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
@@ -33,8 +33,11 @@ else
     --policy-document "file://$POLICY_DOC" >/dev/null
 fi
 
-# --- Lambda stub ---
-echo "Deploying Lambda stub: $LAMBDA_FUNCTION_NAME"
+# --- Device master table (#7) ---
+"$ROOT/setup-device-master.sh"
+
+# --- Lambda ---
+echo "Deploying Lambda: $LAMBDA_FUNCTION_NAME"
 "$ROOT/deploy-bridge-stub.sh"
 
 LAMBDA_ARN="arn:aws:lambda:${AWS_REGION}:${ACCOUNT_ID}:function:${LAMBDA_FUNCTION_NAME}"
