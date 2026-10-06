@@ -3,6 +3,7 @@
 # ゲートウェイ / Wireless Device）を作る（#40, #98）。何度実行しても同じ結果になる。
 #
 # Usage:
+#   ./setup-lorawan.sh role                  # Destination とゲートウェイ（CUPS）が使う IAM ロール（IAM 権限が要る）
 #   ./setup-lorawan.sh profiles [--no-destination]  # Service Profile / Device Profile / Destination
 #   ./setup-lorawan.sh gateway [--rotate]    # ゲートウェイ登録 + CUPS 証明書の発行と関連付け
 #   ./setup-lorawan.sh device <deviceId>     # Wireless Device（端末 1 台分）を登録
@@ -11,7 +12,8 @@
 # - `profiles --no-destination` は Destination（IAM ロールが要る）を作らない。ロールの用意を
 #   待つ間に、ロール不要の Service Profile / Device Profile だけ先に作るときに使う
 # - Destination は IAM ロール（既定 IoTWirelessGatewayCertManagerRole、`LORAWAN_ROLE_ARN` で上書き）
-#   を使う。Power User 権限ではロールを作れないので、管理者に作ってもらう（docs/aws-admin-handoff.md）
+#   を使う。`role` で作れる（IAM のロール作成と PassRole が要る権限で実行する）。Power User 権限では
+#   作れないので、その場合は管理者に作ってもらう（docs/aws-admin-handoff.md）
 # - ゲートウェイ EUI は他の AWS アカウントで再利用できない。別アカウントに登録済みなら、
 #   先にそちらで削除する（docs/aws-admin-handoff.md の切替手順を参照）
 set -euo pipefail
@@ -21,7 +23,7 @@ ROOT="$(cd "$(dirname "$0")" && pwd)"
 source "$ROOT/lib.sh"
 
 usage() {
-  sed -n '5,8p' "$0" | sed 's/^# \{0,1\}//' >&2
+  sed -n '5,9p' "$0" | sed 's/^# \{0,1\}//' >&2
   exit 1
 }
 
@@ -53,6 +55,81 @@ device_profile_id() {
     --query "DeviceProfileList[?Name=='${LORAWAN_DEVICE_PROFILE_NAME}'].Id | [0]" --output text)"
   [[ "$id" == "None" ]] && id=""
   printf '%s' "$id"
+}
+
+# Destination とゲートウェイ（CUPS）が使う IAM ロール。AWS コンソールが自動で作るものと同じ
+# 名前・パス（/service-role/）で、docs/aws-admin-handoff.md の定義どおりに作る。
+cmd_role() {
+  echo "=== LoRaWAN IAM role: $LORAWAN_ROLE_NAME ==="
+  echo "region=$AWS_REGION profile=$(profile_label) account=$ACCOUNT_ID"
+
+  local trust policy created=0
+  ROLE_TMP="$(mktemp -d)"
+  trap 'rm -rf "$ROLE_TMP"' EXIT
+  trust="$ROLE_TMP/trust.json"
+  policy="$ROLE_TMP/destination-policy.json"
+
+  cat >"$trust" <<'POLICY'
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": { "Service": "iotwireless.amazonaws.com" },
+      "Action": "sts:AssumeRole"
+    }
+  ]
+}
+POLICY
+  cat >"$policy" <<POLICY
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": "iot:Publish",
+      "Resource": "arn:aws:iot:${AWS_REGION}:${ACCOUNT_ID}:topic/${LORAWAN_UPLINK_TOPIC}"
+    },
+    {
+      "Effect": "Allow",
+      "Action": "iot:DescribeEndpoint",
+      "Resource": "*"
+    }
+  ]
+}
+POLICY
+
+  if aws_iam get-role --role-name "$LORAWAN_ROLE_NAME" >/dev/null 2>&1; then
+    echo "IAM role exists: $LORAWAN_ROLE_NAME (updating trust + policies)"
+    aws_iam update-assume-role-policy \
+      --role-name "$LORAWAN_ROLE_NAME" \
+      --policy-document "file://$trust" >/dev/null
+  else
+    echo "Creating IAM role: $LORAWAN_ROLE_NAME (path /service-role/)"
+    aws_iam create-role \
+      --role-name "$LORAWAN_ROLE_NAME" \
+      --path /service-role/ \
+      --assume-role-policy-document "file://$trust" \
+      --description "AWS IoT Core for LoRaWAN: gateway certificate management (CUPS) and Destination publish (#98)" >/dev/null
+    created=1
+  fi
+
+  aws_iam attach-role-policy \
+    --role-name "$LORAWAN_ROLE_NAME" \
+    --policy-arn arn:aws:iam::aws:policy/AWSIoTWirelessGatewayCertManager
+  aws_iam put-role-policy \
+    --role-name "$LORAWAN_ROLE_NAME" \
+    --policy-name parking-status-lorawan-destination \
+    --policy-document "file://$policy"
+
+  if [[ "$created" == "1" ]]; then
+    echo "Waiting for IAM role propagation..."
+    sleep 10
+  fi
+  echo ""
+  echo "=== role done ==="
+  echo "role ARN: $(aws_iam get-role --role-name "$LORAWAN_ROLE_NAME" --query Role.Arn --output text)"
+  echo "Next: ./setup-lorawan.sh profiles"
 }
 
 cmd_profiles() {
@@ -312,6 +389,7 @@ cmd_device() {
 }
 
 case "${1:-}" in
+  role) cmd_role ;;
   profiles) shift; cmd_profiles "$@" ;;
   gateway) shift; cmd_gateway "$@" ;;
   device) shift; cmd_device "$@" ;;
