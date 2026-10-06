@@ -22,8 +22,8 @@
 [AWS IoT Core]          ← 端末の MQTT 受け口（薄いパイプ）
     │  IoT ルール
     ▼
-[AWS Lambda]            ← 現状はスタブ（CloudWatch ログのみ）
-    │  #7 で Orion 連携を追加予定
+[AWS Lambda]            ← CloudWatch ログ + Orion upsert（#7）
+    │  デバイスマスター（DynamoDB）から name / location を引く
     ▼
 [FIWARE Orion]          ← Sandbox 環境（#7・別ドキュメント）
 ```
@@ -52,8 +52,9 @@
 | IoT ポリシー | `parking-status-device` | 全端末共通。Thing 名でスコープ制限 |
 | IoT ルール | `parking_status_telemetry` | **ハイフン不可**（アンダースコア） |
 | IoT ルール | `parking_status_lorawan` | LoRaWAN の Destination（`lorawan/parking-status/uplink`）を読む（#83） |
-| Lambda 関数 | `parking-status-bridge` | Python 3.12 スタブ（後で #7 で更新） |
-| Lambda 実行ロール | `parking-status-bridge-lambda-role` | CloudWatch Logs 書き込み + `iotwireless:GetWirelessDevice`（LoRaWAN、#83） |
+| Lambda 関数 | `parking-status-bridge` | Python 3.12。ログ出力 + Orion upsert（#7）。Orion の接続先は環境変数（§10） |
+| Lambda 実行ロール | `parking-status-bridge-lambda-role` | CloudWatch Logs 書き込み + `iotwireless:GetWirelessDevice`（LoRaWAN、#83）+ `dynamodb:GetItem`（デバイスマスター、#7） |
+| DynamoDB テーブル | `parking-status-device-master` | デバイスマスター（deviceId → name / location、#7, #14）。パーティションキー `deviceId`（文字列）、プロビジョンド 1 RCU / 1 WCU（無料枠内） |
 | IoT Thing | `{deviceId}` ごと | 例: `xiao-e83dc1fb05fc`（端末1台＝Thing 1つ） |
 | デバイス証明書 | 端末ごとに1枚 | Thing にアタッチ、ポリシーを紐付け |
 
@@ -127,7 +128,9 @@ parking-status telemetry received: {"deviceId":"xiao-...","status":"open",...}
 | コード | [`bridge/handler.py`](../bridge/handler.py) と [`bridge/lorawan.py`](../bridge/lorawan.py) を zip でデプロイ |
 | タイムアウト | 30 秒（#83: LoRaWAN のコールドスタート対策。10 秒だと余裕が小さかった） |
 | メモリ | 256 MB |
-| 実行ロール | `AWSLambdaBasicExecutionRole`（CloudWatch Logs）+ インラインポリシー `parking-status-bridge-iotwireless-read`（`iotwireless:GetWirelessDevice`、リソースは `arn:aws:iotwireless:<region>:<account>:WirelessDevice/*`） |
+| 実行ロール | `AWSLambdaBasicExecutionRole`（CloudWatch Logs）+ インラインポリシー `parking-status-bridge-iotwireless-read`（`iotwireless:GetWirelessDevice`、リソースは `arn:aws:iotwireless:<region>:<account>:WirelessDevice/*`）+ インラインポリシー `parking-status-bridge-device-master-read`（`dynamodb:GetItem`、リソースは `arn:aws:dynamodb:<region>:<account>:table/parking-status-device-master`）。**ロールを管理者が作る場合（#98）は後者も付ける**（付けないと Orion には書かれず、`orion skipped: device master lookup failed` がログに出る） |
+| コード | 上の 2 ファイルに加え [`bridge/ngsi.py`](../bridge/ngsi.py)・[`bridge/orion.py`](../bridge/orion.py)・[`bridge/device_master.py`](../bridge/device_master.py)（#7） |
+| 環境変数 | `DEVICE_MASTER_TABLE`、`ORION_URL` ほか（§10） |
 
 ### 4.3 IoT ルール `parking_status_telemetry`
 
@@ -173,6 +176,7 @@ SELECT * FROM 'lorawan/parking-status/uplink'
 | IoT | `CreatePolicy`, `CreateTopicRule`, `CreateThing`, `CreateKeysAndCertificate`, `AttachPolicy`, `AttachThingPrincipal`, `DescribeEndpoint` |
 | Lambda | `CreateFunction`, `UpdateFunctionCode`, `AddPermission`, `GetFunction` |
 | Cognito | `cognito-idp:*`（User Pool / App Client / ユーザー作成）、`cognito-identity:*`（Identity Pool 作成・ロール割り当て）（iOS ログビューア、[ios-app-cognito.md](ios-app-cognito.md)） |
+| DynamoDB | `CreateTable`, `DescribeTable`, `PutItem`, `Scan`, `GetItem`, `DeleteItem`（デバイスマスターのテーブル作成と登録。#7） |
 | IoT Wireless | `iotwireless:*`（Service / Device Profile・Destination・ゲートウェイ・Wireless Device の作成。LoRaWAN、[40-lorawan-design.md](40-lorawan-design.md)） |
 | IAM | `CreateRole`, `AttachRolePolicy`, `PutRolePolicy`, `GetRole`（Lambda 実行ロール・Cognito 認証済みロール・LoRaWAN 用ロールの作成） |
 | CloudWatch Logs | Lambda 実行ロール経由（マネージドポリシーで可） |
@@ -209,6 +213,12 @@ Cognito のロールは信頼ポリシーに Identity Pool の ID が要るた�
         "cognito-idp:*",
         "cognito-identity:*",
         "iotwireless:*",
+        "dynamodb:CreateTable",
+        "dynamodb:DescribeTable",
+        "dynamodb:PutItem",
+        "dynamodb:GetItem",
+        "dynamodb:Scan",
+        "dynamodb:DeleteItem",
         "iam:CreateRole",
         "iam:GetRole",
         "iam:AttachRolePolicy",
@@ -351,18 +361,21 @@ Lambda・CloudWatch Logs も無料枠内に収まる想定です。
 
 ## 10. Phase 2: Orion Sandbox 接続前提（#7 向け）
 
-Phase 1 完了後、Lambda から **FIWARE Orion（Sandbox）** へ NGSIv2 upsert する実装を開発チームが追加します（#7）。  
-その前に、クラウド管理者が以下を整備してください。
+Lambda から **FIWARE Orion（Sandbox）** へ NGSIv2 upsert する実装は、開発チームが個人アカウントで先に確認します（#7）。組織アカウントでは、確認済みのコードとスクリプト（`infra/`）をそのまま適用します。クラウド管理者は、次の接続情報と環境を整備してください。
 
 | 項目 | 内容 |
 |---|---|
-| Orion 接続 URL | Lambda 環境変数 `ORION_URL` 等 |
-| ネットワーク | Orion が VPC 内の場合、Lambda の VPC 設定・セキュリティグループ |
-| 認証 | Fiware-Service ヘッダ等（環境の既存パターンに合わせる） |
-| Lambda デプロイ | 開発チーム PR マージ後の `deploy-bridge-stub.sh` 相当 or CI/CD |
+| Orion 接続 URL | Lambda 環境変数 `ORION_URL` |
+| `Fiware-Service` / `Fiware-ServicePath` | 環境変数 `ORION_FIWARE_SERVICE` / `ORION_FIWARE_SERVICEPATH`（環境の既存パターンに合わせる） |
+| 認証（Cognito） | トークンは有効期限があるため、Lambda が Orion に送るたびに Cognito User Pool へユーザー名・パスワードでログインしてトークンを取る（SRP。`USER_SRP_AUTH`。リフレッシュはしない）。次を用意して渡す: **User Pool ID・App Client ID**（クライアントシークレットがあればそれも）、**専用ユーザーのユーザー名・パスワード**（確認済み・MFA なし。Orion に書き込める最小権限）、**Orion が受け取るのが ID トークンかアクセストークンか**。App Client では `ALLOW_USER_SRP_AUTH` を有効にする。環境変数 `ORION_COGNITO_*`（`bridge/README.md` 参照）に入る |
+| ネットワーク | Lambda から Orion に **公開 HTTPS で届く**前提（Lambda を VPC に入れない）。VPC 内からしか届かない場合は、Orion 用の Lambda を分けて VPC に入れる構成にする（開発チームと相談）。Lambda を VPC に入れると、同じ Lambda が呼ぶ AWS API（DynamoDB・IoT Wireless）にも NAT Gateway か VPC エンドポイントが要る |
+| 実行ロールの権限 | §4.2 の `dynamodb:GetItem`（デバイスマスター）。Cognito のログインは認証前の API なので権限は要らない。パスワードを Secrets Manager 等に置く場合は、追加の権限とコード変更が要る（開発チームに連絡） |
+| Lambda デプロイ | 開発チーム PR マージ後の `deploy-bridge-stub.sh` 相当 or CI/CD。環境変数は `infra/config.env`（組織用は `config.org.env`）に書いて同スクリプトで設定できる |
 
-Phase 2 完了後、開発チームへ Orion 接続情報（URL・必要なヘッダ名）を引き渡してください。  
-エンティティ設計は [data-model.md](data-model.md)、実装は #7 を参照。
+環境変数が空（`ORION_URL` 未設定）の間は、Lambda は Orion に送らずログ出力だけを行います。
+
+Phase 2 完了後、開発チームへ Orion 接続情報（URL・必要なヘッダ名・認証方式）を引き渡してください。  
+エンティティ設計は [data-model.md](data-model.md)、実装は [`bridge/README.md`](../bridge/README.md) と #7 を参照。
 
 ---
 
@@ -395,8 +408,9 @@ Phase 2 完了後、開発チームへ Orion 接続情報（URL・必要なヘ�
 
 ```
 [ ] Orion Sandbox の接続 URL・認証方式を確定
-[ ] Lambda の VPC / セキュリティグループ設定（必要な場合）
+[ ] Lambda から Orion に届くことを確認（VPC 内のみなら Lambda を分ける）
 [ ] Lambda 環境変数（ORION_URL 等）を設定
+[ ] 実行ロールに DynamoDB（デバイスマスター）の権限を付けた（ロールを管理者が作る場合）
 [ ] 接続情報を開発チームに引き渡し
 [ ] #7 実装デプロイ後、IoT Core → Lambda → Orion E2E を確認
 ```
