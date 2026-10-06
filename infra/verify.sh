@@ -15,7 +15,7 @@ ENDPOINT="$(iot_endpoint)"
 LAMBDA_ARN="arn:aws:lambda:${AWS_REGION}:${ACCOUNT_ID}:function:${LAMBDA_FUNCTION_NAME}"
 
 echo "=== verify parking-status IoT Core setup ==="
-echo "region=$AWS_REGION profile=$AWS_PROFILE account=$ACCOUNT_ID"
+echo "region=$AWS_REGION profile=$(profile_label) account=$ACCOUNT_ID"
 echo ""
 
 fail=0

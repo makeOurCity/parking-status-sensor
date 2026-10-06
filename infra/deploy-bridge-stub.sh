@@ -29,13 +29,20 @@ ACCOUNT_ID="$(account_id)"
 LAMBDA_ARN="arn:aws:lambda:${AWS_REGION}:${ACCOUNT_ID}:function:${LAMBDA_FUNCTION_NAME}"
 
 # --- Execution role ---
+# LAMBDA_ROLE_ARN が指定されていれば管理者が用意したロールをそのまま使う
+# （Power User 権限では IAM ロールを作れず、PassRole も要る。#98）。
+# その場合のロールの中身は docs/aws-admin-handoff.md の定義に従っていること。
 ROLE_CREATED=0
-if aws_iam get-role --role-name "$ROLE_NAME" >/dev/null 2>&1; then
-  ROLE_ARN="$(aws_iam get-role --role-name "$ROLE_NAME" --query Role.Arn --output text)"
+if [[ -n "$LAMBDA_ROLE_ARN" ]]; then
+  echo "Using existing IAM role (not managed by this script): $LAMBDA_ROLE_ARN"
+  ROLE_ARN="$LAMBDA_ROLE_ARN"
 else
-  echo "Creating IAM role: $ROLE_NAME"
-  TRUST_POLICY="$(mktemp)"
-  cat >"$TRUST_POLICY" <<'POLICY'
+  if aws_iam get-role --role-name "$ROLE_NAME" >/dev/null 2>&1; then
+    ROLE_ARN="$(aws_iam get-role --role-name "$ROLE_NAME" --query Role.Arn --output text)"
+  else
+    echo "Creating IAM role: $ROLE_NAME"
+    TRUST_POLICY="$(mktemp)"
+    cat >"$TRUST_POLICY" <<'POLICY'
 {
   "Version": "2012-10-17",
   "Statement": [
@@ -47,22 +54,22 @@ else
   ]
 }
 POLICY
-  ROLE_ARN="$(aws_iam create-role \
-    --role-name "$ROLE_NAME" \
-    --assume-role-policy-document "file://$TRUST_POLICY" \
-    --query Role.Arn --output text)"
-  rm -f "$TRUST_POLICY"
-  aws_iam attach-role-policy \
-    --role-name "$ROLE_NAME" \
-    --policy-arn arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-  ROLE_CREATED=1
-fi
+    ROLE_ARN="$(aws_iam create-role \
+      --role-name "$ROLE_NAME" \
+      --assume-role-policy-document "file://$TRUST_POLICY" \
+      --query Role.Arn --output text)"
+    rm -f "$TRUST_POLICY"
+    aws_iam attach-role-policy \
+      --role-name "$ROLE_NAME" \
+      --policy-arn arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+    ROLE_CREATED=1
+  fi
 
-# LoRaWAN (#40): Wireless Device ID → 名前（= deviceId）の引き当てだけを許可する。
-# put-role-policy は同名なら上書きなので、何度実行しても同じ結果になる。
-IOTWIRELESS_POLICY="$(mktemp)"
-trap 'rm -f "$IOTWIRELESS_POLICY"' EXIT
-cat >"$IOTWIRELESS_POLICY" <<POLICY
+  # LoRaWAN (#40): Wireless Device ID → 名前（= deviceId）の引き当てだけを許可する。
+  # put-role-policy は同名なら上書きなので、何度実行しても同じ結果になる。
+  IOTWIRELESS_POLICY="$(mktemp)"
+  trap 'rm -f "$IOTWIRELESS_POLICY"' EXIT
+  cat >"$IOTWIRELESS_POLICY" <<POLICY
 {
   "Version": "2012-10-17",
   "Statement": [
@@ -74,14 +81,15 @@ cat >"$IOTWIRELESS_POLICY" <<POLICY
   ]
 }
 POLICY
-aws_iam put-role-policy \
-  --role-name "$ROLE_NAME" \
-  --policy-name parking-status-bridge-iotwireless-read \
-  --policy-document "file://$IOTWIRELESS_POLICY"
+  aws_iam put-role-policy \
+    --role-name "$ROLE_NAME" \
+    --policy-name parking-status-bridge-iotwireless-read \
+    --policy-document "file://$IOTWIRELESS_POLICY"
 
-if [[ "$ROLE_CREATED" == "1" ]]; then
-  echo "Waiting for IAM role propagation..."
-  sleep 10
+  if [[ "$ROLE_CREATED" == "1" ]]; then
+    echo "Waiting for IAM role propagation..."
+    sleep 10
+  fi
 fi
 
 # --- Lambda function ---

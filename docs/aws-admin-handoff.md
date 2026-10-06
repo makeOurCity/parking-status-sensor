@@ -172,9 +172,20 @@ SELECT * FROM 'lorawan/parking-status/uplink'
 |---|---|
 | IoT | `CreatePolicy`, `CreateTopicRule`, `CreateThing`, `CreateKeysAndCertificate`, `AttachPolicy`, `AttachThingPrincipal`, `DescribeEndpoint` |
 | Lambda | `CreateFunction`, `UpdateFunctionCode`, `AddPermission`, `GetFunction` |
-| IAM | `CreateRole`, `AttachRolePolicy`, `PutRolePolicy`, `GetRole`（Lambda 実行ロール作成と、LoRaWAN 用インラインポリシー） |
+| Cognito | `cognito-idp:*`（User Pool / App Client / ユーザー作成）、`cognito-identity:*`（Identity Pool 作成・ロール割り当て）（iOS ログビューア、[ios-app-cognito.md](ios-app-cognito.md)） |
+| IoT Wireless | `iotwireless:*`（Service / Device Profile・Destination・ゲートウェイ・Wireless Device の作成。LoRaWAN、[40-lorawan-design.md](40-lorawan-design.md)） |
+| IAM | `CreateRole`, `AttachRolePolicy`, `PutRolePolicy`, `GetRole`（Lambda 実行ロール・Cognito 認証済みロール・LoRaWAN 用ロールの作成） |
 | CloudWatch Logs | Lambda 実行ロール経由（マネージドポリシーで可） |
 | STS | `GetCallerIdentity` |
+
+### Power User 権限で作業する場合（#98）
+
+AWS 管理ポリシー `PowerUserAccess` は IAM をほぼ操作できず、**IAM ロールの作成と `iam:PassRole` ができない**。IoT Core・Lambda・Cognito・IoT Wireless・CloudWatch Logs は上の表のとおりそのまま使える。次のどちらかで補う。
+
+- **管理者が IAM ロール 3 つ（Lambda 実行 / Cognito 認証済み / LoRaWAN 用）を作り**、実行者の権限に **この 3 ロールだけの `iam:PassRole` と `iam:GetRole`** を追加する。スクリプトは `config.env` の `LAMBDA_ROLE_ARN` / `COGNITO_AUTH_ROLE_ARN` / `LORAWAN_ROLE_ARN` でロールを指定する（作らない）
+- 実行者の権限に `iam:CreateRole` などを 3 ロール名に限定して追加し、スクリプトにロールを作らせる
+
+Cognito のロールは信頼ポリシーに Identity Pool の ID が要るため、`./setup-cognito.sh --pools-only` で Identity Pool を先に作り、表示された ID とトラストポリシーを管理者に渡す。
 
 ### デプロイ用ポリシー例（最小構成の参考）
 
@@ -195,6 +206,9 @@ SELECT * FROM 'lorawan/parking-status/uplink'
         "lambda:GetFunction",
         "lambda:AddPermission",
         "lambda:GetPolicy",
+        "cognito-idp:*",
+        "cognito-identity:*",
+        "iotwireless:*",
         "iam:CreateRole",
         "iam:GetRole",
         "iam:AttachRolePolicy",
