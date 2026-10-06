@@ -46,7 +46,7 @@ if [[ -n "$IDENTITY_POOL_ID" && "$IDENTITY_POOL_ID" != "None" ]]; then
   check "Identity Pool: $COGNITO_IDENTITY_POOL_NAME" \
     aws_cognito_identity describe-identity-pool --identity-pool-id "$IDENTITY_POOL_ID"
   check "Identity Pool roles attached" \
-    bash -c "aws cognito-identity get-identity-pool-roles --identity-pool-id '$IDENTITY_POOL_ID' --query 'Roles.authenticated' --output text | grep -q ."
+    bash -c "aws cognito-identity get-identity-pool-roles --identity-pool-id '$IDENTITY_POOL_ID' --query 'Roles.authenticated' --output text | grep -q '^arn:aws:iam::'"
 else
   echo "  NG  Identity Pool: $COGNITO_IDENTITY_POOL_NAME (not found)"
   fail=1

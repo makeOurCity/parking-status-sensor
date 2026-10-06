@@ -57,6 +57,7 @@ chmod +x *.sh lib.sh
 
 ```bash
 ./setup-lorawan.sh profiles                  # Service Profile / Device Profile / Destination
+./setup-lorawan.sh profiles --no-destination # ロール不要の Service / Device Profile だけ（Destination は後で）
 ./setup-lorawan.sh gateway                   # ゲートウェイ登録 + cups.{uri,trust,crt,key} を gateway-certs/ に出力
 LORAWAN_DEV_EUI=<16桁> LORAWAN_APP_EUI=<16桁> \
   ./setup-lorawan.sh device <deviceId>       # AppKey は対話入力（履歴に残らない）

@@ -3,11 +3,13 @@
 # ゲートウェイ / Wireless Device）を作る（#40, #98）。何度実行しても同じ結果になる。
 #
 # Usage:
-#   ./setup-lorawan.sh profiles              # Service Profile / Device Profile / Destination
+#   ./setup-lorawan.sh profiles [--no-destination]  # Service Profile / Device Profile / Destination
 #   ./setup-lorawan.sh gateway [--rotate]    # ゲートウェイ登録 + CUPS 証明書の発行と関連付け
 #   ./setup-lorawan.sh device <deviceId>     # Wireless Device（端末 1 台分）を登録
 #
 # 前提:
+# - `profiles --no-destination` は Destination（IAM ロールが要る）を作らない。ロールの用意を
+#   待つ間に、ロール不要の Service Profile / Device Profile だけ先に作るときに使う
 # - Destination は IAM ロール（既定 IoTWirelessGatewayCertManagerRole、`LORAWAN_ROLE_ARN` で上書き）
 #   を使う。Power User 権限ではロールを作れないので、管理者に作ってもらう（docs/aws-admin-handoff.md）
 # - ゲートウェイ EUI は他の AWS アカウントで再利用できない。別アカウントに登録済みなら、
@@ -54,6 +56,13 @@ device_profile_id() {
 }
 
 cmd_profiles() {
+  local with_destination=1
+  case "${1:-}" in
+    "") ;;
+    --no-destination) with_destination=0 ;;
+    *) usage ;;
+  esac
+
   echo "=== LoRaWAN profiles / destination ==="
   echo "region=$AWS_REGION profile=$(profile_label) account=$ACCOUNT_ID"
 
@@ -100,6 +109,13 @@ cmd_profiles() {
       --lorawan "$dp_json" \
       --query Id --output text)"
     echo "  created: $dp_id"
+  fi
+
+  if [[ "$with_destination" == "0" ]]; then
+    echo "Skipping Destination (--no-destination). Re-run without the flag once the role exists."
+    echo ""
+    echo "=== profiles done (no destination) ==="
+    return 0
   fi
 
   # Destination: アップリンクを MQTT トピックに publish する。IoT ルール
@@ -296,7 +312,7 @@ cmd_device() {
 }
 
 case "${1:-}" in
-  profiles) cmd_profiles ;;
+  profiles) shift; cmd_profiles "$@" ;;
   gateway) shift; cmd_gateway "$@" ;;
   device) shift; cmd_device "$@" ;;
   *) usage ;;
