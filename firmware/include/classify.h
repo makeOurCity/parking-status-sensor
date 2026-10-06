@@ -4,7 +4,7 @@
 
 enum class ParkingStatus {
   kFull,
-  kAvailable,
+  kOpen,
   kUnknown,
 };
 

@@ -81,7 +81,7 @@ dwell time が有効なネットワークに移した場合、DR2 での送信�
 | byte | bit | 内容 |
 |---|---|---|
 | 0 | 7:6 | version（=1） |
-| 0 | 5:4 | status（0 full / 1 available / 2 unknown。`ParkingStatus` の順） |
+| 0 | 5:4 | status（0 full / 1 open / 2 unknown。`ParkingStatus` の順。#99 で `available` から改名したが、無線上の値は変わらない） |
 | 0 | 3:2 | 送信理由（0 状態変化 / 1 heartbeat / 2 pending の再送 / 3 ブートモード） |
 | 0 | 1 | coldBoot（`esp_reset_reason() == ESP_RST_POWERON`） |
 | 0 | 0 | 予備（0） |

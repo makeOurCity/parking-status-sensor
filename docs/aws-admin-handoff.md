@@ -102,7 +102,7 @@ aws logs tail /aws/lambda/parking-status-bridge --follow --region ap-northeast-1
 `test-publish.sh` 実行後、CloudWatch Logs に次のような行が出れば成功です。
 
 ```
-parking-status telemetry received: {"deviceId":"xiao-...","status":"available",...}
+parking-status telemetry received: {"deviceId":"xiao-...","status":"open",...}
 ```
 
 ---
@@ -250,7 +250,7 @@ aws iot describe-endpoint --endpoint-type iot:Data-ATS --region ap-northeast-1
 ```json
 {
   "deviceId": "xiao-e83dc1fb05fc",
-  "status": "available",
+  "status": "open",
   "raw": { "red": 150, "green": 820, "blue": 200, "clear": 1200 },
   "threshold": 100,
   "determinedBy": "device",
@@ -258,7 +258,7 @@ aws iot describe-endpoint --endpoint-type iot:Data-ATS --region ap-northeast-1
 }
 ```
 
-`status` の値: `full`（満）/ `available`（空）/ `unknown`（不明）
+`status` の値: `full`（満）/ `open`（空）/ `unknown`（不明）
 
 ---
 

@@ -109,7 +109,7 @@ LoRaWAN 版のテレメトリ JSON は、LTE-M 版（下記）の項目に加え
 ```json
 {
   "deviceId": "xiao-e83dc1fc1aec",
-  "status": "available",
+  "status": "open",
   "raw": { "red": 12, "green": 18, "blue": 3, "clear": 64 },
   "threshold": 100,
   "determinedBy": "device",
@@ -150,7 +150,7 @@ AWS IoT Core へ接続する際、端末ごとに以下が必要。
 ```json
 {
   "deviceId": "xiao-e83dc1fb05fc",
-  "status": "available",
+  "status": "open",
   "raw": { "red": 150, "green": 820, "blue": 200, "clear": 1200 },
   "threshold": 100,
   "determinedBy": "device",

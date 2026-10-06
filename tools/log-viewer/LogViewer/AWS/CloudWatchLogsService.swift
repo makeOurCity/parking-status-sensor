@@ -56,7 +56,7 @@ struct CloudWatchLogsService {
             guard let deviceId = row["deviceId"],
                   let lastSeenMs = row["lastSeen"].flatMap(Double.init)
             else { return nil }
-            let status = row["currentStatus"].flatMap(DeviceOperationalStatus.init(rawValue:)) ?? .unknown
+            let status = row["currentStatus"].flatMap(DeviceOperationalStatus.parse) ?? .unknown
             return DeviceStatusRow(
                 deviceId: deviceId,
                 status: status,

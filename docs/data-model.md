@@ -32,8 +32,12 @@
 | 値 | 日本語ラベル | 意味 |
 |---|---|---|
 | `full` | 満 | 満車（赤が支配的: R - G ≥ threshold） |
-| `available` | 空 | 空車（緑が支配的: G - R ≥ threshold） |
+| `open` | 空 | 空車（緑が支配的: G - R ≥ threshold） |
 | `unknown` | 不明 | 消灯・遷移中など判定不能（差が threshold 未満） |
+
+`full` / `open` は FIWARE Smart Data Models の `OffStreetParking.status` の値と同じ（下記「将来対応」）。
+
+**旧値 `available`（#99 で `open` に改名）**: 再書き込み前の端末は `available` を送り続け、CloudWatch Logs の過去ログにも残る。受信側は `available` を `open` として読み替える（Orion に書くときは `open` に正規化する。#7）。LoRaWAN は無線上の値（0/1/2 の番号）が変わらないので、端末の再書き込みなしで `open` になる。
 
 ### エンティティ例
 
@@ -43,7 +47,7 @@
   "type": "ParkingStatusSensor",
   "status": {
     "type": "Text",
-    "value": "available",
+    "value": "open",
     "metadata": {
       "label": { "type": "Text", "value": "空" }
     }
@@ -75,7 +79,7 @@ FIWARE Smart Data Models の [`OffStreetParking`](https://github.com/smart-data-
 | ParkingStatusSensor.status | OffStreetParking.status | 備考 |
 |---|---|---|
 | `full` | `full` | 満車 |
-| `available` | `open` | 空車（台数は不明のため availableSpotNumber は設定しない） |
+| `open` | `open` | 空車（台数は不明のため availableSpotNumber は設定しない） |
 | `unknown` | — | マッピングしない |
 
 `ParkingStatusSensor` と `OffStreetParking` は `refParkingLot` Relationship で紐付ける予定。
