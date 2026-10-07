@@ -1,0 +1,8 @@
+(fp_lib_table
+  (version 7)
+  (lib (name "lte-power-switch")(type "KiCad")(uri "${KIPRJMOD}/lte-power-switch.pretty")(options "")(descr "Project footprints (LCSC/EasyEDA-derived)"))
+  (lib (name "Capacitor_SMD")(type "KiCad")(uri "${KICAD10_FOOTPRINT_DIR}/Capacitor_SMD.pretty")(options "")(descr "KiCad standard"))
+  (lib (name "Resistor_SMD")(type "KiCad")(uri "${KICAD10_FOOTPRINT_DIR}/Resistor_SMD.pretty")(options "")(descr "KiCad standard"))
+  (lib (name "TestPoint")(type "KiCad")(uri "${KICAD10_FOOTPRINT_DIR}/TestPoint.pretty")(options "")(descr "KiCad standard"))
+  (lib (name "MountingHole")(type "KiCad")(uri "${KICAD10_FOOTPRINT_DIR}/MountingHole.pretty")(options "")(descr "KiCad standard"))
+)

@@ -33,9 +33,10 @@ pio device monitor -e <env>
 | `xiao-s3-aws-debug` | 上記 + Deep Sleepなし |
 | `xiao-s3-aws-lte` | AWS IoT Core + LTE-M・リレーなし（毎サイクル送信）。ベンチ・通信パイプライン検証用 |
 | `xiao-s3-aws-lte-debug` | 上記 + Deep Sleepなし（開発） |
-| `xiao-s3-aws-lte-relay` | #46 Grove 2-Coilラッチングリレーで LTE-M 電源を物理遮断する版（ポテンショメーターなし） |
+| `xiao-s3-aws-lte-relay` | 旧方式（#46 Grove 2-Coilラッチングリレー、廃止予定）で LTE-M 電源を物理遮断する版（ポテンショメーターなし） |
 | `xiao-s3-aws-lte-relay-debug` | 上記のベンチ検証用。Deep Sleep無効化 |
-| `xiao-s3-aws-lte-relay-pot` | **LTE-M 版の本番機**（リレー・状態変化時のみ送信・ポテンショメーター。`firmware/README.md` と同じ位置づけ） |
+| `xiao-s3-aws-lte-relay-pot` | 旧方式（リレー、廃止予定）の現行機体用（状態変化時のみ送信・ポテンショメーター。`firmware/README.md` と同じ位置づけ） |
+| `xiao-s3-aws-lte-switch-pot` / `xiao-s3-aws-lte-switch-debug` | #88 のロードスイッチ基板（TPS22918）で LTE-M 電源を遮断する版。移行先（基板評価中）。`-debug` はベンチ検証用（ポテンショメーターなし、Deep Sleep なし） |
 
 poweroff-test はログを power-logger のログディレクトリへ保存する運用:
 

@@ -12,7 +12,7 @@ XIAO ESP32S3 向けファームウェア（PlatformIO）。Grove - I2C Color Sen
 |---|---|
 | ボード | Seeed XIAO ESP32S3 + Grove Shield for XIAO |
 | センサー | Grove - I2C Color Sensor V3.0（VEML6040、I2C `0x10`、D4=SDA / D5=SCL） |
-| LTE-M 版 | M5Stack SIM7080G CAT-M Unit（Grove UART、D6=TX / D7=RX）+ Grove 2-Coil Latching Relay（D0）で LTE-M の電源を送信時だけ入れる（#46） |
+| LTE-M 版 | M5Stack SIM7080G CAT-M Unit（Grove UART、D6=TX / D7=RX）+ **ロードスイッチ基板**（TPS22918、D0、[`hardware/lte-power-switch/`](../hardware/lte-power-switch/)、#88・基板評価中）で LTE-M の電源を送信時だけ入れる。旧方式のラッチングリレー（#46）は廃止予定で、移行が済むまでコードと env を残す |
 | LoRaWAN 版（評価中・#40） | Grove Wio-E5（Grove UART、D6=TX / D7=RX、9600bps）。LTE-M とは排他 |
 | 閾値調整 | Grove - Rotary Angle Sensor（D1、#60） |
 | 電源 | LiPo → Shield の BAT パッド（JST）。ESP32-S3 と Grove の各ポートは Shield の 3.3V を共有する |
@@ -32,7 +32,7 @@ XIAO ESP32S3 向けファームウェア（PlatformIO）。Grove - I2C Color Sen
 | `lte_modem_tls.cpp` | SIM7080G 内蔵 TLS 用の証明書の投入 | #30 |
 | `sync_ledger.cpp` | 送信確認の記録（NVS）。送信するかどうかの判定の元 | #32 |
 | `history_log.cpp` | 毎サイクルの判定結果の履歴（NVS） | #47 |
-| `relay.cpp` | ラッチングリレーの SET / RESET | #46 |
+| `relay.cpp` | LTE-M 電源の制御（ロードスイッチはレベル駆動。旧方式のリレーはパルスの SET / RESET）。関数名は共通 | #88 / #46 |
 | `potentiometer.cpp` | ポテンショメーターによる判定閾値の調整（NVS に保存） | #60 |
 | `device_id.cpp` | デバイス ID（`PSS_DEVICE_ID` が空なら MAC から `xiao-xxxxxxxxxxxx`） | #14 |
 
@@ -43,14 +43,14 @@ XIAO ESP32S3 向けファームウェア（PlatformIO）。Grove - I2C Color Sen
 ```
 起床 → センサー読み取り・判定 → 履歴ログに記録 → 送信するか判定
   ├ 送信しない → Deep Sleep
-  └ 送信する → リレー ON → LTE-M 接続 → MQTT 送信（QoS1）→ 切断（AT+CPOWD=1）→ リレー OFF → Deep Sleep
+  └ 送信する → LTE-M 電源 ON → LTE-M 接続 → MQTT 送信（QoS1）→ 切断（AT+CPOWD=1）→ LTE-M 電源 OFF → Deep Sleep
 ```
 
 - 起床間隔は `PSS_SLEEP_SECONDS`（300 秒）。送信した場合、実際の間隔はこれに起床していた時間（約 17 秒）が加わる
 - LTE-M 版（`PSS_CHANGE_ONLY_SEND=1`）は、**状態が変わったとき、前回の送信が確認できなかったとき、12 回続けて送信しなかったとき**（`PSS_HEARTBEAT_CYCLES=12`、約 66 分ごとの定期送信）だけ送信する。判定の元は NVS の sync ledger（[docs/sync-delivery-design.md](../docs/sync-delivery-design.md)）
 - 接続は `PSS_CONNECT_PHASE_MS`（45 秒）を目安に打ち切る。リレー／ロードスイッチの機体では、モデムが AT に一度も応答しなければ約 30 秒で諦めて Deep Sleep する（#87）
 - 1 サイクルが上限（`PSS_CYCLE_MAX_ACTIVE_MS`）を超えたらウォッチドッグで再起動する（#41）。`task_wdt` で起動した最初のサイクルは送信せず、`budget_exhausted` を記録して Deep Sleep する（#87）
-- 起動時は、理由を問わず最初にリレーを RESET（LTE-M OFF）する
+- 起動時は、理由を問わず最初に LTE-M の電源を OFF にする（旧方式のリレーは RESET パルス、ロードスイッチは GPIO を LOW）
 
 ### ブートモード（#50）
 
@@ -85,11 +85,11 @@ XIAO ESP32S3 向けファームウェア（PlatformIO）。Grove - I2C Color Sen
 
 | env | 用途 |
 |---|---|
-| **`xiao-s3-aws-lte-relay-pot`** | **LTE-M 版の本番機**（リレー・状態変化時のみ送信・ポテンショメーター） |
-| `xiao-s3-aws-lte-relay` | LTE-M 版（ポテンショメーターなし） |
-| `xiao-s3-aws-lte-relay-debug` | 上の Deep Sleep なし版（USB シリアルでログを見る） |
-| `xiao-s3-aws-lte-switch-pot` | LTE-M の電源遮断を**ロードスイッチ基板**（TPS22918、`hardware/lte-power-switch/`、#88）で行う機体用（レベル駆動、ポテンショメーター付き） |
+| `xiao-s3-aws-lte-switch-pot` | **LTE-M 版の移行先**（#88・基板評価中）。LTE-M の電源遮断を**ロードスイッチ基板**（TPS22918、`hardware/lte-power-switch/`）で行う機体用（レベル駆動、ポテンショメーター付き） |
 | `xiao-s3-aws-lte-switch-debug` | 上のベンチ検証用（ポテンショメーターなし、Deep Sleep なし） |
+| `xiao-s3-aws-lte-relay-pot` | **旧方式（ラッチングリレー、廃止予定）の現行機体用**（リレー・状態変化時のみ送信・ポテンショメーター）。新しい機体には使わない |
+| `xiao-s3-aws-lte-relay` | 旧方式（ポテンショメーターなし） |
+| `xiao-s3-aws-lte-relay-debug` | 上の Deep Sleep なし版（USB シリアルでログを見る） |
 | `xiao-s3-aws-lte` / `xiao-s3-aws-lte-debug` | LTE-M・リレーなし（毎サイクル送信） |
 | `xiao-s3-aws` / `xiao-s3-aws-debug` | Wi-Fi + AWS IoT Core（TLS） |
 | `xiao-s3` / `xiao-s3-debug` | Wi-Fi + ローカル MQTT（Mosquitto） |
@@ -207,7 +207,7 @@ USB でつないだ状態で起動（Deep Sleep 以外からの起床）する�
 | Issue | 内容 |
 |---|---|
 | #5 / #6 | センサー読み取り / 判定・MQTT・Deep Sleep |
-| #25 / #46 | 低消費電力運用 / リレーによる LTE-M の電源遮断 |
+| #25 / #46 / #88 | 低消費電力運用 / 旧方式のリレーによる LTE-M の電源遮断 / ロードスイッチ基板への置き換え |
 | #30 | LTE-M の時刻同期・モデム内蔵 TLS |
 | #32 | 送信確認（sync ledger） |
 | #41 | ウォッチドッグ |

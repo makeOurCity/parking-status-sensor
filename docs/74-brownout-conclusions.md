@@ -4,6 +4,7 @@ LTE-M 版（`xiao-s3-aws-lte-relay-pot`、`xiao-e83dc1fb05fc`）で起きたブ�
 
 - 対応する Issue: #74（調査）、#76（切断処理の修正）
 - 関連: [hardware.md](hardware.md)（給電経路・電池の持ち）、[power-measurement.md](power-measurement.md)（計測手順）
+- **注（2026-10-07）:** 本書の「リレー」は、旧方式（ラッチングリレー、廃止）の機体の記録。後継のロードスイッチ基板（#88）でも、ON の瞬間の突入電流が 3V3 レールを落とす点は同じ構造のため、本書の結論（§3）は引き続き前提になる。突入電流の評価は [88-load-switch-design.md](88-load-switch-design.md) §6 項目 2。
 
 ---
 
