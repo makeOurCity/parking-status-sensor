@@ -48,7 +48,8 @@ XIAO ESP32S3 向けファームウェア（PlatformIO）。Grove - I2C Color Sen
 
 - 起床間隔は `PSS_SLEEP_SECONDS`（300 秒）。送信した場合、実際の間隔はこれに起床していた時間（約 17 秒）が加わる
 - LTE-M 版（`PSS_CHANGE_ONLY_SEND=1`）は、**状態が変わったとき、前回の送信が確認できなかったとき、12 回続けて送信しなかったとき**（`PSS_HEARTBEAT_CYCLES=12`、約 66 分ごとの定期送信）だけ送信する。判定の元は NVS の sync ledger（[docs/sync-delivery-design.md](../docs/sync-delivery-design.md)）
-- 1 サイクルが上限（`PSS_CYCLE_MAX_ACTIVE_MS`）を超えたらウォッチドッグで再起動する（#41）
+- 接続は `PSS_CONNECT_PHASE_MS`（45 秒）を目安に打ち切る。リレー／ロードスイッチの機体では、モデムが AT に一度も応答しなければ約 30 秒で諦めて Deep Sleep する（#87）
+- 1 サイクルが上限（`PSS_CYCLE_MAX_ACTIVE_MS`）を超えたらウォッチドッグで再起動する（#41）。`task_wdt` で起動した最初のサイクルは送信せず、`budget_exhausted` を記録して Deep Sleep する（#87）
 - 起動時は、理由を問わず最初にリレーを RESET（LTE-M OFF）する
 
 ### ブートモード（#50）

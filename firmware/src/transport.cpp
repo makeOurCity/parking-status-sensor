@@ -141,11 +141,11 @@ String mqttClientId() {
          String(static_cast<uint32_t>(esp_random()), HEX);
 }
 
-void logModemAt(const char* cmd) {
+void logModemAt(const char* cmd, uint32_t timeoutMs = 5000) {
   Serial.printf("AT%s\n", cmd);
   modem.sendAT(cmd);
   String response;
-  modem.waitResponse(5000L, response);
+  modem.waitResponse(timeoutMs, response);
   if (response.length() > 0) {
     Serial.println(response);
   }
@@ -161,41 +161,89 @@ void logLteDiagnostics() {
   logModemAt("+CPSI?");
 }
 
-bool prepareLteForPlanD() {
+// #87: 接続の制限時間（hard deadline）。hardEndMs は絶対 millis（kNoLimit = 無期限）。
+// 各 AT の待ちと delay を、残り時間で縮める。modem.init() は途中で止められないので、
+// 残りが kInitReserveMs 未満なら呼ばない。
+constexpr uint32_t kInitReserveMs = 20000;  // modem.init() 実用最悪約14s + 余裕
+constexpr uint32_t kRetryMinMs = kInitReserveMs + 5000;  // stop 2s + settle 2.5s
+constexpr uint32_t kDiagMinMs = 20000;                   // 診断 AT 4本
+constexpr uint32_t kMinNetworkWaitMs = 5000;  // 実測 attach 約2.5s の約2倍
+
+enum class LteInitResult : uint8_t { kOk, kSilent, kFailed, kDeadline };
+
+uint32_t remainingMs(uint32_t endMs) { return remainingMsAt(endMs, millis()); }
+
+uint32_t clampMs(uint32_t ms, uint32_t endMs) {
+  const uint32_t r = remainingMs(endMs);
+  return ms < r ? ms : r;
+}
+
+void delayBounded(uint32_t ms, uint32_t endMs) {
+  const uint32_t d = clampMs(ms, endMs);
+  if (d > 0) {
+    delay(d);
+  }
+}
+
+// OK でも ERROR でも「生きている」。waitResponse は無応答のとき 0 を返す。
+bool modemAnyResponse(uint32_t timeoutMs) {
+  modem.sendAT("");
+  return modem.waitResponse(timeoutMs) != 0;
+}
+
+// 1回の取りこぼしで無応答と断定しない（1000ms x 2）。hard では縮めない（最大 +2s）。
+bool modemIsSilent() {
+  return !modemAnyResponse(1000) && !modemAnyResponse(1000);
+}
+
+// 各 AT の待ちを hard で縮める。期限に達したら false（打ち切り）。
+// 期限内に最後まで進めば、現行どおり true を返す。
+bool prepareLteForPlanD(uint32_t hardEndMs) {
   Serial.println("configure plan-D (Docomo Cat-M1)...");
+  auto waitOk = [&](uint32_t ms) -> int8_t {
+    return modem.waitResponse(clampMs(ms, hardEndMs));
+  };
+  auto expired = [&]() { return remainingMs(hardEndMs) == 0; };
 
   modem.sendAT("+CFUN=0");
-  modem.waitResponse(10000L);
+  waitOk(10000L);
+  if (expired()) return false;
 
   modem.sendAT("+CBANDCFG=\"CAT-M\",1,19");
-  if (modem.waitResponse(10000L) != 1) {
+  if (waitOk(10000L) != 1) {
     Serial.println("WARN: CBANDCFG 1,19 failed");
   }
-  logModemAt("+CBANDCFG?");
+  if (expired()) return false;
+  logModemAt("+CBANDCFG?", clampMs(5000, hardEndMs));
 
   modem.sendAT(String("+CGDCONT=1,\"IP\",\"") + config::kLteApn + "\"");
-  modem.waitResponse(10000L);
+  waitOk(10000L);
+  if (expired()) return false;
   modem.sendAT(String("+CNCFG=0,1,\"") + config::kLteApn + "\"");
-  modem.waitResponse(10000L);
+  waitOk(10000L);
+  if (expired()) return false;
 
   modem.sendAT("+CMNB=1");
-  if (modem.waitResponse(10000L) != 1) {
+  if (waitOk(10000L) != 1) {
     Serial.println("WARN: CMNB=1 failed, trying CMNB=3");
     modem.sendAT("+CMNB=3");
-    modem.waitResponse(10000L);
+    waitOk(10000L);
   }
+  if (expired()) return false;
   modem.sendAT("+CNMP=38");
-  modem.waitResponse(10000L);
+  waitOk(10000L);
   modem.sendAT("+CEREG=1");
-  modem.waitResponse();
+  waitOk(1000L);
   modem.sendAT("+COPS=0");
-  modem.waitResponse(10000L);
+  waitOk(10000L);
+  if (expired()) return false;
 
   modem.sendAT("+CFUN=1");
-  modem.waitResponse(15000L);
-  delay(3000);
+  waitOk(15000L);
+  delayBounded(3000, hardEndMs);
+  if (expired()) return false;
 
-  logModemAt("+CMNB?");
+  logModemAt("+CMNB?", clampMs(5000, hardEndMs));
   return true;
 }
 
@@ -217,13 +265,16 @@ void stopLteUart() {
   lteUartStarted = false;
 }
 
-bool wakeLteModemAt() {
+bool wakeLteModemAt(uint32_t hardEndMs) {
   for (uint8_t i = 0; i < 10; ++i) {
+    if (remainingMs(hardEndMs) < 1000) {
+      return false;  // 1回分（waitResponse 1s）に満たなければ打ち切り
+    }
     modem.sendAT("");
     if (modem.waitResponse(1000L) == 1) {
       return true;
     }
-    delay(300);
+    delayBounded(300, hardEndMs);
   }
   return false;
 }
@@ -236,19 +287,23 @@ void logLteInitFailure() {
   logModemAt("+CNACT?");
 }
 
-bool recoverLteModemFromPowerOff() {
+bool recoverLteModemFromPowerOff(uint32_t hardEndMs) {
   Serial.println("LTE: recovering modem (AT wake + CFUN=1,1)...");
-  if (!wakeLteModemAt()) {
+  if (!wakeLteModemAt(hardEndMs)) {
     Serial.println("LTE: no AT during wake");
     return false;
   }
+  const uint32_t cfunMs = clampMs(30000L, hardEndMs);
+  if (cfunMs == 0) {
+    return false;
+  }
   modem.sendAT("+CFUN=1,1");
-  if (modem.waitResponse(30000L) != 1) {
+  if (modem.waitResponse(cfunMs) != 1) {
     Serial.println("LTE: CFUN=1,1 failed");
     return false;
   }
-  delay(3000);
-  return wakeLteModemAt();
+  delayBounded(3000, hardEndMs);
+  return wakeLteModemAt(hardEndMs);
 }
 
 bool sendModemAtOk(const char* cmd, uint32_t timeoutMs = 10000) {
@@ -289,14 +344,39 @@ bool requestModemPowerOff(uint8_t attempts) {
   return false;
 }
 
-bool beginLteUartAndModem() {
+// hardEndMs: 絶対 millis（kNoLimit = 無期限）。failFastWhenSilent: 無応答と判定したら
+// 再試行せず諦める（#87。リレー／ロードスイッチで電源を入切する機体。電源を入れても
+// 約28s 応答しないのは故障とみなす）。
+// failFastWhenSilent に関係なく、無応答が確定して返すときは UART を止める
+// （無応答モデムへの AT+CPOWD 約33.5s を省く。powerOffLteModem は UART 未開始なら即 return）。
+LteInitResult beginLteUartAndModem(uint32_t hardEndMs, bool failFastWhenSilent) {
   constexpr uint8_t kMaxAttempts = 3;
+  bool lastAttemptSilent = false;
+  bool deadlineHit = false;
+
+  // 諦めるとき: 無応答なら UART を止めて kSilent、応答があれば ifAlive
+  // （UART は開いたまま。後段の CPOWD に任せる）。
+  auto abandon = [&](LteInitResult ifAlive) -> LteInitResult {
+    ltePlanDReady = false;
+    if (modemIsSilent()) {
+      stopLteUart();
+      return LteInitResult::kSilent;
+    }
+    return ifAlive;
+  };
 
   for (uint8_t attempt = 1; attempt <= kMaxAttempts; ++attempt) {
+    lastAttemptSilent = false;
+
     if (attempt > 1) {
+      if (remainingMs(hardEndMs) < kRetryMinMs) {
+        Serial.println("LTE modem init: deadline, no more retries");
+        deadlineHit = true;
+        break;
+      }
       Serial.printf("LTE modem init retry %u/%u\n", attempt, kMaxAttempts);
       stopLteUart();
-      delay(2000);
+      delayBounded(2000, hardEndMs);
     }
 
     startLteUart();
@@ -304,36 +384,72 @@ bool beginLteUartAndModem() {
       // #46: このサイクルの relayLteOn() で今まさにコールド電源投入された直後。
       // 以下の "After CPOWD" 値は AT+CPOWD からの復帰用でコールドブートには
       // 短すぎるため、専用の待ち時間を使う。
-      delay(config::kLteColdBootSettleMs);
+      delayBounded(config::kLteColdBootSettleMs, hardEndMs);
     } else {
       // After CPOWD the modem needs Toff-on >= 2 s before UART is reliable.
-      delay(attempt == 1 ? 1500 : 2500);
+      delayBounded(attempt == 1 ? 1500 : 2500, hardEndMs);
     }
-    (void)wakeLteModemAt();
+    (void)wakeLteModemAt(hardEndMs);
 
-    if (modem.init()) {
+    // modem.init() は中断できない（無応答 約10.3s、応答ありの実用最悪 約14s）。
+    // 残りが kInitReserveMs 未満なら呼ばない。
+    const bool canInit = remainingMs(hardEndMs) >= kInitReserveMs;
+
+    if (canInit && modem.init()) {
       if (!ltePlanDReady) {
         Serial.println("LTE plan-D setup (first boot this power cycle)");
-        if (!prepareLteForPlanD()) {
-          logLteInitFailure();
+        if (!prepareLteForPlanD(hardEndMs)) {
+          // 現行: logLteInitFailure(); continue;（recover は呼ばない）を維持。
+          if (remainingMs(hardEndMs) >= kDiagMinMs) {
+            logLteInitFailure();
+          }
+          if (remainingMs(hardEndMs) == 0) {
+            // deadline で打ち切られた。init 成功直後なので通常は生きているが、
+            // 途中で落ちた場合だけ CPOWD を省くため確認する。
+            return abandon(LteInitResult::kDeadline);
+          }
           continue;
         }
         ltePlanDReady = true;
       }
-      return true;
+      return LteInitResult::kOk;
     }
 
-    Serial.printf("LTE modem.init() failed (attempt %u/%u)\n", attempt,
-                  kMaxAttempts);
-    logLteInitFailure();
+    if (canInit) {
+      Serial.printf("LTE modem.init() failed (attempt %u/%u)\n", attempt,
+                    kMaxAttempts);
+    } else {
+      Serial.println("LTE modem.init() skipped: deadline");
+      deadlineHit = true;
+    }
 
-    if (attempt < kMaxAttempts && recoverLteModemFromPowerOff()) {
+    const bool silent = modemIsSilent();
+    lastAttemptSilent = silent;
+    if (silent && failFastWhenSilent) {
+      Serial.println("LTE modem silent: giving up");
+      stopLteUart();
+      ltePlanDReady = false;
+      return LteInitResult::kSilent;
+    }
+    if (!canInit) {
+      break;
+    }
+
+    if (!silent && remainingMs(hardEndMs) >= kDiagMinMs) {
+      logLteInitFailure();  // 無応答だと出力が空で約20s 無駄なので応答があるときだけ
+    }
+    if (attempt < kMaxAttempts && recoverLteModemFromPowerOff(hardEndMs)) {
+      lastAttemptSilent = false;  // 復旧した。次の attempt で判定し直す
       continue;
     }
   }
 
   ltePlanDReady = false;
-  return false;
+  if (lastAttemptSilent) {
+    stopLteUart();
+    return LteInitResult::kSilent;
+  }
+  return deadlineHit ? LteInitResult::kDeadline : LteInitResult::kFailed;
 }
 
 bool connectMqtt(MQTTClient& mqtt, Client& net, TransportMetrics& metrics) {
@@ -505,7 +621,7 @@ bool ensureLteClock() {
   return setSystemClockFromModem();
 }
 
-bool connectLte(TransportMetrics& metrics) {
+bool connectLte(TransportMetrics& metrics, uint32_t hardEndMs) {
   if (!config::kLteEnabled) {
     return false;
   }
@@ -517,18 +633,37 @@ bool connectLte(TransportMetrics& metrics) {
   Serial.println("LTE-M connecting");
   const uint32_t start = millis();
 
-  if (!beginLteUartAndModem()) {
+  // #87: 電源を入れる機体（リレー／ロードスイッチ）は、無応答のモデムを再試行せず諦める。
+  const LteInitResult init =
+      beginLteUartAndModem(hardEndMs, config::kLtePowerRelayEnabled);
+  if (init != LteInitResult::kOk) {
+    metrics.modemSilent = (init == LteInitResult::kSilent);
     Serial.println("LTE modem init failed");
     return false;
   }
 
-  if (!modem.waitForNetwork(config::kLteNetworkTimeoutMs)) {
+  // #87: hard deadline。残りが kMinNetworkWaitMs 未満なら待たずに失敗にする。
+  const uint32_t netRemaining = remainingMs(hardEndMs);
+  if (netRemaining < kMinNetworkWaitMs) {
+    Serial.println("LTE network wait skipped: deadline");
+    (void)powerOffLteModem();
+    return false;
+  }
+  const uint32_t netTimeoutMs = config::kLteNetworkTimeoutMs < netRemaining
+                                    ? config::kLteNetworkTimeoutMs
+                                    : netRemaining;
+  if (!modem.waitForNetwork(netTimeoutMs)) {
     Serial.println("LTE network failed");
     logLteDiagnostics();
     (void)powerOffLteModem();
     return false;
   }
 
+  if (remainingMs(hardEndMs) == 0) {
+    Serial.println("LTE data attach skipped: deadline");
+    (void)powerOffLteModem();
+    return false;
+  }
   if (!modem.gprsConnect(config::kLteApn, config::kLteUser,
                          config::kLtePassword)) {
     Serial.println("LTE data attach failed");
@@ -542,6 +677,11 @@ bool connectLte(TransportMetrics& metrics) {
                 modem.getOperator().c_str(), modem.getSignalQuality());
 
   if (config::kMqttUseTls) {
+    if (remainingMs(hardEndMs) == 0) {
+      Serial.println("LTE TLS setup skipped: deadline");
+      (void)powerOffLteModem();
+      return false;
+    }
 #if PSS_LTE_MODEM_TLS
     if (!ensureLteModemCertificates()) {
       Serial.println("LTE modem TLS cert setup failed");
@@ -557,6 +697,12 @@ bool connectLte(TransportMetrics& metrics) {
 #endif
   }
 
+  if (remainingMs(hardEndMs) == 0) {
+    Serial.println("MQTT connect skipped: deadline");
+    resetLteMqttLink();
+    (void)powerOffLteModem();
+    return false;
+  }
   if (!connectMqtt(lteMqtt, lteNetworkClient(), metrics)) {
     resetLteMqttLink();
     (void)powerOffLteModem();
@@ -603,7 +749,7 @@ bool connectLoRaWan(TransportMetrics& metrics) {
   return true;
 }
 
-bool reconnectTransport(TransportMetrics& metrics) {
+bool reconnectTransport(TransportMetrics& metrics, uint32_t hardEndMs) {
   if (activeTransport == TransportKind::kLoRaWan) {
     return connectLoRaWan(metrics);
   }
@@ -624,7 +770,7 @@ bool reconnectTransport(TransportMetrics& metrics) {
     }
     if (!modem.isGprsConnected()) {
       disconnectTransport();
-      return connectTransport(metrics);
+      return connectTransport(metrics, hardEndMs);
     }
     Serial.println("MQTT reconnect (LTE still up)");
 #if PSS_MQTT_USE_TLS
@@ -636,7 +782,7 @@ bool reconnectTransport(TransportMetrics& metrics) {
   }
 
   disconnectTransport();
-  return connectTransport(metrics);
+  return connectTransport(metrics, hardEndMs);
 }
 
 }  // namespace
@@ -649,7 +795,7 @@ void resetLoRaWanCache() {
   loRaWanProvisioned = false;
 }
 
-bool connectTransport(TransportMetrics& metrics) {
+bool connectTransport(TransportMetrics& metrics, uint32_t hardEndMs) {
   const uint8_t savedAttempts = metrics.transportAttempts;
   metrics = TransportMetrics{};
   metrics.transportAttempts = savedAttempts;
@@ -672,13 +818,21 @@ bool connectTransport(TransportMetrics& metrics) {
     Serial.println("Wi-Fi failed; falling back to LTE-M");
   }
 
-  return connectLte(metrics);
+  return connectLte(metrics, hardEndMs);
 }
 
 bool connectTransportWithRetry(TransportMetrics& metrics, uint32_t cycleStartMs,
                                uint32_t budgetMs) {
   metrics = TransportMetrics{};
   metrics.transportAttempts = 0;
+
+  // #87: soft（budgetMs）は新しい試行を始めるかの判断だけに使う。実行中の AT 待ちと
+  // waitForNetwork は hard で縮める。
+  // hard = soft + 10s（ただし kCycleMaxActiveMs を超えない。config::kConnectHardMs と同じ式）。
+  const uint32_t hardBudgetMs = (budgetMs + 10000 < config::kCycleMaxActiveMs)
+                                    ? budgetMs + 10000
+                                    : config::kCycleMaxActiveMs;
+  const uint32_t hardEndMs = deadlineAfter(cycleStartMs, hardBudgetMs);
 
   for (uint8_t attempt = 1; attempt <= config::kTransportMaxAttempts; ++attempt) {
     if ((millis() - cycleStartMs) >= budgetMs) {
@@ -695,17 +849,24 @@ bool connectTransportWithRetry(TransportMetrics& metrics, uint32_t cycleStartMs,
     Serial.printf("transport attempt %u/%u\n", attempt,
                   config::kTransportMaxAttempts);
 
-    if (connectTransport(metrics)) {
+    if (connectTransport(metrics, hardEndMs)) {
       metrics.transportAttempts = attempt;
       return true;
+    }
+
+    // #87: モデムが AT に一度も応答しない（電源が来ていない疑い）。再試行しても回復しない
+    // ので、次の attempt（disconnectTransport + delay + 再接続）に進まず諦める。
+    if (metrics.modemSilent) {
+      Serial.println("LTE modem silent; skipping transport retry");
+      break;
     }
   }
 
   return false;
 }
 
-bool reconnectActiveTransport(TransportMetrics& metrics) {
-  return reconnectTransport(metrics);
+bool reconnectActiveTransport(TransportMetrics& metrics, uint32_t hardEndMs) {
+  return reconnectTransport(metrics, hardEndMs);
 }
 
 bool probeLteModem(LteProbeResult& result) {
@@ -719,7 +880,9 @@ bool probeLteModem(LteProbeResult& result) {
   result.uartOk = true;
 
   Serial.println("[1/5] modem init (AT) + plan-D setup...");
-  result.initOk = beginLteUartAndModem();
+  // test 系 env: 従来どおり（無期限、3 回リトライ、診断あり）。
+  result.initOk =
+      beginLteUartAndModem(kNoLimit, false) == LteInitResult::kOk;
   if (!result.initOk) {
     Serial.println(
         "FAIL: modem init (AT/CLTS/SIM/plan-D). If after CPOWD test, power-cycle "
