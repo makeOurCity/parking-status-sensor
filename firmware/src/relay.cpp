@@ -25,6 +25,12 @@ void initRelay() {
     return;
   }
   pinMode(LTE_POWER_RELAY_PIN, OUTPUT);
+  if (config::kLtePowerSwitchLevel) {
+    // #88: ロードスイッチ（TPS22918）。ON ピンは基板上の 100kΩ プルダウンで LOW に
+    // 保たれる。ステートレスなので起動時の安全パルスは不要で、OFF（LOW）にするだけ。
+    digitalWrite(LTE_POWER_RELAY_PIN, LOW);
+    return;
+  }
   // フェイルセーフ（#46 §2.6）: 起動理由を問わず、他の処理より先に必ず一度
   // RESETパルスを送る。SET後・RESET前にウォッチドッグリセットが起きても
   // LTE-Mが通電しっぱなしにならないようにする。
@@ -35,6 +41,12 @@ void relayLteOn() {
   if (!config::kLtePowerRelayEnabled) {
     return;
   }
+  if (config::kLtePowerSwitchLevel) {
+    Serial.printf("switch: ON (LTE ON) at t=%lu ms\n",
+                  static_cast<unsigned long>(millis()));
+    digitalWrite(LTE_POWER_RELAY_PIN, HIGH);
+    return;
+  }
   Serial.printf("relay: SET (LTE ON) at t=%lu ms\n",
                 static_cast<unsigned long>(millis()));
   pulse(kRelayOnLevel);
@@ -42,6 +54,12 @@ void relayLteOn() {
 
 void relayLteOff() {
   if (!config::kLtePowerRelayEnabled) {
+    return;
+  }
+  if (config::kLtePowerSwitchLevel) {
+    Serial.printf("switch: OFF (LTE OFF) at t=%lu ms\n",
+                  static_cast<unsigned long>(millis()));
+    digitalWrite(LTE_POWER_RELAY_PIN, LOW);
     return;
   }
   Serial.printf("relay: RESET (LTE OFF) at t=%lu ms\n",

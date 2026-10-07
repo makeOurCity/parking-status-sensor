@@ -87,6 +87,8 @@ XIAO ESP32S3 向けファームウェア（PlatformIO）。Grove - I2C Color Sen
 | **`xiao-s3-aws-lte-relay-pot`** | **LTE-M 版の本番機**（リレー・状態変化時のみ送信・ポテンショメーター） |
 | `xiao-s3-aws-lte-relay` | LTE-M 版（ポテンショメーターなし） |
 | `xiao-s3-aws-lte-relay-debug` | 上の Deep Sleep なし版（USB シリアルでログを見る） |
+| `xiao-s3-aws-lte-switch-pot` | LTE-M の電源遮断を**ロードスイッチ基板**（TPS22918、`hardware/lte-power-switch/`、#88）で行う機体用（レベル駆動、ポテンショメーター付き） |
+| `xiao-s3-aws-lte-switch-debug` | 上のベンチ検証用（ポテンショメーターなし、Deep Sleep なし） |
 | `xiao-s3-aws-lte` / `xiao-s3-aws-lte-debug` | LTE-M・リレーなし（毎サイクル送信） |
 | `xiao-s3-aws` / `xiao-s3-aws-debug` | Wi-Fi + AWS IoT Core（TLS） |
 | `xiao-s3` / `xiao-s3-debug` | Wi-Fi + ローカル MQTT（Mosquitto） |
@@ -97,7 +99,7 @@ XIAO ESP32S3 向けファームウェア（PlatformIO）。Grove - I2C Color Sen
 | `xiao-s3-lte-poweroff-test` | LTE-M の電源断・復帰の検証（#25） |
 | `xiao-s3-lorawan-test` | Grove Wio-E5 単体の AT 疎通確認・Join・1パケット送信（手動コマンド、Deep Sleep なし、#40） |
 
-リレーやポテンショメーターを配線していない機体に、それらが有効な env を書き込まないこと。
+リレー・ロードスイッチ基板・ポテンショメーターを配線していない機体に、それらが有効な env を書き込まないこと。
 
 ```bash
 cd firmware
