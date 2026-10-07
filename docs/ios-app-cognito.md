@@ -29,7 +29,7 @@
 - サインインは SRP ではなく `USER_PASSWORD_AUTH` を使用する。軽量な Swift 用 SRP 実装が存在せず自前実装はリスクが高いため、パスワードは TLS 経由で Cognito に一度だけ送信する方式を採用（個人利用の PoC ツールとして許容）。以降のセッション延命はすべて `REFRESH_TOKEN_AUTH` で行い、パスワードは二度と送信しない
 - AWS SDK・Amplify 等の外部ライブラリには依存せず、`URLSession` + 自前の SigV4 署名（CloudWatch Logs 呼び出しのみ）で実装する。Cognito の `InitiateAuth` / `GetId` / `GetCredentialsForIdentity` は署名不要の公開 API
 
-## 作成した AWS リソース（`parking-private` アカウント）
+## 作成した AWS リソース（組織アカウント。#98 で個人の `parking-private` アカウントから移行）
 
 | リソース種別 | 名前 | 備考 |
 |---|---|---|
