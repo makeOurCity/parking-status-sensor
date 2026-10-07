@@ -52,12 +52,33 @@ pio device monitor -e logger-devkit --port /dev/cu.usbserial-XXXX > capture.csv
 
 - Serial: `ms,current_mA,bus_mV,power_mW`（15 Hz）
 - OLED: 電流・電圧・電力・セッション mAh・ピーク・経過秒（約 4 Hz 更新）
+- 60 秒ごとに、CSV ヘッダーとサマリ行を出す（[長期測定](#長期測定と積算値issue-105)）
 
 ### mAh 積算（ホスト）
 
 ```bash
 python3 integrate_mah.py capture.csv
 ```
+
+通常モード・高速モードのどちらのログも読める。電流の列は、ヘッダー行（`current_avg_mA` / `current_mA`）から選ぶ。ヘッダー行が無いログ（`pio device monitor` を途中から始めたもの）では、列数（4 列 = 通常、7 列 = 高速）から選ぶ。`#` で始まる行は読み飛ばす。
+
+## 長期測定と積算値（Issue #105）
+
+数日規模の測定でも積算値が狂わないようにしてある。
+
+- **積算は整数**（µA·ms、`uint64_t`）で持つ。以前の `float` は、64 mAh 以上で加算量が丸められて誤差が出て、128 mAh 前後で増えなくなった（50 ms 窓・0.49 mA の場合）。整数なら丸め誤差が出ない（ホスト上で 20 日分を試算: 理想値 235.2 mAh に対し、`float` は 128 mAh で止まり、整数は 235.2 mAh）
+- **`millis()` の 1 周**（約 49.7 日）は、符号なしの引き算で経過時間を求めるので、積算が途切れない。`integrate_mah.py` も、1 周した ms 列を連続した時間として扱う
+- **60 秒ごと**（`LOGGER_SUMMARY_INTERVAL_MS`）に、次の 2 行を出す。長期測定の途中から `pio device monitor` を始めても、ヘッダーと総量が残る
+
+  ```
+  ms,samples,bus_min_mV,bus_avg_mV,current_max_mA,current_min_mA,current_avg_mA
+  # total,<ms>,<積算 mAh>,<起動以降の最低電圧 mV>,<ピーク mA>
+  ```
+
+  `#` で始まるので、`integrate_mah.py` と `find_dips.py` は読み飛ばす。最後の `# total` 行を見れば、ログ全体を積算し直さなくても総量が分かる
+- 高速モードの OLED にも、`S:` 行でセッション mAh を表示する
+
+積算は INA226 の読み値の積分で、電池の残量そのものではない（自己放電、電圧と容量の関係は含まない）。
 
 ### 通常モードの時間分解能（注意）
 
@@ -79,7 +100,7 @@ pio run -e logger-devkit-fast -t upload --upload-port /dev/cu.usbserial-XXXX
 pio device monitor -e logger-devkit-fast --port /dev/cu.usbserial-XXXX > capture-fast.csv
 ```
 
-- Serial: `ms,samples,bus_min_mV,bus_avg_mV,current_max_mA,current_min_mA,current_avg_mA`
+- Serial: `ms,samples,bus_min_mV,bus_avg_mV,current_max_mA,current_min_mA,current_avg_mA`（60 秒ごとに、ヘッダーと `# total,...` 行も出る）
 - `samples` は、そのウィンドウで読めた電圧のサンプル数。OLED 更新などで計測が止まると、この数が減る
 - 電流の列は間引いて読んだ値から求めているので、約 4 ms より短い電流のピークは `current_max_mA` に出ないことがある。電圧の最低値（`bus_min_mV`）を主な指標にする
 
