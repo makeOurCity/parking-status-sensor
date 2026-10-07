@@ -111,7 +111,7 @@ IAM ロールの信頼ポリシーは、この Identity Pool の `aud` かつ `a
 
 ## 今後の検討事項
 
-- 組織 AWS アカウントへ移行する場合、[`aws-admin-handoff.md`](aws-admin-handoff.md) と同様に本ドキュメントの手順を踏襲する
+- 組織 AWS アカウントへの移行は完了した（#98）。構築は `infra/setup-cognito.sh`（IAM ロールを作るので Admin で実行）、権限の使い分けは [`aws-admin-handoff.md`](aws-admin-handoff.md)
 - Lambda 本実装（#7）で Orion 連携後、Status の取得元を Orion に切り替える場合は、IAM ロールに Orion 側の読み取り権限を追加検討する
 - 複数ユーザーでの利用が必要になった場合、Cognito グループや追加ユーザー作成を検討する（現状は開発者本人のみ）
 
