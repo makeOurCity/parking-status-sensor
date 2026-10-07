@@ -16,7 +16,9 @@ Wio-E5 ──LoRaWAN(JP920/AS923-1)──▶ SenseCAP M2 (M2-AS923, Basics Stati
 | Wireless Device | 名前は deviceId（例: `xiao-e83dc1fc1aec`）、OTAA v1.0.x |
 | Destination | `Saga_IoT_Core` → MQTT トピック `lorawan/parking-status/uplink`（Wi-Fi / LTE-M の `parking-status/<deviceId>/telemetry` とは別の名前空間） |
 
-クラウド側のうち、IoT ルールと bridge の LoRaWAN デコーダ（iOS ログビューアへの表示）は #83、経路の説明は [iot-core.md](iot-core.md) にある。Orion 連携は #7 で扱う。
+クラウド側のうち、IoT ルールと bridge の LoRaWAN デコーダ（iOS ログビューアへの表示）は #83、経路の説明は [iot-core.md](iot-core.md) にある。Orion 連携は #7（実装済み）。
+
+**アカウント（#98）**: 2026-10-07 に、個人の AWS アカウントから**組織の AWS アカウント**に切り替えた。クラウド側のリソースは `infra/setup-lorawan.sh`（`role` / `profiles` / `gateway` / `device`）で作る。**ゲートウェイ EUI と DevEui は、他のアカウントに登録されていると登録できない**ため、アカウントを移すときは、旧アカウントの Wireless Device とゲートウェイを削除してから新アカウントに作る（並行稼働できず、その間はアップリンクが途切れる）。M2 の設定は、ローカルコンソールの LoRa > LoRa Network で、Mode: Basics Station、Server: CUPS（443）、Authentication: TLS Server and Client Authentication、URI と CA（trust）・certificate・key を新アカウントの値に差し替える。端末（Wio-E5）は MQTT を話さず鍵も変わらないので**再書き込みは不要**で、電源を入れ直して Join し直す（古いセッションが残っていると再 Join されないため）。
 
 ## 2. Wio-E5 の設定
 

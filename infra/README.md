@@ -2,7 +2,7 @@
 
 [docs/iot-core.md](../docs/iot-core.md) の設計に沿って、IoT Core・Lambda スタブ・Cognito・LoRaWAN をセットアップするスクリプト群。
 
-**組織 AWS への移行時**: 開発チームが直接作業しない場合は、管理者へ [docs/aws-admin-handoff.md](../docs/aws-admin-handoff.md) を渡してください。
+**組織の AWS アカウント**: この PoC 専用のアカウントに、これらのスクリプトで構築した（#98）。構成・必要な権限・権限の使い分け（確認は ReadOnly、作成は PowerUser、IAM ロールを作る手順は Admin）は [docs/aws-admin-handoff.md](../docs/aws-admin-handoff.md)。
 
 ## 前提
 
@@ -11,7 +11,7 @@
 - `zip`（`deploy-bridge-stub.sh` で使用）
 - IAM 権限: IoT Core（Thing / Policy / Rule）、Lambda、IAM ロール作成、CloudWatch Logs
 
-**検証アカウント**: 開発者のプライベート AWS で先行検証し、確認済みのコード・スクリプトを組織アカウントに適用する（#4, #7）。接続先の違いは `config.env` / `config.org.env` と `CONFIG_FILE` で切り替える。
+**アカウントの切り替え**: 開発者の個人 AWS アカウント（移行元。LTE-M 端末の切り替えまで残る）と組織アカウントは、`config.env` / `config.org.env` と `CONFIG_FILE` で切り替える。`EXPECTED_ACCOUNT_ID` が違えば何も作らずに中断する。
 
 ## 設定（`config.env`）
 

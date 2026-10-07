@@ -176,17 +176,14 @@ cp config.env.example config.env   # リージョン等を編集
 # CloudWatch Logs で Lambda スタブのログを確認
 ```
 
-端末からの疎通は #6 で TLS 対応後に `secrets.h` を AWS 向けに切り替えて実施する。
+端末からの疎通は、`secrets.h` を AWS 向けに設定して実施する（#6）。
 
-## 検証環境（2026-07 方針）
+## 環境（2026-10 時点）
 
-| フェーズ | 環境 | 到達点 |
-|---|---|---|
-| **#4（現在）** | 開発者のプライベート AWS アカウント | IoT Core → Lambda スタブ → CloudWatch Logs |
-| **#6** | 同上 + 実機（TLS） | 端末から IoT Core へ publish |
-| **#7** | 組織 Sandbox Orion | Lambda 本実装（NGSIv2 upsert） |
-
-Orion 連携は #7 に委ねる。#4 では Lambda スタブが受信ペイロードを CloudWatch に記録するだけで完了とする。
+| 環境 | 内容 |
+|---|---|
+| **組織の AWS アカウント（現在）** | この PoC 専用のアカウント。IoT Core → Lambda（CloudWatch Logs + Orion への upsert）。LoRaWAN と M2 ゲートウェイ、iOS ログビューア（Cognito）、デバイスマスター（DynamoDB）が載っている。構築の実績と必要な権限は [aws-admin-handoff.md](aws-admin-handoff.md)（#98） |
+| 開発者の個人 AWS アカウント（移行元） | LTE-M 端末（`xiao-e83dc1fb05fc`）の切り替えが終わるまで残す（ロードスイッチ基板の到着待ち）。終わったら削除する |
 
 ### 認証の区切り
 
@@ -194,9 +191,9 @@ Orion 連携は #7 に委ねる。#4 では Lambda スタブが受信ペイロ�
 |---|---|
 | 端末 → IoT Core | X.509 デバイス証明書（TLS 8883） |
 | IoT Core → Lambda | IAM（IoT ルールから `lambda:InvokeFunction`） |
-| Lambda → Orion | #7 で定義（組織 Sandbox の接続仕様に合わせる） |
+| Lambda → Orion | Orion 側の Cognito User Pool にユーザー名・パスワードで SRP ログインして取ったトークン（#7。[`bridge/README.md`](../bridge/README.md)） |
 
-`infra/config.env` の `AWS_PROFILE` で対象アカウントを指定する。組織アカウントへの移行時は、管理者が [aws-admin-handoff.md](aws-admin-handoff.md) に沿ってセットアップし、接続情報・証明書を開発チームに引き渡す（Thing / 証明書は再プロビジョニング）。
+`infra/config.env`（組織アカウントは `config.org.env`）の `EXPECTED_ACCOUNT_ID` で対象アカウントを指定し、`AWS_PROFILE` は実行時に渡す（[infra/README.md](../infra/README.md)）。端末のエンドポイントと証明書はファームに埋め込まれるため、アカウントを移すと LTE-M / Wi-Fi の端末は **Thing / 証明書の再発行と再書き込み**が要る（LoRaWAN 端末は不要）。
 
 ## 料金（PoC 規模の目安）
 

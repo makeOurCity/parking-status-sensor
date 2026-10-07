@@ -65,28 +65,48 @@ mosquitto_sub -h <LAN IP> -t 'parking-status/#' -F '%I %t %p'
 
 欠番検出・整形は `tools/mosquitto/detect_gaps.py`、`tools/mosquitto/format_telemetry.py` を使う。
 
-## 3. AWS IoT Core / Lambda ブリッジ（#4, #7）
+## 3. AWS IoT Core / Lambda ブリッジ / LoRaWAN（#4, #7, #98）
 
-作業ディレクトリ: `infra/`。前提: AWS CLI v2、`jq`、`zip`。
+作業ディレクトリ: `infra/`。前提: AWS CLI v2（SSO のプロファイルを設定済み）、`jq`、`zip`。
 
-詳細: [infra/README.md](../../../infra/README.md)、[bridge/README.md](../../../bridge/README.md)
+詳細: [infra/README.md](../../../infra/README.md)、[docs/aws-admin-handoff.md](../../../docs/aws-admin-handoff.md)、[bridge/README.md](../../../bridge/README.md)
+
+環境は **組織の AWS アカウント（現在）** と、個人アカウント（移行元。LTE-M 端末の切り替えまで残る）の 2 つ。設定ファイルを `CONFIG_FILE` で切り替え（組織: `config.org.env`、個人: `config.env`。どちらも Git 管理外）、`EXPECTED_ACCOUNT_ID` が実際のアカウントと違えばスクリプトは何も作らずに中断する。`AWS_PROFILE` は設定ファイルに書かず、実行時に渡す。**確認は ReadOnly、通常の作成は PowerUser、IAM ロールを作る手順だけ Admin**。
 
 ```bash
 cd infra
-cp config.env.example config.env   # 初回のみ
-chmod +x *.sh lib.sh               # 初回のみ
+cp config.env.example config.org.env   # 初回のみ。EXPECTED_ACCOUNT_ID などを設定
+chmod +x *.sh lib.sh                   # 初回のみ
+export CONFIG_FILE=config.org.env
+aws sso login --sso-session <セッション名>
 
-./setup.sh                                   # ポリシー + Lambdaスタブ + IoTルールを一括セットアップ
-./verify.sh                                  # セットアップ後のリソース確認
-./provision-device.sh <deviceId>             # 端末1台分のThing + 証明書を発行（firmware/certs/に書き出し）
-./test-publish.sh <deviceId>                 # AWS CLIからサンプルペイロードをpublishして疎通確認
-./deploy-bridge-stub.sh                      # Lambdaスタブのみ再デプロイ
+# IAM ロールを作る手順は Admin
+AWS_PROFILE=<Admin> ./setup.sh                      # IoT ポリシー + デバイスマスター + Lambda（と実行ロール）+ IoT ルール
+AWS_PROFILE=<Admin> ./setup-cognito.sh              # iOS ログビューア用の Cognito と認証済みロール
+AWS_PROFILE=<Admin> ./setup-lorawan.sh role         # LoRaWAN 用 IAM ロール
+AWS_PROFILE=<Admin> ./deploy-bridge-stub.sh         # Lambda の再デプロイ（Orion の設定を反映。パスワードは端末で入力）
+
+# 確認は ReadOnly
+AWS_PROFILE=<ReadOnly> ./verify.sh                  # IoT Core / Lambda / デバイスマスター / Orion 設定の確認
+AWS_PROFILE=<ReadOnly> ./verify-cognito.sh
+AWS_PROFILE=<ReadOnly> ./verify-lorawan.sh [deviceId ...]   # ゲートウェイの接続状態も表示
+
+# 作成・登録は PowerUser
+AWS_PROFILE=<PowerUser> ./provision-device.sh <deviceId>    # 端末1台分の Thing + 証明書（firmware/certs/ に出力）
+AWS_PROFILE=<PowerUser> ./device-master.sh put <deviceId> <名称> <緯度> <経度>   # デバイスマスターに登録（list / get / delete もある）
+AWS_PROFILE=<PowerUser> ./setup-lorawan.sh profiles         # Service / Device Profile と Destination（Destination は Admin）
+AWS_PROFILE=<PowerUser> ./setup-lorawan.sh gateway          # ゲートウェイ登録と CUPS 証明書
+AWS_PROFILE=<PowerUser> ./test-publish.sh xiao-test-device  # 疎通確認（テスト用の deviceId で）
 ```
+
+- **Orion が有効な間は、実機の `deviceId` で `test-publish.sh` を実行しない**（デバイスマスターに登録済みの ID は実データのエンティティを上書きする。未登録の ID は Orion にスキップされる）
+- LoRaWAN のゲートウェイ EUI と DevEui は、他のアカウントに登録されていると作れない（アカウントを移すときは旧アカウント側を先に削除する。手順は #98 の Issue コメント）
+- iOS ログビューアの接続先は `tools/log-viewer/LogViewer/Config.swift`
 
 Lambdaのログ確認:
 
 ```bash
-aws logs tail /aws/lambda/parking-status-bridge --follow --region ap-northeast-1
+AWS_PROFILE=<ReadOnly> aws logs tail /aws/lambda/parking-status-bridge --follow --region ap-northeast-1
 ```
 
 ## 4. SORACOM SIM 運用（#35）
