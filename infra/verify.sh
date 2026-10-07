@@ -58,6 +58,18 @@ else
   echo "  --  Orion upsert disabled (ORION_URL is not set on the Lambda)"
 fi
 
+# CloudWatch Logs の保持期間（LOG_RETENTION_DAYS が空なら確認しない）
+if [[ -n "$LOG_RETENTION_DAYS" ]]; then
+  RETENTION="$(aws_logs describe-log-groups --log-group-name-prefix "$CLOUDWATCH_LOG_GROUP_NAME" \
+    --query "logGroups[?logGroupName=='${CLOUDWATCH_LOG_GROUP_NAME}'].retentionInDays | [0]" --output text 2>/dev/null || true)"
+  if [[ "$RETENTION" == "$LOG_RETENTION_DAYS" ]]; then
+    echo "  OK  CloudWatch Logs retention: ${RETENTION} days"
+  else
+    echo "  NG  CloudWatch Logs retention: expected ${LOG_RETENTION_DAYS} days (current: ${RETENTION:-no log group}; None = unlimited)"
+    fail=1
+  fi
+fi
+
 echo ""
 echo "MQTT endpoint: $ENDPOINT"
 echo "Lambda ARN   : $LAMBDA_ARN"

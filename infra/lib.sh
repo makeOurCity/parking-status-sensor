@@ -58,6 +58,10 @@ load_config() {
   : "${COGNITO_IDENTITY_POOL_NAME:=parking_status_ios_app}"
   : "${COGNITO_AUTH_ROLE_NAME:=parking-status-ios-app-authenticated}"
   : "${CLOUDWATCH_LOG_GROUP_NAME:=/aws/lambda/parking-status-bridge}"
+  # Lambda のロググループの保持期間（日）。約 1 年。400 日は、iOS ログビューアのリセット時刻
+  # クエリが過去 400 日分を見ることに合わせた値（CloudWatch Logs が受け付ける値のひとつ。
+  # 365 なら 1 年ちょうど）。空にすると設定しない（無期限）。
+  : "${LOG_RETENTION_DAYS=400}"
   : "${IOS_APP_USER_EMAIL:=}"
 
   # LoRaWAN (#40, #98)
@@ -122,6 +126,24 @@ aws_lambda() {
 
 aws_logs() {
   aws logs "$@"
+}
+
+# Lambda のロググループを（無ければ作って）保持期間を設定する。ロググループは Lambda の最初の
+# 実行で自動的に作られるが、保持期間は無期限のまま。作っておけば、最初の実行より前に設定できる。
+# 何度実行しても同じ結果になる。
+ensure_log_retention() {
+  if [[ -z "$LOG_RETENTION_DAYS" ]]; then
+    echo "Log retention: not set (LOG_RETENTION_DAYS is empty)"
+    return 0
+  fi
+  local group="$CLOUDWATCH_LOG_GROUP_NAME"
+  if ! aws_logs describe-log-groups --log-group-name-prefix "$group" \
+    --query "logGroups[?logGroupName=='${group}'].logGroupName" --output text | grep -q .; then
+    echo "Creating log group: $group"
+    aws_logs create-log-group --log-group-name "$group"
+  fi
+  aws_logs put-retention-policy --log-group-name "$group" --retention-in-days "$LOG_RETENTION_DAYS"
+  echo "Log retention: $group = ${LOG_RETENTION_DAYS} days"
 }
 
 aws_cognito_idp() {
