@@ -361,6 +361,14 @@ constexpr uint8_t kPublishMaxAttempts = PSS_PUBLISH_MAX_ATTEMPTS;
 constexpr uint32_t kRetryDelayMs = PSS_RETRY_DELAY_MS;
 constexpr uint32_t kCycleMaxActiveMs = PSS_CYCLE_MAX_ACTIVE_MS;
 constexpr uint32_t kConnectPhaseMs = PSS_CONNECT_PHASE_MS;
+// #87: 接続の hard deadline。soft（kConnectPhaseMs）は「新しい試行を始めるか」の判断だけに
+// 使い、hard は実行中の AT 待ちと waitForNetwork を縮める上限。cycle = connect 45 +
+// publish 20 + マージン 10（docs/sync-delivery-design.md §4.1）。接続が hard で終わっても
+// publish 20s が残る。PSS_CYCLE_MAX_ACTIVE_MS を超えない。
+constexpr uint32_t kConnectHardMs =
+    (PSS_CONNECT_PHASE_MS + 10000 < PSS_CYCLE_MAX_ACTIVE_MS)
+        ? PSS_CONNECT_PHASE_MS + 10000
+        : PSS_CYCLE_MAX_ACTIVE_MS;
 constexpr uint32_t kPublishPhaseMs = PSS_PUBLISH_PHASE_MS;
 constexpr uint8_t kFaultInjectPublishFails = PSS_FAULT_INJECT_PUBLISH_FAILS;
 

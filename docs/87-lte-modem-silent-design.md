@@ -2,7 +2,7 @@
 
 対象Issue: https://github.com/makeOurCity/parking-status-sensor/issues/87
 
-**状態: 実装計画（未実装）。** ビルドと実機検証は、証明書・`secrets.h` のある別マシンで行う。
+**状態: 実装済み（全 env のビルド確認済み、実機検証は未実施）。** 計画から変えた点は、`connectTransportWithRetry` の hard を `min(budgetMs + 10s, kCycleMaxActiveMs)` で計算していることだけ（`config::kConnectHardMs` と同じ式）。
 
 本ドキュメントは、実コード（`firmware/src/transport.cpp`、`main.cpp`、`sync_ledger.cpp`、`relay.cpp`、`include/config.h`、`include/transport.h`）、TinyGSM v0.12.0 のソース、Issue のログと突き合わせた計画。サブエージェントによる計画の立案に対して 3 回レビューを往復し、差し戻した点を反映した版。
 
