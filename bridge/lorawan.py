@@ -21,7 +21,7 @@ from typing import Any, Callable
 CORE_FPORT = 1
 CORE_SIZE = 18
 
-STATUS = ["full", "available", "unknown"]
+STATUS = ["full", "open", "unknown"]
 REASON = ["state_change", "heartbeat", "pending_retry", "boot_mode"]
 # firmware/src/main.cpp の resetReasonToString / wakeCauseToString と同じ文字列・並び
 # （LTE-M 版 JSON の power.resetReason / power.wakeCause と揃える）。

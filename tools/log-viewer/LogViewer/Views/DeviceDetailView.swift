@@ -4,13 +4,20 @@ struct DeviceDetailView: View {
     @StateObject private var viewModel: DeviceDetailViewModel
     @Environment(\.scenePhase) private var scenePhase
 
-    init(deviceId: String, auth: CognitoAuthService) {
-        _viewModel = StateObject(wrappedValue: DeviceDetailViewModel(deviceId: deviceId, auth: auth))
+    init(deviceId: String, name: String?, auth: CognitoAuthService) {
+        _viewModel = StateObject(wrappedValue: DeviceDetailViewModel(deviceId: deviceId, name: name, auth: auth))
     }
 
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 12) {
+                // The title shows the parking lot name; keep the deviceId visible for troubleshooting.
+                if viewModel.name != nil {
+                    Text(viewModel.deviceId)
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                }
+
                 if let errorMessage = viewModel.errorMessage {
                     Text(errorMessage)
                         .font(.callout)
@@ -33,7 +40,7 @@ struct DeviceDetailView: View {
             .padding(16)
         }
         .background(Color(.systemGroupedBackground))
-        .navigationTitle(viewModel.deviceId)
+        .navigationTitle(viewModel.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {

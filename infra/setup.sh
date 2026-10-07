@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Create shared IoT policy, deploy Lambda stub, and create IoT rules.
+# Create shared IoT policy, device master table, deploy Lambda, and create IoT rules.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
@@ -10,7 +10,7 @@ load_config
 require_aws
 
 echo "=== parking-status IoT Core setup ==="
-echo "region=$AWS_REGION profile=$AWS_PROFILE"
+echo "region=$AWS_REGION profile=$(profile_label)"
 
 ACCOUNT_ID="$(account_id)"
 ENDPOINT="$(iot_endpoint)"
@@ -33,8 +33,11 @@ else
     --policy-document "file://$POLICY_DOC" >/dev/null
 fi
 
-# --- Lambda stub ---
-echo "Deploying Lambda stub: $LAMBDA_FUNCTION_NAME"
+# --- Device master table (#7) ---
+"$ROOT/setup-device-master.sh"
+
+# --- Lambda ---
+echo "Deploying Lambda: $LAMBDA_FUNCTION_NAME"
 "$ROOT/deploy-bridge-stub.sh"
 
 LAMBDA_ARN="arn:aws:lambda:${AWS_REGION}:${ACCOUNT_ID}:function:${LAMBDA_FUNCTION_NAME}"
@@ -97,6 +100,9 @@ allow_rule_to_invoke_lambda "$IOT_RULE_NAME"
 allow_rule_to_invoke_lambda "$IOT_LORAWAN_RULE_NAME"
 upsert_lambda_rule "$IOT_RULE_NAME" "$SQL"
 upsert_lambda_rule "$IOT_LORAWAN_RULE_NAME" "$LORAWAN_SQL"
+
+# --- CloudWatch Logs retention ---
+ensure_log_retention
 
 echo ""
 echo "=== setup complete ==="

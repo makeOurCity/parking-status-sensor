@@ -12,6 +12,7 @@ CloudWatch Logs（Lambda `parking-status-bridge`）をサクッと確認でき�
 | プロジェクト生成 | [XcodeGen](https://github.com/yonaskolb/XcodeGen)（`project.yml` から `.xcodeproj` を生成。生成済みのものをコミット済みなので、通常は再生成不要） |
 | 認証 | Cognito User Pool（`USER_PASSWORD_AUTH` で初回サインインのみ、以降は `REFRESH_TOKEN_AUTH` で自動更新）+ Identity Pool。外部 SDK（AWS SDK for Swift / Amplify）には依存せず、`URLSession` と自前の SigV4 署名で実装 |
 | データ取得 | CloudWatch Logs Insights（`StartQuery` / `GetQueryResults`）を都度クエリ。Lambda がまだスタブ（#7 未実装）のため、これが唯一のデータソース |
+| 駐車場名 | デバイスマスターの DynamoDB テーブル（`parking-status-device-master`）を `Scan` で読み、`deviceId` → 駐車場名の対応表を 5 分キャッシュする（#108）。同じ Cognito 認証情報と SigV4 署名を使う。読めない・未登録のデバイスは、`deviceId` を表示する |
 | 配布 | なし。開発者本人が Xcode から直接実行する運用限定 |
 
 ## ビルド・実行
@@ -31,7 +32,7 @@ xcodebuild -project LogViewer.xcodeproj -scheme LogViewer \
 ## 画面
 
 - **サインイン**: 初回のみ。ユーザー名は `kazuki@code4japan.org` を初期値として表示。
-- **ダッシュボード**: デバイス一覧（Status バッジ・最終受信の相対時刻・オフライン警告アイコン）＋ 直近5件のログ。Pull-to-refresh 対応。ヘッダーの「サインアウト」でセッションを破棄できる。
+- **ダッシュボード**: デバイス一覧（駐車場名が主表示で、`deviceId` は小さな補助表示。名称が未登録のデバイスは `deviceId` のみ。Status バッジ・最終受信の相対時刻・オフライン警告アイコン）＋ 直近5件のログ。Pull-to-refresh 対応。ヘッダーの「サインアウト」でセッションを破棄できる。
 - **デバイス詳細**: 一覧からデバイスをタップすると、そのデバイスの全ログ（最大200件・直近14日間）を新しい順に表示。
 
 ## オフライン判定

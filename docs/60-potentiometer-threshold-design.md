@@ -260,8 +260,8 @@ PotReading readPotentiometerThresholdLive() {
   for (uint8_t i = 0; i < config::kPotSampleCount; ++i) {
     sum += analogRead(POT_ADC_PIN);
     if (i + 1 < config::kPotSampleCount) {
-      // ADC自体のノイズとワイパー接触ノイズの平滑化用。VEML6040の1500ms
-      // 安定待ち(sensor.cpp)に比べ無視できる遅延(§2.4参照)。
+      // ADC自体のノイズとワイパー接触ノイズの平滑化用。VEML6040の100ms
+      // 安定待ち(sensor.cpp、#94で1500msから短縮)に比べ小さい遅延(§2.4参照)。
       delay(2);
     }
   }
@@ -330,7 +330,7 @@ pot["adcRaw"] = potReading.raw;
 
 `initPotentiometer()`(アッテネーション設定)は`setup()`から`initRelay()`と同様、
 起床のたびに(Deep Sleep復帰は`setup()`ごと再実行されるため)毎回呼ぶ。VEML6040のような
-外部I2Cペリフェラルの電源投入直後の安定待ち(`sensor.cpp`の`delay(1500)`)とは異なり、
+外部I2Cペリフェラルの電源投入直後の安定待ち(`sensor.cpp`の`delay(kSettleMs)`。100ms、#94で1500msから短縮)とは異なり、
 内蔵ADCは電源投入直後から即座に読み取り可能であり、**専用の安定待ちは不要**と判断する。
 `readPotentiometerThresholdLive()`(v5、ブートモード専用)内の8回×2ms=16ms程度の
 サンプリング間隔は、ノイズ平滑化目的の遅延であってハードウェア安定待ちではない。
@@ -338,7 +338,7 @@ pot["adcRaw"] = potReading.raw;
 発生しない。
 
 `kPotSampleCount=8`回の`analogRead()`自体は1回あたりマイクロ秒オーダーであり、
-`initSensor()`の1500ms安定待ちや、LTE接続フェーズ(数秒〜数十秒)と比べて無視できるコスト
+`initSensor()`の100ms安定待ち(#94で1500msから短縮)や、LTE接続フェーズ(数秒〜数十秒)と比べて無視できるコスト
 増分である。Issueの「消費電力への影響はほぼ無視できる」という見立ては、**ADC読み取り自体の
 所要時間**については実機でも妥当と確認された(§10.2)。
 
@@ -731,7 +731,7 @@ v5では`currentPotThreshold()`(`runCycle()`から呼ばれる)がNVSにキャ�
 10. 現場設置後に同envの実機で§8テスト項目7を実施し、`PSS_POT_THRESHOLD_MIN`/`MAX`の
     妥当性を再検討する(§6 #1参照)。
 11. `docs/data-model.md`の`threshold`フィールド説明・`sync.*`/`network.*`/`bootMode.*`の
-    診断フィールド節(`docs/data-model.md:83`付近)に`pot.*`(`enabled`/`adcRaw`)を追記する。
+    診断項目の節(`bridge/README.md` の「MQTT ペイロードの診断項目」。旧 `docs/data-model.md` の診断フィールド節)に`pot.*`(`enabled`/`adcRaw`)を追記する。
 
 ### レビュー観点(実装レビュー時に確認すること)
 
@@ -830,6 +830,28 @@ UART-bridge基板より信頼性が低いという複数の報告があること
 (d) 同じ「LEDは反応するが機械的に切り替わらない」症状パターンが別のGrove Relay製品で
 独立に報告されていること、という4点の裏付けが見つかった(ピンポイントで同一事例は
 なし)。詳細は#63の調査コメントを参照。
+
+**追記(2026-10-02、[#90](https://github.com/makeOurCity/parking-status-sensor/issues/90)・[#88](https://github.com/makeOurCity/parking-status-sensor/issues/88)で訂正)**:
+[#87](https://github.com/makeOurCity/parking-status-sensor/issues/87)の調査で、リレーモジュールの回路図(Seeed公式Eagle v1、2013年)を
+改めて読み、簡易シミュレーション(実機未確認)をした結果、上の仮説と恒久対策の
+一部は**そのままでは採用できない**ことが分かった。
+
+- **「Hi-Zの緩い遷移で部分発火」仮説は、このモデルでは再現しなかった。** SIGが
+  100kΩのプルダウンだけで減衰しても、SET側(立ち下がり)のトランジスタを動かすには
+  電流が足りず、SETは起きない(コイル電流はほぼ0)。実機のオシロ確認は未実施のため、
+  棄却ではなく「支持されない」にとどめる。
+- **「SIG-GND間に4.7〜10kΩのプルダウンを追加する」恒久対策案(#63のコメント)は、
+  勧めない。** モデルでは15kΩ以下だと、Deep SleepでGPIOがHi-Zになるたびに
+  SET(LTE ON)が出る。既存の100kΩのままが安全側。実測前は変更しない。
+- **LEDが光ることは、コイルに十分な電流が流れた証拠にならない。** LEDはコイルと別の
+  経路(約0.5mA)で光る。上の「LEDは点滅するがカチッと鳴らない」症状は、
+  コイルの電圧不足・断線・機械的な固着でも起きる。
+- **リレーは5V定格で、3.3Vで駆動している。** SET側は特に電圧余裕が薄い
+  (詳細は[25-low-power-phase2-hardware-cutoff.md](25-low-power-phase2-hardware-cutoff.md) §2.2の訂正)。
+  #63の事象(書き込み直後に切り替わらない)も、この余裕不足が関係した可能性があるが、
+  未確認。
+
+切り分けは#88で追跡する。
 
 ### 10.2 消費電力実測: ポット常時接続によるDeep Sleepリーク電流
 

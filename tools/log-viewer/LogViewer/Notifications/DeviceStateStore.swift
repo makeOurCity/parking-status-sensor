@@ -17,14 +17,16 @@ enum DeviceStateDiff {
         for device in current {
             guard let prev = previous[device.deviceId] else { continue }
 
-            if prev.status != device.status.rawValue {
-                let prevLabel = DeviceOperationalStatus(rawValue: prev.status)?.label ?? prev.status
-                messages.append("\(device.deviceId): \(prevLabel) → \(device.status.label)")
+            // `available` saved by an older app version is the same state as `open` (#99).
+            let prevStatus = DeviceOperationalStatus.parse(prev.status)
+            if prevStatus != device.status {
+                let prevLabel = prevStatus?.label ?? prev.status
+                messages.append("\(device.title): \(prevLabel) → \(device.status.label)")
             }
             if !prev.isOffline && device.isOffline {
-                messages.append("\(device.deviceId): オフラインになりました")
+                messages.append("\(device.title): オフラインになりました")
             } else if prev.isOffline && !device.isOffline {
-                messages.append("\(device.deviceId): オンラインに復帰しました")
+                messages.append("\(device.title): オンラインに復帰しました")
             }
         }
         return messages

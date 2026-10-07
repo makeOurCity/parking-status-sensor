@@ -26,7 +26,7 @@ def test_decode_message_envelope():
         },
     }
     result = decode_message(message)
-    assert result["status"] == "available"
+    assert result["status"] == "open"
     assert result["fCnt"] == 7
     assert result["receivedAt"] == "2026-10-01T06:00:00Z"
 

@@ -3,13 +3,21 @@ import SwiftUI
 /// Mirrors the `status` field in the telemetry payload (docs/data-model.md).
 enum DeviceOperationalStatus: String {
     case full
-    case available
+    case open
     case unknown
+
+    /// Parses a telemetry `status` string. `available` is the pre-#99 name of
+    /// `open`: devices that haven't been reflashed yet still send it, and
+    /// CloudWatch history keeps it. Use this instead of `init(rawValue:)` for
+    /// anything read from logs or persisted state.
+    static func parse(_ raw: String) -> DeviceOperationalStatus? {
+        raw == "available" ? .open : DeviceOperationalStatus(rawValue: raw)
+    }
 
     var label: String {
         switch self {
         case .full: return "満"
-        case .available: return "空"
+        case .open: return "空"
         case .unknown: return "不明"
         }
     }
@@ -17,7 +25,7 @@ enum DeviceOperationalStatus: String {
     var color: Color {
         switch self {
         case .full: return Theme.full
-        case .available: return Theme.available
+        case .open: return Theme.available
         case .unknown: return Theme.unknown
         }
     }
@@ -25,14 +33,45 @@ enum DeviceOperationalStatus: String {
     var icon: String {
         switch self {
         case .full: return "car.fill"
-        case .available: return "checkmark.circle.fill"
+        case .open: return "checkmark.circle.fill"
         case .unknown: return "questionmark.circle.fill"
         }
     }
 }
 
+/// deviceId -> parking lot name, from the device master (#108).
+struct DeviceNames: Equatable {
+    let names: [String: String]
+
+    init(_ names: [String: String] = [:]) {
+        self.names = names
+    }
+
+    func name(for deviceId: String) -> String? {
+        names[deviceId]
+    }
+
+    /// Builds the map from a DynamoDB `Scan` response's `Items` (AttributeValue
+    /// form: `{"deviceId": {"S": "..."}, "name": {"S": "..."}}`). Items without a
+    /// non-empty `name` are skipped, so those devices keep showing their deviceId.
+    static func parse(scanItems items: [[String: Any]]) -> DeviceNames {
+        var result: [String: String] = [:]
+        for item in items {
+            guard let deviceId = (item["deviceId"] as? [String: Any])?["S"] as? String,
+                  let name = (item["name"] as? [String: Any])?["S"] as? String,
+                  !name.isEmpty
+            else { continue }
+            result[deviceId] = name
+        }
+        return DeviceNames(result)
+    }
+}
+
 struct DeviceSummary: Identifiable, Equatable {
     let deviceId: String
+    /// Parking lot name from the device master. nil when the device isn't registered
+    /// (or the master couldn't be read), in which case the deviceId is shown instead.
+    let name: String?
     let status: DeviceOperationalStatus
     let lastSeen: Date
     let bootStatus: BootStatusInfo?
@@ -43,6 +82,9 @@ struct DeviceSummary: Identifiable, Equatable {
     let transport: String?
 
     var id: String { deviceId }
+
+    /// What to show as the device's heading: the parking lot name, else the deviceId.
+    var title: String { name ?? deviceId }
 
     var isOffline: Bool {
         Date().timeIntervalSince(lastSeen) > AWSConfig.offlineThreshold
@@ -102,7 +144,7 @@ struct LogEntry: Identifiable, Equatable {
         self.id = "\(timestampString)|\(message)"
         self.timestamp = date
         self.deviceId = row["deviceId"]
-        self.status = row["status"].flatMap(DeviceOperationalStatus.init(rawValue:))
+        self.status = row["status"].flatMap(DeviceOperationalStatus.parse)
         self.message = message
     }
 

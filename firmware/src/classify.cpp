@@ -8,7 +8,7 @@ ParkingStatus classifyStatus(const RawSample& sample, int threshold) {
     return ParkingStatus::kFull;
   }
   if (-rgDiff >= threshold) {
-    return ParkingStatus::kAvailable;
+    return ParkingStatus::kOpen;
   }
   return ParkingStatus::kUnknown;
 }
@@ -17,8 +17,8 @@ const char* statusToString(ParkingStatus status) {
   switch (status) {
     case ParkingStatus::kFull:
       return "full";
-    case ParkingStatus::kAvailable:
-      return "available";
+    case ParkingStatus::kOpen:
+      return "open";
     case ParkingStatus::kUnknown:
     default:
       return "unknown";
