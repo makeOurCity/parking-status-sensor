@@ -56,6 +56,8 @@ check "IAM role: $COGNITO_AUTH_ROLE_NAME" \
   aws_iam get-role --role-name "$COGNITO_AUTH_ROLE_NAME"
 check "IAM role policy: cloudwatch-logs-readonly" \
   aws_iam get-role-policy --role-name "$COGNITO_AUTH_ROLE_NAME" --policy-name cloudwatch-logs-readonly
+check "IAM role policy: device-master-readonly" \
+  aws_iam get-role-policy --role-name "$COGNITO_AUTH_ROLE_NAME" --policy-name device-master-readonly
 
 echo ""
 if [[ "$fail" -ne 0 ]]; then

@@ -206,3 +206,118 @@ struct CloudWatchLogsService {
         return json
     }
 }
+
+// MARK: - Device master (DynamoDB)
+
+enum DeviceMasterError: LocalizedError {
+    case malformedResponse
+    case apiError(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .malformedResponse:
+            return "デバイスマスターの応答を解釈できませんでした"
+        case .apiError(let message):
+            return "デバイスマスターの取得に失敗しました: \(message)"
+        }
+    }
+}
+
+/// Last successfully read deviceId -> name map, kept so a launch, a background
+/// refresh or a failed read still has names to show.
+enum DeviceNamesCache {
+    private static let defaultsKey = "deviceNames.cache"
+
+    private struct Stored: Codable {
+        let fetchedAt: Date
+        let names: [String: String]
+    }
+
+    static func load() -> (names: DeviceNames, fetchedAt: Date)? {
+        guard let data = UserDefaults.standard.data(forKey: defaultsKey),
+              let stored = try? JSONDecoder().decode(Stored.self, from: data)
+        else { return nil }
+        return (DeviceNames(stored.names), stored.fetchedAt)
+    }
+
+    static func save(_ names: DeviceNames, at date: Date = Date()) {
+        guard let data = try? JSONEncoder().encode(Stored(fetchedAt: date, names: names.names)) else { return }
+        UserDefaults.standard.set(data, forKey: defaultsKey)
+    }
+}
+
+/// Reads the device master table (deviceId -> parking lot name, #108) with the same
+/// Cognito credentials and SigV4 signing as the CloudWatch Logs calls. The table
+/// holds a handful of items, so a full `Scan` is fine.
+struct DeviceMasterService {
+    let auth: CognitoAuthService
+
+    /// The deviceId -> name map, reusing the cached copy while it is younger than
+    /// `maxAge`. Never throws: if the table can't be read (not allowed, offline, ...)
+    /// it returns the stale cache, or an empty map, and the UI falls back to deviceIds.
+    func names(maxAge: TimeInterval = AWSConfig.deviceNamesCacheTTL) async -> DeviceNames {
+        let cached = DeviceNamesCache.load()
+        if let cached, Date().timeIntervalSince(cached.fetchedAt) < maxAge {
+            return cached.names
+        }
+        do {
+            let fresh = try await fetchNames()
+            DeviceNamesCache.save(fresh)
+            return fresh
+        } catch {
+            print("DeviceMasterService: could not read the device master: \(error)")
+            return cached?.names ?? DeviceNames()
+        }
+    }
+
+    func fetchNames() async throws -> DeviceNames {
+        let credentials = try await auth.credentialsForCloudWatch()
+        var items: [[String: Any]] = []
+        var startKey: [String: Any]?
+        repeat {
+            // `name` is a DynamoDB reserved word, hence the placeholder.
+            var body: [String: Any] = [
+                "TableName": AWSConfig.deviceMasterTable,
+                "ProjectionExpression": "deviceId, #n",
+                "ExpressionAttributeNames": ["#n": "name"],
+            ]
+            if let startKey { body["ExclusiveStartKey"] = startKey }
+            let json = try await scan(body: body, credentials: credentials)
+            items += (json["Items"] as? [[String: Any]]) ?? []
+            startKey = json["LastEvaluatedKey"] as? [String: Any]
+        } while startKey != nil
+        return DeviceNames.parse(scanItems: items)
+    }
+
+    private func scan(body: [String: Any], credentials: AWSTemporaryCredentials) async throws -> [String: Any] {
+        let url = URL(string: "https://dynamodb.\(AWSConfig.region).amazonaws.com/")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/x-amz-json-1.0", forHTTPHeaderField: "Content-Type")
+        request.setValue("DynamoDB_20120810.Scan", forHTTPHeaderField: "X-Amz-Target")
+
+        let payload = try JSONSerialization.data(withJSONObject: body)
+        request.httpBody = payload
+
+        let signer = SigV4Signer(
+            accessKeyId: credentials.accessKeyId,
+            secretAccessKey: credentials.secretKey,
+            sessionToken: credentials.sessionToken,
+            region: AWSConfig.region,
+            service: "dynamodb"
+        )
+        signer.sign(request: &request, payload: payload)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse,
+              let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else {
+            throw DeviceMasterError.malformedResponse
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            let message = (json["message"] as? String) ?? (json["__type"] as? String) ?? "HTTP \(http.statusCode)"
+            throw DeviceMasterError.apiError(message)
+        }
+        return json
+    }
+}

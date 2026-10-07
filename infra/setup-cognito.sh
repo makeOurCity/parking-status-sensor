@@ -145,6 +145,13 @@ TRUST_POLICY="$TMP_DIR/trust-policy.json"
 sed "s|__IDENTITY_POOL_ID__|${IDENTITY_POOL_ID}|" \
   "$ROOT/cognito-authenticated-trust-policy.json.tmpl" >"$TRUST_POLICY"
 
+# デバイスマスター（DynamoDB）の読み取り。アプリが deviceId の代わりに駐車場名を表示するため（#108）。
+DEVICE_MASTER_POLICY="$TMP_DIR/device-master-policy.json"
+sed -e "s|__REGION__|${AWS_REGION}|" \
+    -e "s|__ACCOUNT_ID__|${ACCOUNT_ID}|" \
+    -e "s|__TABLE_NAME__|${DEVICE_MASTER_TABLE}|" \
+  "$ROOT/cognito-device-master-readonly-policy.json.tmpl" >"$DEVICE_MASTER_POLICY"
+
 LOGS_POLICY="$TMP_DIR/logs-policy.json"
 sed -e "s|__REGION__|${AWS_REGION}|" \
     -e "s|__ACCOUNT_ID__|${ACCOUNT_ID}|" \
@@ -173,6 +180,8 @@ if [[ "$POOLS_ONLY" == "1" ]]; then
   cat "$TRUST_POLICY"
   echo "  inline policy 'cloudwatch-logs-readonly':"
   cat "$LOGS_POLICY"
+  echo "  inline policy 'device-master-readonly':"
+  cat "$DEVICE_MASTER_POLICY"
   echo ""
   echo "Then set COGNITO_AUTH_ROLE_ARN in config.env and run ./setup-cognito.sh again."
   exit 0
@@ -201,6 +210,10 @@ else
     --role-name "$COGNITO_AUTH_ROLE_NAME" \
     --policy-name "cloudwatch-logs-readonly" \
     --policy-document "file://$LOGS_POLICY" >/dev/null
+  aws_iam put-role-policy \
+    --role-name "$COGNITO_AUTH_ROLE_NAME" \
+    --policy-name "device-master-readonly" \
+    --policy-document "file://$DEVICE_MASTER_POLICY" >/dev/null
 fi
 
 # --- Attach role to Identity Pool ---

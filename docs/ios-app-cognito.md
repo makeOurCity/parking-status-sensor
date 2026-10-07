@@ -41,7 +41,7 @@
 
 セットアップ・再実行（冪等）は [`infra/setup-cognito.sh`](../infra/setup-cognito.sh)、確認は [`infra/verify-cognito.sh`](../infra/verify-cognito.sh) を使う。
 
-## IAM ロールの権限（CloudWatch Logs 読み取り専用）
+## IAM ロールの権限（CloudWatch Logs とデバイスマスターの読み取り専用）
 
 対象ロググループを `/aws/lambda/parking-status-bridge` に限定し、書き込み・削除系アクションは一切許可しない。
 
@@ -75,6 +75,22 @@
 ```
 
 `logs:GetQueryResults` / `logs:StopQuery` / `logs:DescribeLogGroups` はクエリ ID・アカウント単位の API でリソースレベル制限が効かないため `Resource: "*"` としているが、`Action` はいずれも read 系のみ。
+
+### デバイスマスターの読み取り（#108）
+
+アプリは、デバイスの `deviceId` の代わりに駐車場名を表示するため、デバイスマスターの DynamoDB テーブル `parking-status-device-master` を読む（`deviceId` → `name`）。ロールには、そのテーブルだけを対象にした読み取りのインラインポリシー `device-master-readonly`（テンプレート: [`infra/cognito-device-master-readonly-policy.json.tmpl`](../infra/cognito-device-master-readonly-policy.json.tmpl)）が付く。書き込み・削除や、ほかのテーブルは許可しない。
+
+```json
+{
+  "Sid": "DeviceMasterRead",
+  "Effect": "Allow",
+  "Action": ["dynamodb:Scan", "dynamodb:GetItem"],
+  "Resource": "arn:aws:dynamodb:ap-northeast-1:<account-id>:table/parking-status-device-master"
+}
+```
+
+- アプリは `Scan` で全件（数件）を読み、結果を 5 分キャッシュする。読めなかったとき（権限なし・オフラインなど）は、古いキャッシュか空で、画面は今までどおり `deviceId` を表示する
+- 名称の変更は、`infra/device-master.sh put ...` で行い、アプリには最大 5 分で反映される
 
 IAM ロールの信頼ポリシーは、この Identity Pool の `aud` かつ `amr=authenticated` の場合のみ `AssumeRoleWithWebIdentity` を許可する（テンプレート: [`infra/cognito-authenticated-trust-policy.json.tmpl`](../infra/cognito-authenticated-trust-policy.json.tmpl)）。
 

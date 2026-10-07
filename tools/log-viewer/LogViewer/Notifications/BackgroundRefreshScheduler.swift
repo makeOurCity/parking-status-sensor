@@ -70,9 +70,13 @@ final class BackgroundRefreshScheduler {
                 // Status-only: change detection only needs status/lastSeen,
                 // never the expensive 400-day reset-time lookup (#77).
                 let statuses = try await service.fetchDeviceStatuses()
+                // Names come from the cache when it's fresh (#108); a failure just
+                // falls back to showing the deviceId in the notification.
+                let names = await DeviceMasterService(auth: auth).names()
                 let devices = statuses.map { status in
                     DeviceSummary(
                         deviceId: status.deviceId,
+                        name: names.name(for: status.deviceId),
                         status: status.status,
                         lastSeen: status.lastSeen,
                         bootStatus: nil,

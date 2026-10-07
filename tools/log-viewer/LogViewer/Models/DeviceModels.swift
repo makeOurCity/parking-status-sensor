@@ -39,8 +39,39 @@ enum DeviceOperationalStatus: String {
     }
 }
 
+/// deviceId -> parking lot name, from the device master (#108).
+struct DeviceNames: Equatable {
+    let names: [String: String]
+
+    init(_ names: [String: String] = [:]) {
+        self.names = names
+    }
+
+    func name(for deviceId: String) -> String? {
+        names[deviceId]
+    }
+
+    /// Builds the map from a DynamoDB `Scan` response's `Items` (AttributeValue
+    /// form: `{"deviceId": {"S": "..."}, "name": {"S": "..."}}`). Items without a
+    /// non-empty `name` are skipped, so those devices keep showing their deviceId.
+    static func parse(scanItems items: [[String: Any]]) -> DeviceNames {
+        var result: [String: String] = [:]
+        for item in items {
+            guard let deviceId = (item["deviceId"] as? [String: Any])?["S"] as? String,
+                  let name = (item["name"] as? [String: Any])?["S"] as? String,
+                  !name.isEmpty
+            else { continue }
+            result[deviceId] = name
+        }
+        return DeviceNames(result)
+    }
+}
+
 struct DeviceSummary: Identifiable, Equatable {
     let deviceId: String
+    /// Parking lot name from the device master. nil when the device isn't registered
+    /// (or the master couldn't be read), in which case the deviceId is shown instead.
+    let name: String?
     let status: DeviceOperationalStatus
     let lastSeen: Date
     let bootStatus: BootStatusInfo?
@@ -51,6 +82,9 @@ struct DeviceSummary: Identifiable, Equatable {
     let transport: String?
 
     var id: String { deviceId }
+
+    /// What to show as the device's heading: the parking lot name, else the deviceId.
+    var title: String { name ?? deviceId }
 
     var isOffline: Bool {
         Date().timeIntervalSince(lastSeen) > AWSConfig.offlineThreshold
