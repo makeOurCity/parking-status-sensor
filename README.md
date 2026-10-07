@@ -163,7 +163,7 @@
 | **LTE-M 版** | M5Stack SIM7080G CAT-M Unit（M5STACK-U128）+ SORACOM SIM（plan-D / plan-KM1） | 実装済み・現地試験済み | LoRaWAN でどうしても通信できない場合 |
 | Wi-Fi | ESP32-S3 内蔵 | ファーム対応済み | Wi-Fi を使える環境 |
 
-- LTE-M 版は、送信するときだけラッチングリレーで LTE-M の電源を入れる（#46）。モデム内蔵の TLS で AWS IoT Core に直接つなぐ。
+- LTE-M 版は、送信するときだけ**ロードスイッチ基板**で LTE-M の電源を入れる（#88、基板評価中）。モデム内蔵の TLS で AWS IoT Core に直接つなぐ。旧方式のラッチングリレー（#46）は廃止した（経緯: [docs/25-low-power-phase2-hardware-cutoff.md](docs/25-low-power-phase2-hardware-cutoff.md) §2）。
 - 送信データは判定結果＋生値のみで極小（数百バイト程度）。LoRaWAN の典型的なペイロードにも収まる。
 - ファームの env と設定は [firmware/README.md](firmware/README.md) を参照。
 
@@ -197,7 +197,7 @@
 | LoRaWAN モジュール | Grove - Wio-E5 | Seeed 等 | — | LoRaWAN 版。Grove UART 接続。常時通電 |
 | LTE-M モジュール | M5Stack SIM7080G CAT-M Unit（M5STACK-U128） | スイッチサイエンス | ¥6,908 | LTE-M 版。Grove UART 接続 |
 | SIM | SORACOM IoT SIM plan-D / plan-KM1 | SORACOMストア | ¥990（初期）+ ¥192/月〜 | LTE-M 版。ドコモ / KDDI 回線 |
-| ラッチングリレー | Grove - 2-Coil Latching Relay（103020010） | 共立エレショップ 等 | ¥1,650 | LTE-M 版。LTE-M の電源を送信時だけ入れる（#46） |
+| LTE-M 電源スイッチ基板 | 自作小基板 rev A（TI TPS22918、[hardware/lte-power-switch/](hardware/lte-power-switch/)） | JLCPCB（基板 + 実装） | $20.14（5 枚、送料込み） | LTE-M 版。LTE-M の電源を送信時だけ入れる（#88、2026-10-05 発注・実機未検証） |
 
 - 詳細な選定経緯・調達先 URL は [docs/hardware.md](docs/hardware.md)・[docs/bom.md](docs/bom.md) を参照。
 
@@ -205,7 +205,7 @@
 
 - **マイコン**: カメラ不要なため無印 XIAO ESP32S3 で十分（Sense 版は不要）。LiPo 充電管理は Grove Shield 側にある。
 - **センサ**: **Grove - I2C Color Sensor V3.0**（VEML6040 搭載）。
-- **接続方式**: センサ・通信モジュール・リレーはすべて **Grove で接続**する（ピン入替・はんだ付け不要）。汎用性と組み立ての容易さを両立させ、LoRaWAN 版と LTE-M 版で構成を揃える。
+- **接続方式**: センサ・通信モジュール・LTE-M 電源スイッチ基板はすべて **Grove で接続**する（ピン入替・はんだ付け不要）。汎用性と組み立ての容易さを両立させ、LoRaWAN 版と LTE-M 版で構成を揃える。
 - **バッテリー**: LiPo 電池を **Grove Shield の BAT パッド**に JST で接続（XIAO 本体には JST コネクタ非搭載）。モバイルバッテリーはオートパワーオフおよびパススルー時の瞬断が問題になるため不採用。
 
 ---
@@ -216,7 +216,7 @@
 
 - **LiPo 電池（3.7V 4,400mAh、保護回路内蔵）**を Grove Shield for XIAO の **BAT パッド**に JST で接続して運用する（はんだ付け前にテスターで極性を確認）。電源を引ける現場では USB 給電でも可。
 - 電池で動かしているとき、**ESP32-S3 と Grove の各ポート（センサー・LTE-M を含む）は、Shield 上の降圧コンバーター（ETA3410）の 3.3V を共有する**。5V 系統は無効で、昇圧回路は使わない（[docs/hardware.md](docs/hardware.md)）。
-- LTE-M モジュールは、送信するときだけラッチングリレーで通電する（#46）。
+- LTE-M モジュールは、送信するときだけロードスイッチ基板で通電する（#88、基板評価中）。
 - 起床間隔は 5 分（`PSS_SLEEP_SECONDS=300`）。LTE-M 版は**状態が変わったときだけ送信**し、変わらなければ約 66 分に 1 回だけ定期送信する（`PSS_CHANGE_ONLY_SEND=1`、`PSS_HEARTBEAT_CYCLES=12`）。満空情報に秒単位の即時性は不要なので、この遅延は許容できる。
 
 ### 6.2 消費電力と稼働日数（LTE-M 版）
