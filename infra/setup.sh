@@ -101,6 +101,9 @@ allow_rule_to_invoke_lambda "$IOT_LORAWAN_RULE_NAME"
 upsert_lambda_rule "$IOT_RULE_NAME" "$SQL"
 upsert_lambda_rule "$IOT_LORAWAN_RULE_NAME" "$LORAWAN_SQL"
 
+# --- CloudWatch Logs retention ---
+ensure_log_retention
+
 echo ""
 echo "=== setup complete ==="
 echo "MQTT endpoint : $ENDPOINT"
