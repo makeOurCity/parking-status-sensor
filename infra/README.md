@@ -49,7 +49,7 @@ chmod +x *.sh lib.sh
 | `device-master.sh` | デバイスマスターの登録・確認・削除（`put <deviceId> <name> <lat> <lon> [--disabled]` / `list` / `get` / `delete`）。登録のない deviceId は Orion に書かれないので、`test-publish.sh` で Orion まで流したいときは先に `put` する |
 | `setup-cognito.sh` | iOS ログビューアアプリ向け Cognito User Pool / Identity Pool / IAM ロール（CloudWatch Logs とデバイスマスターの読み取り専用）を一括作成（[docs/ios-app-cognito.md](../docs/ios-app-cognito.md)）。`--pools-only` で Identity Pool までで止め、管理者に渡すトラストポリシーを表示する。`COGNITO_AUTH_ROLE_ARN` 指定時はロールを作らず割り当てのみ |
 | `verify-cognito.sh` | Cognito セットアップ後のリソース存在確認 |
-| `setup-lorawan.sh` | IoT Core for LoRaWAN の `profiles`（Service / Device Profile・Destination）、`gateway`（ゲートウェイ登録と CUPS 証明書。`--rotate` で再発行）、`device <deviceId>`（Wireless Device）。#98 |
+| `setup-lorawan.sh` | IoT Core for LoRaWAN の `role`（Destination とゲートウェイが使う IAM ロール。IAM 権限が要る）、`profiles`（Service / Device Profile・Destination）、`gateway`（ゲートウェイ登録と CUPS 証明書。`--rotate` で再発行）、`device <deviceId>`（Wireless Device）。#98 |
 | `verify-lorawan.sh` | LoRaWAN リソースの存在確認とゲートウェイの接続状態（読み取りのみ） |
 
 `verify*.sh` は読み取り系の呼び出しだけなので、ReadOnly 権限のプロファイルで実行できる。
@@ -59,6 +59,7 @@ chmod +x *.sh lib.sh
 [docs/40-lorawan-design.md](../docs/40-lorawan-design.md) の構成を、スクリプトで再現する。
 
 ```bash
+./setup-lorawan.sh role                      # IAM ロール IoTWirelessGatewayCertManagerRole（IAM のロール作成と PassRole が要る権限で）
 ./setup-lorawan.sh profiles                  # Service Profile / Device Profile / Destination
 ./setup-lorawan.sh profiles --no-destination # ロール不要の Service / Device Profile だけ（Destination は後で）
 ./setup-lorawan.sh gateway                   # ゲートウェイ登録 + cups.{uri,trust,crt,key} を gateway-certs/ に出力
@@ -67,7 +68,7 @@ LORAWAN_DEV_EUI=<16桁> LORAWAN_APP_EUI=<16桁> \
 ./verify-lorawan.sh <deviceId>
 ```
 
-- Destination は IAM ロール（既定 `IoTWirelessGatewayCertManagerRole`）を使う。管理者が用意すること
+- Destination は IAM ロール（既定 `IoTWirelessGatewayCertManagerRole`）を使う。`role` で作れる（IAM 権限が要る。Power User では作れないので、その場合は管理者に作ってもらう）
 - **ゲートウェイ EUI は他の AWS アカウントに登録済みだと作れない**。アカウント移行では、旧アカウントでゲートウェイを削除してから `gateway` を実行する
 - `gateway-certs/` は Git 管理外。`cups.key` は秘密鍵で、再ダウンロードできない（紛失したら `gateway --rotate`）
 - SenseCAP M2 側の設定（ローカルコンソール > LoRa > LoRa Network）は `gateway` の実行後に表示される手順に従う
