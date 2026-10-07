@@ -24,6 +24,7 @@
 | `docs/data-model.md` | NGSIv2 エンティティ設計 |
 | `docs/site-inventory.md` | 現場棚卸し（Issue 作業記録・暫定） |
 | `firmware/` | ESP32 ファームウェア（PlatformIO）。**XIAO ESP32S3 = PoC 試作機**。配線は `docs/wiring.md`、概要は `firmware/README.md` |
+| `hardware/flame-sensor-case/` | 印刷に使っている Grove センサ用ケースの 3mf。**第三者作品（CC BY 4.0、作者 Fyrby Additive）**。変更時は帰属表示を維持（#3） |
 | `bridge/` | AWS Lambda ブリッジ（IoT Core → NGSIv2 → Orion）。#4 スタブあり、#7 で本実装 |
 
 ## 作業時の注意

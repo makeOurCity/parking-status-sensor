@@ -230,6 +230,16 @@ static_assert(!PSS_LORAWAN_TEST_MODE || PSS_LORAWAN_ENABLED,
 #define PSS_LTE_POWER_RELAY_ENABLED 0
 #endif
 
+// #88: LTE-M の電源遮断をロードスイッチ IC（TI TPS22918、hardware/lte-power-switch/）で
+// 行う機体では 1 にする（PSS_LTE_POWER_RELAY_ENABLED も 1 にすること）。
+// 制御はパルスではなく**レベル駆動**（HIGH で ON、LOW で OFF）。ON ピンには基板上で
+// 100kΩ のプルダウンがあるので、リセット・Deep Sleep（GPIO が Hi-Z）・電源喪失のどれでも
+// 自動的に OFF になる。ラッチングリレーの機体に誤って有効化すると SIG が HIGH のまま
+// 保持され、動作が変わるので、配線済みの env でのみ 1 にする。
+#ifndef PSS_LTE_POWER_SWITCH_LEVEL
+#define PSS_LTE_POWER_SWITCH_LEVEL 0
+#endif
+
 // Set/Reset パルス幅。SIGのレベルを保持する時間で、コイルの通電幅は決めない
 // （通電幅は基板側のRC回路で決まる。relay.h の注意を参照）。既定20ms。
 #ifndef PSS_RELAY_PULSE_MS
@@ -361,6 +371,14 @@ constexpr uint8_t kPublishMaxAttempts = PSS_PUBLISH_MAX_ATTEMPTS;
 constexpr uint32_t kRetryDelayMs = PSS_RETRY_DELAY_MS;
 constexpr uint32_t kCycleMaxActiveMs = PSS_CYCLE_MAX_ACTIVE_MS;
 constexpr uint32_t kConnectPhaseMs = PSS_CONNECT_PHASE_MS;
+// #87: 接続の hard deadline。soft（kConnectPhaseMs）は「新しい試行を始めるか」の判断だけに
+// 使い、hard は実行中の AT 待ちと waitForNetwork を縮める上限。cycle = connect 45 +
+// publish 20 + マージン 10（docs/sync-delivery-design.md §4.1）。接続が hard で終わっても
+// publish 20s が残る。PSS_CYCLE_MAX_ACTIVE_MS を超えない。
+constexpr uint32_t kConnectHardMs =
+    (PSS_CONNECT_PHASE_MS + 10000 < PSS_CYCLE_MAX_ACTIVE_MS)
+        ? PSS_CONNECT_PHASE_MS + 10000
+        : PSS_CYCLE_MAX_ACTIVE_MS;
 constexpr uint32_t kPublishPhaseMs = PSS_PUBLISH_PHASE_MS;
 constexpr uint8_t kFaultInjectPublishFails = PSS_FAULT_INJECT_PUBLISH_FAILS;
 
@@ -369,6 +387,7 @@ constexpr uint32_t kWatchdogTimeoutMs =
     PSS_CYCLE_MAX_ACTIVE_MS + PSS_WATCHDOG_MARGIN_MS;
 
 constexpr bool kLtePowerRelayEnabled = PSS_LTE_POWER_RELAY_ENABLED;
+constexpr bool kLtePowerSwitchLevel = PSS_LTE_POWER_SWITCH_LEVEL;
 constexpr uint32_t kRelayPulseMs = PSS_RELAY_PULSE_MS;
 constexpr uint32_t kLteColdBootSettleMs = PSS_LTE_COLD_BOOT_SETTLE_MS;
 constexpr bool kChangeOnlySend = PSS_CHANGE_ONLY_SEND;

@@ -64,13 +64,6 @@ class FakeIotWireless:
         return {"Name": self.name} if self.name is not None else {}
 
 
-@pytest.fixture(autouse=True)
-def fresh_cache():
-    lorawan.clear_device_cache()
-    yield
-    lorawan.clear_device_cache()
-
-
 @pytest.fixture
 def fake_client(monkeypatch):
     client = FakeIotWireless()
@@ -123,7 +116,7 @@ def test_build_telemetry_shape():
 
     assert telemetry == {
         "deviceId": DEVICE_NAME,
-        "status": "available",
+        "status": "open",
         "raw": {"red": 12, "green": 18, "blue": 3, "clear": 64},
         "threshold": 100,
         "determinedBy": "device",
@@ -170,8 +163,8 @@ def test_handler_logs_telemetry_line(fake_client, caplog):
     assert json.loads(result["body"]) == {
         "ok": True,
         "deviceId": DEVICE_NAME,
-        "status": "available",
-        "message": "stub handler — Orion upsert is Issue #7",
+        "status": "open",
+        "orion": "disabled",
     }
     lines = telemetry_lines(caplog)
     assert len(lines) == 1
@@ -204,7 +197,7 @@ def test_handler_log_line_parses_like_ios_app(fake_client, caplog):
         return match.group(1) if match else None
 
     assert first(r'"deviceId":\s*"([^"]+)"') == DEVICE_NAME
-    assert first(r'"status":\s*"([^"]+)"') == "available"
+    assert first(r'"status":\s*"([^"]+)"') == "open"
     assert first(r'"bootCount":\s*(\d+)') == "1"
     assert first(r'"transport":\s*"([^"]+)"') == "lorawan"
     # TelemetryPayload が読むキー
@@ -304,12 +297,12 @@ def test_lte_event_is_logged_unchanged(caplog, monkeypatch):
     assert caplog.records[0].getMessage() == "parking-status telemetry received: " + json.dumps(
         LTE_EVENT, ensure_ascii=False
     )
-    assert len(caplog.records) == 1
+    assert len(telemetry_lines(caplog)) == 1
     assert json.loads(result["body"]) == {
         "ok": True,
         "deviceId": "xiao-e83dc1fb05fc",
         "status": "full",
-        "message": "stub handler — Orion upsert is Issue #7",
+        "orion": "disabled",
     }
 
 

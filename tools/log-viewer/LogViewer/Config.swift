@@ -1,15 +1,24 @@
 import Foundation
 
-/// Cognito/CloudWatch connection info for the parking-status PoC (`parking-private` AWS
-/// account). These identifiers alone grant nothing — signing in still requires the
-/// developer's Cognito password, and the vended IAM role only allows reading
-/// `logGroupName` below. See docs/ios-app-cognito.md in the repo for the full design.
+/// Cognito/CloudWatch connection info for the parking-status PoC (the organization AWS
+/// account, migrated from the personal `parking-private` account in #98). These
+/// identifiers alone grant nothing — signing in still requires the developer's Cognito
+/// password, and the vended IAM role only allows reading `logGroupName` below. See
+/// docs/ios-app-cognito.md in the repo for the full design.
 enum AWSConfig {
     static let region = "ap-northeast-1"
-    static let cognitoUserPoolId = "ap-northeast-1_qa1vrH2IU"
-    static let cognitoAppClientId = "p0fl67p8k9u56k38dqn7gj5k9"
-    static let cognitoIdentityPoolId = "ap-northeast-1:1d149d81-f0fd-43d1-93f6-f948514604ff"
+    static let cognitoUserPoolId = "ap-northeast-1_KFrs5UJw8"
+    static let cognitoAppClientId = "4nlsm2imjr9sfpndkg83oj5vij"
+    static let cognitoIdentityPoolId = "ap-northeast-1:49d08e74-839d-4462-ae34-58733edc162d"
     static let logGroupName = "/aws/lambda/parking-status-bridge"
+
+    /// DynamoDB table holding the device master (deviceId -> parking lot name, #108).
+    static let deviceMasterTable = "parking-status-device-master"
+
+    /// How long the deviceId -> name map is reused before the table is read again.
+    /// The table is tiny and edited rarely, so a few minutes is plenty (and keeps
+    /// reads far below the table's 1 RCU).
+    static let deviceNamesCacheTTL: TimeInterval = 5 * 60
 
     /// Pre-filled username hint on the sign-in screen (single-user PoC tool).
     static let loginUsernameHint = "kazuki@code4japan.org"

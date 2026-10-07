@@ -7,10 +7,15 @@ final class DeviceDetailViewModel: ObservableObject {
     @Published var errorMessage: String?
 
     let deviceId: String
+    /// Parking lot name from the device master (#108); nil → show the deviceId.
+    let name: String?
     private let logsService: CloudWatchLogsService
 
-    init(deviceId: String, auth: CognitoAuthService) {
+    var title: String { name ?? deviceId }
+
+    init(deviceId: String, name: String?, auth: CognitoAuthService) {
         self.deviceId = deviceId
+        self.name = name
         self.logsService = CloudWatchLogsService(auth: auth)
     }
 

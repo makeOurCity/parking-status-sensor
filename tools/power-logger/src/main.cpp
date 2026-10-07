@@ -43,6 +43,11 @@
 #ifndef LOGGER_OLED_IDLE_MA
 #define LOGGER_OLED_IDLE_MA 5.0f
 #endif
+// #105: 積算値などのサマリ行（`# total,...`）と CSV ヘッダー行を出す間隔。
+// 長期測定の途中から `pio device monitor` を始めても、ヘッダーと総量が残る。
+#ifndef LOGGER_SUMMARY_INTERVAL_MS
+#define LOGGER_SUMMARY_INTERVAL_MS 60000
+#endif
 
 namespace {
 
@@ -64,12 +69,33 @@ bool inaReady = false;
 bool oledReady = false;
 uint8_t oledAddr = LOGGER_OLED_ADDR;
 
-float sessionMah = 0.0f;
+// #105: 積算は整数（µA·ms）で持つ。float だと 64 mAh 以上で、1 回分の加算量
+// （数 µAh）が仮数部に収まらず、誤差が出てやがて増えなくなる。
+// 1 A を 1 年流しても 3e16 で、uint64_t（約 1.8e19）に収まる。
+constexpr double kMicroAmpMsPerMah = 3.6e9;  // 1 mAh = 1000 µA × 3,600,000 ms
+uint64_t sessionMicroAmpMs = 0;
 float peakAbsMa = 0.0f;
+float sessionBusMinMv = 0.0f;
 uint32_t sampleCount = 0;
 uint32_t sessionStartMs = 0;
+// millis() は約 49.7 日で 1 周する。経過時間は常に符号なしの引き算
+// （now - last）で求め、「未設定」は 0 ではなくフラグで区別する。
+bool haveLastSample = false;
 uint32_t lastSampleMs = 0;
 uint32_t lastOledMs = 0;
+uint32_t lastSummaryMs = 0;
+
+double sessionMah() {
+  return static_cast<double>(sessionMicroAmpMs) / kMicroAmpMsPerMah;
+}
+
+// |電流| を µA に丸めて、経過 ms を掛けて足す。INA226 の電流 LSB は数十 µA 以上
+// なので、µA への丸めは読み値の分解能より十分細かい。
+void addCharge(float currentMa, uint32_t dtMs) {
+  const uint64_t microAmp =
+      static_cast<uint64_t>(llroundf(fabsf(currentMa) * 1000.0f));
+  sessionMicroAmpMs += microAmp * dtMs;
+}
 
 #if LOGGER_FAST_MODE
 // 1ウィンドウ分の集計。
@@ -84,7 +110,6 @@ struct Window {
 };
 
 Window window;
-float sessionBusMinMv = 0.0f;
 uint32_t sessionBusMinAtMs = 0;
 float lastWindowCurrentMaxMa = 0.0f;
 uint32_t loopCount = 0;
@@ -95,6 +120,29 @@ constexpr uint8_t kRegBusVoltage = 0x02;
 constexpr uint8_t kRegCurrent = 0x04;
 constexpr float kBusLsbMv = 1.25f;
 #endif
+
+#if LOGGER_FAST_MODE
+constexpr const char* kCsvHeader =
+    "ms,samples,bus_min_mV,bus_avg_mV,current_max_mA,current_min_mA,current_avg_mA";
+#else
+constexpr const char* kCsvHeader = "ms,current_mA,bus_mV,power_mW";
+#endif
+
+// 定期的に、CSV ヘッダーと積算値のサマリ行を出す。`#` で始まる行は
+// integrate_mah.py / find_dips.py が読み飛ばす。
+//   # total,<ms>,<積算 mAh>,<起動以降の最低電圧 mV>,<ピーク mA>
+void emitSummary(uint32_t nowMs) {
+  Serial.println(kCsvHeader);
+  Serial.printf("# total,%lu,%.4f,%.0f,%.1f\n", static_cast<unsigned long>(nowMs),
+                sessionMah(), sessionBusMinMv, peakAbsMa);
+  lastSummaryMs = nowMs;
+}
+
+void emitSummaryIfDue(uint32_t nowMs) {
+  if (nowMs - lastSummaryMs >= LOGGER_SUMMARY_INTERVAL_MS) {
+    emitSummary(nowMs);
+  }
+}
 
 void waitForSerial() {
   const uint32_t start = millis();
@@ -230,7 +278,7 @@ void updateOled(float currentMa, float busMv, float powerMw) {
   display.print(powerMw, 1);
   display.println(F(" mW"));
   display.print(F("S: "));
-  display.print(sessionMah, 4);
+  display.print(sessionMah(), 4);
   display.println(F(" mAh"));
   display.print(F("pk:"));
   display.print(peakAbsMa, 1);
@@ -271,6 +319,9 @@ void updateOledFast(float busMinMv, float currentAvgMa) {
   display.print(F("mA "));
   display.print(elapsedS, 0);
   display.println(F("s"));
+  display.print(F("S: "));
+  display.print(sessionMah(), 4);
+  display.println(F(" mAh"));
   display.display();
 }
 
@@ -336,7 +387,7 @@ void flushWindow(uint32_t nowMs) {
                 busAvgMv, window.currentMaxMa, window.currentMinMa,
                 currentAvgMa);
 
-  if (sessionBusMinAtMs == 0 || window.busMinMv < sessionBusMinMv) {
+  if (sampleCount == 0 || window.busMinMv < sessionBusMinMv) {
     sessionBusMinMv = window.busMinMv;
     sessionBusMinAtMs = nowMs;
   }
@@ -344,9 +395,10 @@ void flushWindow(uint32_t nowMs) {
   if (absMaxMa > peakAbsMa) {
     peakAbsMa = absMaxMa;
   }
-  if (lastSampleMs != 0 && nowMs > lastSampleMs) {
-    sessionMah += fabsf(currentAvgMa) * (nowMs - lastSampleMs) / 3600000.0f;
+  if (haveLastSample) {
+    addCharge(currentAvgMa, nowMs - lastSampleMs);
   }
+  haveLastSample = true;
   lastSampleMs = nowMs;
   sampleCount += window.samples;
   lastWindowCurrentMaxMa = window.currentMaxMa;
@@ -359,19 +411,23 @@ void flushWindow(uint32_t nowMs) {
 
   // OLED更新中（数十ms）は計測できないが、上の条件でDeep Sleep中に限っている。
   // 空白は次の行の samples 数の減少として現れる。
+  emitSummaryIfDue(nowMs);
   resetWindow(nowMs);
 }
 #endif
 
-void integrateSample(float currentMa, uint32_t nowMs) {
-  if (lastSampleMs != 0 && nowMs > lastSampleMs) {
-    const float dtH = (nowMs - lastSampleMs) / 3600000.0f;
-    const float absMa = fabsf(currentMa);
-    sessionMah += absMa * dtH;
-    if (absMa > peakAbsMa) {
-      peakAbsMa = absMa;
-    }
+void integrateSample(float currentMa, float busMv, uint32_t nowMs) {
+  const float absMa = fabsf(currentMa);
+  if (haveLastSample) {
+    addCharge(currentMa, nowMs - lastSampleMs);
   }
+  if (absMa > peakAbsMa) {
+    peakAbsMa = absMa;
+  }
+  if (sampleCount == 0 || busMv < sessionBusMinMv) {
+    sessionBusMinMv = busMv;
+  }
+  haveLastSample = true;
   lastSampleMs = nowMs;
   sampleCount++;
 }
@@ -408,8 +464,10 @@ void setup() {
   }
 
   sessionStartMs = millis();
+  haveLastSample = false;
   lastSampleMs = 0;
   lastOledMs = 0;
+  lastSummaryMs = sessionStartMs;
 
   if (!inaReady) {
     Serial.println(F("# ERROR: INA226 not found at 0x41"));
@@ -435,11 +493,11 @@ void setup() {
                 "current_every=%u oled_idle_ma=%.1f\n",
                 LOGGER_WINDOW_MS, static_cast<unsigned long>(LOGGER_I2C_HZ),
                 LOGGER_CURRENT_EVERY, static_cast<float>(LOGGER_OLED_IDLE_MA));
-  Serial.println(F("ms,samples,bus_min_mV,bus_avg_mV,current_max_mA,current_min_mA,current_avg_mA"));
+  Serial.println(kCsvHeader);
   setRegisterPointer(kRegBusVoltage);
   resetWindow(millis());
 #else
-  Serial.println(F("ms,current_mA,bus_mV,power_mW"));
+  Serial.println(kCsvHeader);
 #endif
 
   if (oledReady) {
@@ -476,9 +534,10 @@ void loop() {
   const float busMv = ina226.getBusVoltage_mV();
   const float powerMw = ina226.getPower_mW();
 
-  integrateSample(currentMa, t0);
+  integrateSample(currentMa, busMv, t0);
 
   Serial.printf("%lu,%.3f,%.1f,%.3f\n", t0, currentMa, busMv, powerMw);
+  emitSummaryIfDue(t0);
 
   if (oledReady && (t0 - lastOledMs >= LOGGER_OLED_INTERVAL_MS)) {
     updateOled(currentMa, busMv, powerMw);

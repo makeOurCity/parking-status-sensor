@@ -21,7 +21,7 @@
 - 新規モジュール `firmware/include/history_log.h` / `firmware/src/history_log.cpp` として実装し、既存の `sync_ledger.*` には**一切変更を加えない**。
 - `main.cpp` の `runCycle()` 内、`classifyStatus()` 直後の1箇所にのみフック(1関数呼び出し)を追加する。センサー読み取り成功時は毎回呼ぶ(`mustPublish()`の判定より前)。
 - USB再接続(=非タイマー起床)を検知したとき、`setup()` 内でリングバッファ全件をシリアルへダンプする。
-- `waitForSerial()` の待機ウィンドウ内で1文字コマンド(`'h'`)を受け付け、任意タイミングでも(本番・デバッグ両ビルドで)ダンプできるようにする。
+- `waitForSerial()` の待機ウィンドウ内で1文字コマンド(`'h'`)を受け付け、任意タイミングでも(本番・デバッグ両ビルドで)ダンプできるようにする。待機ウィンドウは電源投入・USBリセット時のみ(タイマー復帰では待たない。#94、§4.3)。
 - MQTT payload・`sync.*`・`mustPublish()`・`publishWithRetry()`・`SyncLedger` には一切触れない。LTE接続や再送を一切トリガーしない。
 
 ### 1.2 やらないこと(スコープ外)
@@ -43,7 +43,7 @@
 | offset | フィールド | 型 | 説明 |
 |---|---|---|---|
 | 0-3 | `timestampEpoch` | u32 (LE) | UTC unix time。`0` = 未同期 |
-| 4 | `status` | u8 | そのサイクルで観測した `ParkingStatus`(0=full, 1=available, 2=unknown) |
+| 4 | `status` | u8 | そのサイクルで観測した `ParkingStatus`(0=full, 1=open, 2=unknown。#99 で `available` から改名。保存値は数値なので変わらない) |
 | 5 | `flags` | u8 | bit0 = 時刻同期済みフラグ。bit1-7予備(常に0) |
 | 6 | `bootCountLo8` | u8 | `bootCount & 0xFF`(下位8bit) |
 | 7 | (予備) | u8 | 未使用。将来項目用に確保 |
@@ -243,7 +243,7 @@ if (cause == ESP_SLEEP_WAKEUP_TIMER) {
 history: count=672 capacity=672 (full)
 [0] boot=142 2026-09-19T08:15:03Z status=full   r=812 g=201 b=340 w=1500
 [1] boot=142 <unsynced>          status=full   r=805 g=198 b=335 w=1490
-[2] boot=141 2026-09-19T08:10:02Z status=available r=120 g=610 b=95  w=980
+[2] boot=141 2026-09-19T08:10:02Z status=open      r=120 g=610 b=95  w=980
 ...
 ```
 
@@ -272,6 +272,8 @@ void waitForSerial() {
 ```
 
 本番・デバッグ両ビルドで有効にする。Watchdog有効時も `delay()` を挟まない即時チェックのみ。
+
+**#94 による変更**: 電池駆動では USB が無く、`Serial` が真にならないため、タイマー復帰のたびに3秒待機を使い切っていた(起床1回あたり約36mAで約3秒)。このため、USBの接続待ち(上記コードの `while (!Serial && ...)`)は、起床要因が `ESP_SLEEP_WAKEUP_TIMER` **でないとき**(電源投入・USBリセット)だけに限った。タイマー復帰では待たずに `Serial.available()` の即時チェックだけを行う。電源投入時の `'h'` と、Deep Sleepなしのデバッグビルド(`setup()` は1回だけ、起床要因は非タイマー)の挙動は変わらない。一方、Deep Sleepありの通常運用でUSBを挿したまま観察する場合、タイマー復帰では接続待ちをしないため、起床直後の `'h'` は受け付けられない(ダンプは電源投入・USBリセット時のみ)。
 
 ---
 

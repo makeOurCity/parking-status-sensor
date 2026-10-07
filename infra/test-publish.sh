@@ -22,7 +22,7 @@ TIMESTAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 PAYLOAD="$(cat <<EOF
 {
   "deviceId": "$DEVICE_ID",
-  "status": "available",
+  "status": "open",
   "raw": { "red": 150, "green": 820, "blue": 200, "clear": 1200 },
   "threshold": 100,
   "determinedBy": "device",

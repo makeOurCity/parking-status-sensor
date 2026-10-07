@@ -16,7 +16,9 @@ Wio-E5 ──LoRaWAN(JP920/AS923-1)──▶ SenseCAP M2 (M2-AS923, Basics Stati
 | Wireless Device | 名前は deviceId（例: `xiao-e83dc1fc1aec`）、OTAA v1.0.x |
 | Destination | `Saga_IoT_Core` → MQTT トピック `lorawan/parking-status/uplink`（Wi-Fi / LTE-M の `parking-status/<deviceId>/telemetry` とは別の名前空間） |
 
-クラウド側のうち、IoT ルールと bridge の LoRaWAN デコーダ（iOS ログビューアへの表示）は #83、経路の説明は [iot-core.md](iot-core.md) にある。Orion 連携は #7 で扱う。
+クラウド側のうち、IoT ルールと bridge の LoRaWAN デコーダ（iOS ログビューアへの表示）は #83、経路の説明は [iot-core.md](iot-core.md) にある。Orion 連携は #7（実装済み）。
+
+**アカウント（#98）**: 2026-10-07 に、個人の AWS アカウントから**組織の AWS アカウント**に切り替えた。クラウド側のリソースは `infra/setup-lorawan.sh`（`role` / `profiles` / `gateway` / `device`）で作る。**ゲートウェイ EUI と DevEui は、他のアカウントに登録されていると登録できない**ため、アカウントを移すときは、旧アカウントの Wireless Device とゲートウェイを削除してから新アカウントに作る（並行稼働できず、その間はアップリンクが途切れる）。M2 の設定は、ローカルコンソールの LoRa > LoRa Network で、Mode: Basics Station、Server: CUPS（443）、Authentication: TLS Server and Client Authentication、URI と CA（trust）・certificate・key を新アカウントの値に差し替える。端末（Wio-E5）は MQTT を話さず鍵も変わらないので**再書き込みは不要**で、電源を入れ直して Join し直す（古いセッションが残っていると再 Join されないため）。
 
 ## 2. Wio-E5 の設定
 
@@ -46,7 +48,7 @@ Wio-E5 ──LoRaWAN(JP920/AS923-1)──▶ SenseCAP M2 (M2-AS923, Basics Stati
 | `AT+LW=TPS`（UplinkDwellTime, DownlinkDwellTime, MaxEIRP） | `OFF, OFF, 3` |
 | Join 直後の DR | DR2（SF10/125kHz） |
 
-LBT（送信前のキャリアセンス）は Wio-E5 に内蔵されていて、しきい値は `AT+LW=THLD` で変えられる。JP920 プランで具体的にどう動くか（キャリアセンスの時間など）は、仕様書に記載がない。
+LBT（送信前のキャリアセンス）は Wio-E5 に内蔵されていて、しきい値は `AT+LW=THLD` で変えられる。JP920 プランで具体的にどう動くか（キャリアセンスの時間など）は、仕様書に記載がない（法令との関係は §3 の「法令（ARIB STD-T108）について」）。
 
 ## 3. コアペイロード（fPort 1、ver 1、固定 18 バイト）
 
@@ -70,18 +72,38 @@ AWS IoT Core for LoRaWAN（AS923-1）は、MaxEIRP を書き換えたうえで *
 
 dwell time が有効なネットワークに移した場合、DR2 での送信は Wio-E5 が `Length error` で拒否する。ファームはこれをエラー（-105）として扱う。
 
-**法令（ARIB STD-T108）について、未確認**:
+**法令（ARIB STD-T108）について（2026-10-07 調査。キャリアセンスの時間は未確定）**:
 
-- 日本の 920MHz 帯では、キャリアセンスの時間によって1回の送信時間の上限が変わる（5ms 以上なら 4 秒、128µs なら 400ms と理解している）
-- Wio-E5 の JP920 のキャリアセンスの時間は、仕様書に記載がない
+日本の 920MHz 帯では、キャリアセンス（LBT）の時間によって、1回の送信時間の上限が変わる。参照実装の LoRaMac-node（`RegionAS923.c`）は、STD-T108 Ver1.4 の扱いをチャネル計画ごとに次のように実装している。
+
+| 計画 | 周波数 | キャリアセンス | 1回の送信の上限（dwell time） |
+|---|---|---|---|
+| ch24〜38（LBT） | 920.6〜923.4 MHz | 5 ms | 制限なし（`UPLINK_DWELL_TIME = 0`） |
+| ch37〜61（LBT + デューティ制限） | 922.4〜928.0 MHz | 128µs 以上 | 400ms の制限を有効にする必要あり |
+
+分かっていること:
+
+- Seeed の仕様書（LoRa-E5 AT Command Specification V1.0）は、JP920 を「AS923 互換で日本向けにカスタマイズしたもの」とだけ書く。LBT は実装されている（`AT+LW=THLD`、`No free channel`）が、**キャリアセンスの時間は記載がない**（全文を検索して確認）
+- Wio-E5 が既定で使う 923.2 / 923.4 MHz（Join で渡される 922.6 MHz も）は、**上の 2 つの計画の範囲の両方に入る**。周波数だけでは、どちらの計画で動いているか決まらない
+- Seeed の AT ファームは非公開。LoRaMac-node と同じ計画で動いているかは、推測である（ソースは参照実装であって、Wio-E5 のファームそのものではない）
+- キャリアセンスが 5ms か 128µs かは、差が数 ms で、ファームの処理遅延に埋もれるため、電流波形などの実測では判別しにくい
+
+送信時間への影響:
+
 - DR2 で 400ms を超えるのは、11 バイトを超えたときだけではない。11 バイトでも、MAC コマンドの応答（FOpts）が相乗りすると超える。実測で `FOptLen: 2` のときに約 412ms になっていた
-- 技適はモジュールの送信制御も含めて認証されているので、モジュールが許す範囲は適合していると考えられるが、Seeed に確認する
-- ゲートウェイの近くでは ADR が DR5（SF7）に上げるため、18 バイトでも送信時間は約 72ms
+- キャリアセンスが 5ms の計画なら、400ms を超えても問題ない。128µs の計画なら、400ms の制限が必要で、412ms は上限を少し超える
+- 技適はモジュールの送信制御も含めて認証されているので、モジュールが許す範囲は適合していると考えられる
+- ゲートウェイの近くでは ADR が DR5（SF7）に上げるため、18 バイトでも送信時間は約 72ms。問題になるのは、電波が遠くて DR2 のままになる現場
+
+どちらの計画でも 400ms を超えないようにする手段（確定を待たずに安全側に倒す場合）:
+
+- 最低 DR を DR3（SF9）にする。18 バイトで約 247ms（FOpts 込みでも 400ms 未満）。到達距離と消費電力は不利になる
+- `AT+LW=TPS` で UplinkDwellTime を ON にする。ただし、AWS が TxParamSetupReq で OFF に戻してくることを実機で確認済みなので、単独では効かない
 
 | byte | bit | 内容 |
 |---|---|---|
 | 0 | 7:6 | version（=1） |
-| 0 | 5:4 | status（0 full / 1 available / 2 unknown。`ParkingStatus` の順） |
+| 0 | 5:4 | status（0 full / 1 open / 2 unknown。`ParkingStatus` の順。#99 で `available` から改名したが、無線上の値は変わらない） |
 | 0 | 3:2 | 送信理由（0 状態変化 / 1 heartbeat / 2 pending の再送 / 3 ブートモード） |
 | 0 | 1 | coldBoot（`esp_reset_reason() == ESP_RST_POWERON`） |
 | 0 | 0 | 予備（0） |
@@ -215,4 +237,4 @@ AWS の Destination に届いたメッセージをデコードすると、status
 - `xiao-s3-lorawan-pot` の実機確認（ポテンショメーターを配線した機体）
 - Deep Sleep 中の GPIO43（TX）の状態で Wio-E5 が起きないか（必要なら `gpio_hold_en`）
 - Device Profile の MaxEirp が 5 と小さい。AWS は TxParamSetupReq で MaxEIRP を index 0（8 dBm）に下げてくる（JP920 の初期値は index 3 = 13 dBm）。ベンチでは問題ないが、現場で距離が出ないときはまずここを見直す
-- Seeed に、Wio-E5 の JP920 での LBT（キャリアセンスの時間）と送信時間の上限を確認する（§3）
+- Wio-E5 の JP920 のキャリアセンスの時間（5ms か 128µs か）を確定する。参照実装では 5ms（ch24〜38）と 128µs（ch37〜61、400ms 制限あり）の 2 通りがあり、仕様書に記載がない（§3 の「法令（ARIB STD-T108）について」）。Seeed に確認するか、安全側に倒す（最低 DR を DR3 にする）かを決める

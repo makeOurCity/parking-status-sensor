@@ -212,6 +212,7 @@ SyncLedger の `prevOutcome = skipped` を記録してスリープする。
 
 - 数値は `config.h` のマクロで上書き可能。現場の電波状況に応じ `platformio.ini` で調整
 - `min(フェーズ残予算, 操作タイムアウト)` を打ち切り可能操作に適用（§1.3）
+- `PSS_CONNECT_PHASE_MS` は新しい試行を始める上限（soft）。実行中の AT 待ち・`waitForNetwork` は、+10 秒の hard（`kConnectHardMs`、`PSS_CYCLE_MAX_ACTIVE_MS` を超えない）で縮める（#87、[87-lte-modem-silent-design.md](87-lte-modem-silent-design.md)）
 - Wi-Fi ビルドは現行値ベース。本 Issue の主対象は LTE
 
 #### 初回証明書プロビジョニングの扱い【確定】
@@ -274,7 +275,7 @@ SyncLedger の `prevOutcome = skipped` を記録してスリープする。
 
 ```json
 "sync": {
-  "lastConfirmedStatus": "available",
+  "lastConfirmedStatus": "open",
   "lastConfirmedBootCount": 41,
   "pending": false,
   "prevOutcome": "confirmed",

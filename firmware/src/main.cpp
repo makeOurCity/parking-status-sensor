@@ -59,13 +59,18 @@ void computeWakeDiagnostics() {
 }
 
 void waitForSerial() {
-  const uint32_t start = millis();
-  while (!Serial && (millis() - start) < kSerialWaitMs) {
-    delay(10);
+  // #94: 電池駆動では USB が無く `Serial` は真にならないため、タイマー復帰の
+  // たびに kSerialWaitMs を使い切っていた（起床1回あたり約3秒・約36mA）。
+  // USB の接続待ちは電源投入・USB リセット時だけに限る。
+  if (esp_sleep_get_wakeup_cause() != ESP_SLEEP_WAKEUP_TIMER) {
+    const uint32_t start = millis();
+    while (!Serial && (millis() - start) < kSerialWaitMs) {
+      delay(10);
+    }
   }
-  // #47: non-blocking check within the existing wait window — adds no new
-  // delay. 'h' forces a history dump in setup() even on a timer wake (e.g.
-  // a bench debug build with Deep Sleep disabled).
+  // #47: non-blocking check — adds no new delay (and is the only thing run
+  // on a timer wake, see #94). 'h' forces a history dump in setup() even on
+  // a timer wake (e.g. a bench debug build with Deep Sleep disabled).
   while (Serial.available()) {
     if (Serial.read() == 'h') {
       forceHistoryDump = true;
@@ -362,7 +367,9 @@ bool publishWithRetry(const RawSample& sample, ParkingStatus status,
 
     if (attempt > 1) {
       delay(config::kRetryDelayMs);
-      if (!reconnectActiveTransport(metrics)) {
+      // #87: 再接続の hard deadline は cycle の上限（WDT の margin 手前）。
+      if (!reconnectActiveTransport(
+              metrics, deadlineAfter(cycleStart, config::kCycleMaxActiveMs))) {
         continue;
       }
     }
@@ -601,6 +608,24 @@ void runCycle() {
   // branches. Independent of SyncLedger/mustPublish — never triggers LTE.
   historyLogRecordCycle(status, sample, bootCount);
 
+  // #87: ウォッチドッグ（task_wdt）で再起動した最初のサイクルは、送信せず失敗として記録して
+  // Deep Sleep する。ウォッチドッグ再起動後は ledgerRecordFailure() に到達しないので失敗が
+  // 記録されず、起動のたびに同じ処理を試みて再起動を繰り返すループになりうる。
+  // kDisableDeepSleep の env では sleepNow() が戻ってチップはリセットされず、
+  // esp_reset_reason() が同じ起動中ずっと TASK_WDT のままなので、1 回だけ処理する。
+  static bool wdtRebootHandled = false;
+  if (!wdtRebootHandled && esp_reset_reason() == ESP_RST_TASK_WDT) {
+    wdtRebootHandled = true;
+    // outcome は kBudgetExhausted を流用（新しい enum は LoRaWAN の 3 ビットに波及する）。
+    // 区別は prevActiveMs=kWatchdogTimeoutMs とシリアルの "watchdog-reset" で行う。
+    // activeMs は前サイクルがウォッチドッグで落ちたことの近似値（実測ではない）。
+    ledgerRecordFailure(CycleOutcome::kBudgetExhausted, status, bootCount, 0, 0,
+                        config::kWatchdogTimeoutMs);
+    Serial.println("watchdog reset: skip send this cycle");
+    sleepNow("watchdog-reset", millis() - cycleStart);
+    return;
+  }
+
   if (!mustPublish(status)) {
     const uint32_t activeMs = millis() - cycleStart;
     ledgerRecordFailure(CycleOutcome::kSkipped, status, bootCount, 0, 0, activeMs);
@@ -770,9 +795,15 @@ void runBootMode() {
       transportReady = true;
       metrics.transport = activeTransportKind();
     } else {
-      transportReady = reconnectActiveTransport(metrics);
+      // #87: 再接続の hard deadline はスロット開始から kConnectHardMs。
+      transportReady = reconnectActiveTransport(
+          metrics, deadlineAfter(slotStart, config::kConnectHardMs));
       if (transportReady) {
         metrics.transport = activeTransportKind();
+      } else if (metrics.modemSilent) {
+        // #87: モデムが AT に一度も応答しない。同じスロット内で全接続をやり直しても
+        // 約30s 無駄になるだけなので、諦めて次のスロットへ。
+        Serial.println("boot-mode: LTE modem silent; skipping full reconnect");
       } else {
         // req. 4: same retry policy as normal operation.
         transportReady = connectTransportWithRetry(metrics, slotStart,

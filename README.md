@@ -316,7 +316,7 @@
 |---|---|---|
 | [M1: 試作1台 通電](https://github.com/makeOurCity/parking-status-sensor/milestone/1) | 完了 | — |
 | [M2: クラウド E2E](https://github.com/makeOurCity/parking-status-sensor/milestone/2) | 端末 → AWS IoT Core → Lambda（スタブ）まで完了 | #7 Lambda の本実装（NGSIv2）、#27 組織クラウド環境 |
-| [M3: 現場 PoC](https://github.com/makeOurCity/parking-status-sensor/milestone/3) | 進行中 | #8 生値分離テスト、#2 棚卸し、#3 遮光フード |
+| [M3: 現場 PoC](https://github.com/makeOurCity/parking-status-sensor/milestone/3) | 進行中 | #8 生値分離テスト、#2 棚卸し |
 
 マイルストーン外の主な進行中の作業: #40 LoRaWAN 版、#12 筐体。
 
@@ -341,6 +341,8 @@ parking-status-sensor/
 │   ├── NN-*.md                # Issue ごとの設計・調査（例: 74-brownout-conclusions.md）
 │   └── datasheets/            # 回路図・データシート
 ├── firmware/                  # ESP32 ファームウェア（PlatformIO、版ごとの env）
+├── hardware/
+│   └── flame-sensor-case/     # Grove センサ用ケースの 3D モデル（第三者作品・CC BY 4.0、#3）
 ├── bridge/                    # Lambda ブリッジ（現在はスタブ → #7 で本実装）
 ├── infra/                     # AWS IoT Core・Cognito のプロビジョニングスクリプト
 └── tools/

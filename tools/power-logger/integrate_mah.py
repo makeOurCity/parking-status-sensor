@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """Integrate U200-1A CSV logs to mAh (Issue #31).
 
-Input columns: ms,current_mA,bus_mV,power_mW
+Input: normal-mode log (ms,current_mA,bus_mV,power_mW) or fast-mode log
+(ms,samples,...,current_avg_mA). The current column is picked from the header
+line, or from the column count when the log has no header. Lines starting
+with `#` (e.g. `# total,...`) are skipped.
 Uses trapezoidal integration on |current| (charge consumed regardless of sign).
 """
 
@@ -25,10 +28,22 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+# millis()（uint32_t）は約 49.7 日で 1 周する。直前の値が 1 周の手前 10 分以内で、
+# 次の値が小さければ 1 周とみなす（途中でロガーを再起動した場合と区別するため）。
+MILLIS_WRAP = 1 << 32
+WRAP_WINDOW_MS = 600_000
+
+# ヘッダー行が無いログ（`pio device monitor` を途中から始めたもの）の列数 → 電流の列。
+# 通常モード: ms,current_mA,bus_mV,power_mW
+# 高速モード(#74): ms,samples,bus_min_mV,bus_avg_mV,current_max_mA,current_min_mA,current_avg_mA
+CURRENT_COL_BY_WIDTH = {4: 1, 7: 6}
+
+
 def load_rows(path: Path) -> list[tuple[float, float]]:
     rows: list[tuple[float, float]] = []
-    # 通常モード: ms,current_mA,... / 高速モード(#74): ms,samples,...,current_avg_mA
-    current_col = 1
+    current_col: int | None = None  # ヘッダーで決まる。未確定なら列数から推定
+    wrap_offset = 0.0
+    prev_raw_ms: float | None = None
     with path.open(newline="", errors="ignore") as fh:
         for line in fh:
             line = line.strip()
@@ -36,18 +51,25 @@ def load_rows(path: Path) -> list[tuple[float, float]]:
                 continue
             if line.startswith("ms,"):
                 header = line.split(",")
-                if "current_avg_mA" in header:
-                    current_col = header.index("current_avg_mA")
+                for name in ("current_avg_mA", "current_mA"):
+                    if name in header:
+                        current_col = header.index(name)
+                        break
                 continue
             parts = line.split(",")
-            if len(parts) <= current_col:
+            col = current_col if current_col is not None else CURRENT_COL_BY_WIDTH.get(len(parts))
+            if col is None or len(parts) <= col:
                 continue
             try:
-                t_ms = float(parts[0])
-                current_ma = float(parts[current_col])
+                raw_ms = float(parts[0])
+                current_ma = float(parts[col])
             except ValueError:
                 continue
-            rows.append((t_ms, current_ma))
+            if (prev_raw_ms is not None and raw_ms < prev_raw_ms
+                    and prev_raw_ms > MILLIS_WRAP - WRAP_WINDOW_MS):
+                wrap_offset += MILLIS_WRAP
+            prev_raw_ms = raw_ms
+            rows.append((raw_ms + wrap_offset, current_ma))
     return rows
 
 
