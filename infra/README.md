@@ -47,7 +47,7 @@ chmod +x *.sh lib.sh
 | `deploy-bridge-stub.sh` | Lambda のみデプロイ（`bridge/` のモジュールを zip 化。Lambda の環境変数を `config.env` の `DEVICE_MASTER_TABLE` / `ORION_*` から設定。実行ロールには LoRaWAN 用 `iotwireless:GetWirelessDevice` とデバイスマスター用 `dynamodb:GetItem` を付与。`LAMBDA_ROLE_ARN` 指定時はロールを作らない（権限は管理者が付ける）） |
 | `setup-device-master.sh` | デバイスマスター（deviceId → name / location）の DynamoDB テーブルを作る（#7, #14。プロビジョンド 1 RCU / 1 WCU）。`setup.sh` からも呼ばれる |
 | `device-master.sh` | デバイスマスターの登録・確認・削除（`put <deviceId> <name> <lat> <lon> [--disabled]` / `list` / `get` / `delete`）。登録のない deviceId は Orion に書かれないので、`test-publish.sh` で Orion まで流したいときは先に `put` する |
-| `setup-cognito.sh` | iOS ログビューアアプリ向け Cognito User Pool / Identity Pool / IAM ロールを一括作成（[docs/ios-app-cognito.md](../docs/ios-app-cognito.md)）。`--pools-only` で Identity Pool までで止め、管理者に渡すトラストポリシーを表示する。`COGNITO_AUTH_ROLE_ARN` 指定時はロールを作らず割り当てのみ |
+| `setup-cognito.sh` | iOS ログビューアアプリ向け Cognito User Pool / Identity Pool / IAM ロール（CloudWatch Logs とデバイスマスターの読み取り専用）を一括作成（[docs/ios-app-cognito.md](../docs/ios-app-cognito.md)）。`--pools-only` で Identity Pool までで止め、管理者に渡すトラストポリシーを表示する。`COGNITO_AUTH_ROLE_ARN` 指定時はロールを作らず割り当てのみ |
 | `verify-cognito.sh` | Cognito セットアップ後のリソース存在確認 |
 | `setup-lorawan.sh` | IoT Core for LoRaWAN の `profiles`（Service / Device Profile・Destination）、`gateway`（ゲートウェイ登録と CUPS 証明書。`--rotate` で再発行）、`device <deviceId>`（Wireless Device）。#98 |
 | `verify-lorawan.sh` | LoRaWAN リソースの存在確認とゲートウェイの接続状態（読み取りのみ） |

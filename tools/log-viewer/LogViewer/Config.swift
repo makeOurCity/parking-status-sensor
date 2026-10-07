@@ -12,6 +12,14 @@ enum AWSConfig {
     static let cognitoIdentityPoolId = "ap-northeast-1:49d08e74-839d-4462-ae34-58733edc162d"
     static let logGroupName = "/aws/lambda/parking-status-bridge"
 
+    /// DynamoDB table holding the device master (deviceId -> parking lot name, #108).
+    static let deviceMasterTable = "parking-status-device-master"
+
+    /// How long the deviceId -> name map is reused before the table is read again.
+    /// The table is tiny and edited rarely, so a few minutes is plenty (and keeps
+    /// reads far below the table's 1 RCU).
+    static let deviceNamesCacheTTL: TimeInterval = 5 * 60
+
     /// Pre-filled username hint on the sign-in screen (single-user PoC tool).
     static let loginUsernameHint = "kazuki@code4japan.org"
 

@@ -4,10 +4,13 @@ import Foundation
 final class DashboardViewModel: ObservableObject {
     @Published private(set) var devices: [DeviceSummary] = []
     @Published private(set) var recentLogs: [LogEntry] = []
+    /// deviceId -> parking lot name (#108). Empty until the device master is read.
+    @Published private(set) var deviceNames = DeviceNames()
     @Published private(set) var isLoading = false
     @Published var errorMessage: String?
 
     private let logsService: CloudWatchLogsService
+    private let masterService: DeviceMasterService
 
     // Reset-timestamp cache (see #77): `fetchResetTimestamps` scans 400 days
     // of logs and accounted for ~90% of this app's CloudWatch Logs Insights
@@ -20,6 +23,7 @@ final class DashboardViewModel: ObservableObject {
 
     init(auth: CognitoAuthService) {
         self.logsService = CloudWatchLogsService(auth: auth)
+        self.masterService = DeviceMasterService(auth: auth)
     }
 
     /// - Parameter forceResetRefresh: true on app start / foreground resume
@@ -33,8 +37,11 @@ final class DashboardViewModel: ObservableObject {
         do {
             async let statusesTask = logsService.fetchDeviceStatuses()
             async let recentTask = logsService.fetchRecentLogs(limit: 5)
+            // Manual / start-up refreshes re-read the master; periodic ones reuse the cache.
+            async let namesTask = masterService.names(maxAge: forceResetRefresh ? 0 : AWSConfig.deviceNamesCacheTTL)
             let (statuses, recent) = try await (statusesTask, recentTask)
             self.recentLogs = recent
+            self.deviceNames = await namesTask
 
             let needsResetRefresh = forceResetRefresh
                 || !hasFetchedResetTimestamps
@@ -65,6 +72,7 @@ final class DashboardViewModel: ObservableObject {
                 }
                 return DeviceSummary(
                     deviceId: status.deviceId,
+                    name: deviceNames.name(for: status.deviceId),
                     status: status.status,
                     lastSeen: status.lastSeen,
                     bootStatus: bootStatus,

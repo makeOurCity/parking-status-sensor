@@ -21,12 +21,12 @@ enum DeviceStateDiff {
             let prevStatus = DeviceOperationalStatus.parse(prev.status)
             if prevStatus != device.status {
                 let prevLabel = prevStatus?.label ?? prev.status
-                messages.append("\(device.deviceId): \(prevLabel) → \(device.status.label)")
+                messages.append("\(device.title): \(prevLabel) → \(device.status.label)")
             }
             if !prev.isOffline && device.isOffline {
-                messages.append("\(device.deviceId): オフラインになりました")
+                messages.append("\(device.title): オフラインになりました")
             } else if prev.isOffline && !device.isOffline {
-                messages.append("\(device.deviceId): オンラインに復帰しました")
+                messages.append("\(device.title): オンラインに復帰しました")
             }
         }
         return messages

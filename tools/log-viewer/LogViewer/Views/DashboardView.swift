@@ -43,7 +43,7 @@ struct DashboardView: View {
                     }
                     VStack(spacing: 12) {
                         ForEach(viewModel.recentLogs) { entry in
-                            LogCard(entry: entry)
+                            LogCard(entry: entry, name: entry.deviceId.flatMap { viewModel.deviceNames.name(for: $0) })
                         }
                     }
                 }
@@ -52,7 +52,7 @@ struct DashboardView: View {
             .background(Color(.systemGroupedBackground))
             .navigationTitle("ダッシュボード")
             .navigationDestination(for: String.self) { deviceId in
-                DeviceDetailView(deviceId: deviceId, auth: auth)
+                DeviceDetailView(deviceId: deviceId, name: viewModel.deviceNames.name(for: deviceId), auth: auth)
             }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -177,12 +177,23 @@ private struct DeviceCard: View {
             BoardAccents(tone: .gold, transportLabel: device.transportLabel)
 
             VStack(spacing: 6) {
-                Text(device.deviceId)
-                    .font(.caption2.weight(.bold).monospaced())
-                    .foregroundStyle(.primary)
-                    .multilineTextAlignment(.center)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.7)
+                // Parking lot name as the heading (#108); the deviceId stays as a small
+                // caption for troubleshooting. Unregistered devices show the deviceId only.
+                VStack(spacing: 1) {
+                    Text(device.title)
+                        .font(device.name == nil ? .caption2.weight(.bold).monospaced() : .caption2.weight(.bold))
+                        .foregroundStyle(.primary)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.7)
+                    if device.name != nil {
+                        Text(device.deviceId)
+                            .font(.system(size: 8).monospaced())
+                            .foregroundStyle(.tertiary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.5)
+                    }
+                }
 
                 StatusBadge(status: device.status)
 
@@ -413,6 +424,8 @@ private struct CastellatedEdges: View {
 
 private struct LogCard: View {
     let entry: LogEntry
+    /// Parking lot name for the entry's device (#108); nil → show the deviceId.
+    let name: String?
     @State private var showRawLog = false
 
     var body: some View {
@@ -424,9 +437,19 @@ private struct LogCard: View {
 
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
-                    Text(entry.deviceId ?? "unknown")
-                        .font(.caption.weight(.medium).monospaced())
-                        .foregroundStyle(.secondary)
+                    HStack(spacing: 6) {
+                        Text(name ?? entry.deviceId ?? "unknown")
+                            .font(name == nil ? .caption.weight(.medium).monospaced() : .caption.weight(.semibold))
+                            .foregroundStyle(name == nil ? .secondary : .primary)
+                            .lineLimit(1)
+                        if name != nil, let deviceId = entry.deviceId {
+                            Text(deviceId)
+                                .font(.caption2.monospaced())
+                                .foregroundStyle(.tertiary)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.6)
+                        }
+                    }
                     Spacer()
                     Text(JSTTime.shortDateTimeFormatter.string(from: entry.timestamp))
                         .font(.caption)
