@@ -124,7 +124,7 @@ add_fp("R2", R, "R_0603_1608Metric", 20.4, 8.125, 90)    # パッド 1 (QOD) 下
 add_fp("C3", C, "C_0603_1608Metric", 21.0, 3.975, 90)    # パッド 1 (VLTE) が下、パッド 2 (GND) が上
 TP = STD_FP / "TestPoint.pretty"
 add_fp("TP1", TP, "TestPoint_Pad_D1.5mm", 14.0, 10.3, 0)
-add_fp("TP2", TP, "TestPoint_Pad_D1.5mm", 24.0, 6.0, 0)
+add_fp("TP2", TP, "TestPoint_Pad_D1.5mm", 24.0, 8.0, 0)
 add_fp("TP3", TP, "TestPoint_Pad_D1.5mm", 16.15, 14.7, 0)
 add_fp("TP4", TP, "TestPoint_Pad_D1.5mm", 9.0, 21.5, 0)
 HOLE = STD_FP / "MountingHole.pretty"

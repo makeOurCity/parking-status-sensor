@@ -197,7 +197,7 @@
 | LoRaWAN モジュール | Grove - Wio-E5 | Seeed 等 | — | LoRaWAN 版。Grove UART 接続。常時通電 |
 | LTE-M モジュール | M5Stack SIM7080G CAT-M Unit（M5STACK-U128） | スイッチサイエンス | ¥6,908 | LTE-M 版。Grove UART 接続 |
 | SIM | SORACOM IoT SIM plan-D / plan-KM1 | SORACOMストア | ¥990（初期）+ ¥192/月〜 | LTE-M 版。ドコモ / KDDI 回線 |
-| LTE-M 電源スイッチ基板 | 自作小基板 rev A（TI TPS22918、[hardware/lte-power-switch/](hardware/lte-power-switch/)） | JLCPCB（基板 + 実装） | $20.14（5 枚、送料込み） | LTE-M 版。LTE-M の電源を送信時だけ入れる（#88）。**rev A は Grove コネクタのピン番号が鏡像で、普通のケーブルでは使えない。rev B で直す** |
+| LTE-M 電源スイッチ基板 | 自作小基板 rev A（TI TPS22918、[hardware/lte-power-switch/](hardware/lte-power-switch/)） | JLCPCB（基板 + 実装） | $20.14（5 枚、送料込み） | LTE-M 版。LTE-M の電源を送信時だけ入れる（#88）。**rev A は Grove コネクタのピン番号が鏡像で、普通のケーブルでは使えない。rev B（作成済み・未発注）で直した** |
 
 - 詳細な選定経緯・調達先 URL は [docs/hardware.md](docs/hardware.md)・[docs/bom.md](docs/bom.md) を参照。
 

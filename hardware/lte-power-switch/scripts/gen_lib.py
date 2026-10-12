@@ -83,7 +83,8 @@ def hy20():
     s += '\t(layer "F.Cu")\n'
     s += ('\t(descr "CAX HY2.0-4P-WT (LCSC C722729) 2.0mm pitch 4P SMD right-angle (Grove-compatible receptacle). '
           'Pad geometry from the LCSC/EasyEDA library (easyeda2kicad). Body 12.0 x 7.9mm (datasheet), '
-          'mating face toward +Y, contact tails toward -Y, pin 1 at -X at rotation 0.")\n')
+          'mating face toward +Y, contact tails toward -Y, pin 1 at +X at rotation 0 '
+          '(rev B: pad numbers reversed vs rev A; the Grove cable yellow wire = pin 1 lands on the +X pad).")\n')
     s += '\t(tags "HY2.0 Grove JST-PH 2.0mm SMD right angle C722729")\n'
     s += prop("Reference", "REF**", 0, 0, "F.Fab", size=1.0)
     s += prop("Value", "HY2.0-4P-WT", 0, 7.5, "F.Fab")
@@ -97,12 +98,13 @@ def hy20():
     for sx in (-1, 1):
         s += line(sx * 6.15, -2.43, sx * 6.15, 1.75, "F.SilkS", 0.12)
         s += line(sx * 6.15, -2.43, sx * 4.6, -2.43, "F.SilkS", 0.12)
-    # 1 番ピンの目印: パッド 1 の左隣 (-X 側)、パッド先端側。三角形の頂点はパッド 1 を向く
+    # GND 端 (pin 4、-X 側) の目印: -X 側の端のパッドの隣、パッド先端側。三角形の頂点はそのパッドを向く
     s += poly([(-5.3, -5.3), (-5.3, -4.1), (-4.4, -4.7)], "F.SilkS", 0.1, fill="yes")
     # 嵌合方向 (ケーブルが出る側 +Y) の矢印 (Fab)
     s += line(0, 5.0, 0, 3.0, "F.Fab", 0.1)
     s += rect(-6.25, -5.8, 6.25, 5.8, "F.CrtYd", 0.05)
-    for n, x in [(1, -3.0), (2, -1.0), (3, 1.0), (4, 3.0)]:
+    # rev B: 実物の pin 1 (Grove の黄線) は +X 側。rev A は pad 番号が逆だった
+    for n, x in [(1, 3.0), (2, 1.0), (3, -1.0), (4, -3.0)]:
         s += pad(n, x, -3.9, 1.0, 3.4)
     # 5, 6 = シェルのタブ (回路上は未接続)
     s += pad("5", 5.3, 3.9, 1.5, 3.6)
