@@ -24,7 +24,7 @@ Issue #1 での検討結果をまとめたドキュメント。
 | カラーセンサ | Grove - I2C Color Sensor V3.0（101021133） | [Seeed Studio](https://www.seeedstudio.com/Grove-Color-Sensor-V3-0-p-5993.html) 等 | 約¥600 |
 | Grove 4芯ケーブル | 50〜100cm（現場ごとに選択） | Seeed / Amazon 等 | 約¥200〜400 |
 | LTE-Mモジュール | M5Stack SIM7080G CAT-M Unit（M5STACK-U128） | [スイッチサイエンス](https://www.switch-science.com/products/11052) | ¥6,908 |
-| LTE-M 電源スイッチ基板（LTE-M 版のみ） | 自作小基板 rev A（TI TPS22918、[hardware/lte-power-switch/](../hardware/lte-power-switch/)、#88） | JLCPCB（基板 + 実装） | $20.14（5 枚、送料込み。2026-10-05 発注・実機未検証） |
+| LTE-M 電源スイッチ基板（LTE-M 版のみ） | 自作小基板 rev A（TI TPS22918、[hardware/lte-power-switch/](../hardware/lte-power-switch/)、#88） | JLCPCB（基板 + 実装） | $20.14（5 枚、送料込み。2026-10-05 発注。**コネクタのピン番号が鏡像で、rev B で直す**） |
 | LoRaWANモジュール（評価中・#40） | Seeed Grove - Wio-E5（STM32WLE5JC、技適付き。LTE-M とは排他） | [スイッチサイエンス](https://www.switch-science.com/products/9671) | 調達済み（2026-07-10） |
 | SIM | SORACOM IoT SIM plan-D / plan-KM1 | [SORACOMストア](https://soracom.jp/store/13380/) | ¥990初期 + ¥192/月〜 |
 | バッテリー | LiPo 3.7V 4,400mAh 保護回路内蔵 JST-PH | [ストロベリーリナックス](https://strawberry-linux.com/catalog/items?code=15095) | ¥550 |
@@ -232,7 +232,7 @@ Grove Shield D0   ─ Grove ケーブル ─ [ロードスイッチ基板 J3]（
 **LTE-M の電源スイッチ：ロードスイッチ基板（#88・基板評価中）**
 
 - Grove Shield のポート VCC は 3.3V レール直結で GPIO では切れないため、U128 の VCC 線だけを TI TPS22918（ロードスイッチ IC）で開閉する。Deep Sleep・リセット・電源喪失のどれでも、ON ピンのプルダウンで自動的に OFF になる（ステートレス）
-- 基板は Grove コネクタ 3 つ（IN / OUT / CTRL）の小基板で、ケーブルを切らずに挿すだけ。設計は [88-load-switch-design.md](88-load-switch-design.md)、設計ファイルは [hardware/lte-power-switch/](../hardware/lte-power-switch/)
+- 基板は Grove コネクタ 3 つ（IN / OUT / CTRL）の小基板で、ケーブルを切らずに挿すだけ（**rev A は、コネクタのピン番号が鏡像のため、この使い方ができない。rev B で直す**）。設計は [88-load-switch-design.md](88-load-switch-design.md)、設計ファイルは [hardware/lte-power-switch/](../hardware/lte-power-switch/)
 - 旧方式（Grove 2-Coil ラッチングリレー）は、5V 定格のコイルを 3.3V で駆動する設計上の誤りがあり廃止した。経緯と教訓は [25-low-power-phase2-hardware-cutoff.md](25-low-power-phase2-hardware-cutoff.md) §2
 
 **SIM：SORACOM IoT SIM**
