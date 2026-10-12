@@ -1,6 +1,6 @@
 # LTE power switch（Issue #88）
 
-**状態: 暫定・WIP（rev A、2026-10-05 に JLCPCB へ発注済み、2026-10-12 に実機到着）。** **rev A は、Grove コネクタのピン番号が実物と鏡像のため、普通の Grove ケーブルでは使えない（下の「rev A の既知の不具合」）。** rev B で直す予定。 M5 Unit CatM（LTE-M）の VCC 線を TI TPS22918DBVR で開閉する、Grove コネクタ 3 つの小基板。設計の背景は [../../docs/88-load-switch-design.md](../../docs/88-load-switch-design.md)。
+**状態: 暫定・WIP。rev A（2026-10-05 発注、2026-10-12 到着）は、Grove コネクタのピン番号が実物と鏡像のため、普通の Grove ケーブルでは使えない（下の「rev A の既知の不具合」）。このディレクトリの設計・製造データは、鏡像を直した rev B（2026-10-12 作成、未発注）。** M5 Unit CatM（LTE-M）の VCC 線を TI TPS22918DBVR で開閉する、Grove コネクタ 3 つの小基板。設計の背景は [../../docs/88-load-switch-design.md](../../docs/88-load-switch-design.md)。
 
 | コネクタ | 向き | 内容 |
 |---|---|---|
@@ -8,7 +8,7 @@
 | J2 OUT | 右辺 | LTE-M ユニットへ。pin1/pin2 は J1 から直結、pin3 = スイッチ後（`VLTE`）、pin4 = GND |
 | J3 CTRL | 下辺 | Shield の D0（GPIO1）から。pin1 = `LTE_EN`（HIGH で ON）、pin4 = GND、**pin2/pin3 は未接続**（5V ポートに誤挿入しても被害が出ないように） |
 
-Grove の pin1 = 黄、pin2 = 白、pin3 = 赤、pin4 = 黒。基板は 38 × 28mm、2 層、1.6mm。部品はすべて表面（JLCPCB の片面実装）。
+Grove の pin1 = 黄、pin2 = 白、pin3 = 赤、pin4 = 黒。**物理的なパッドの並びは、三角（J1 は▼、J2 は▲、J3 は▶）のパッドから順に、pin4（黒・GND）、pin3（赤）、pin2（白）、pin1（黄）**（下の「rev B」の表）。基板は 38 × 28mm、2 層、1.6mm。部品はすべて表面（JLCPCB の片面実装）。
 
 ## 部品（JLCPCB、2026-10-05 に jlcpcb.com の部品検索で在庫と区分を確認）
 
@@ -28,8 +28,8 @@ Grove の pin1 = 黄、pin2 = 白、pin3 = 赤、pin4 = 黒。基板は 38 × 28
 - `lte-power-switch.kicad_pro` / `.kicad_sch` / `.kicad_pcb`: KiCad 10.0.6 のプロジェクト。`lte-power-switch.kicad_sym` と `lte-power-switch.pretty/` は TPS22918 の記号とフットプリント（LCSC/EasyEDA 由来のパッド寸法。`3dmodels/` も同じ出典）。
 - `lte-power-switch-schematic.pdf`: 回路図。
 - `renders/`: 表・裏の SVG と 3D 画像。
-- `fabrication/`: `lte-power-switch-gerber.zip`（ガーバー + ドリル。注文用）、`lte-power-switch-bom.csv`、`lte-power-switch-cpl.csv`、`erc.rpt`、`drc.rpt`、`gerber/`（展開済み）。
-- `scripts/`: 回路図・基板・製造データの生成スクリプト（`gen_lib.py` → `gen_sch.py` → `run_pcb.sh` → `make_fab.py` の順）。回路図と基板は手書きではなくスクリプトから生成している。KiCad で編集した場合、スクリプトを再実行すると上書きされる。
+- `fabrication/`: `lte-power-switch-gerber.zip`（ガーバー + ドリル。注文用）、`lte-power-switch-bom.csv`、`lte-power-switch-cpl.csv`、`erc.rpt`、`drc.rpt`、`gerber/`（展開済み）。**rev B のデータ。** rev A の注文データは、git の履歴（PR #117 のマージ時点、`eb54a1a`）にある。
+- `scripts/`: 回路図・基板・製造データの生成スクリプト（`gen_lib.py` → `gen_sch.py` → `run_pcb.sh` → `make_fab.py` の順）。製造データの確認用に、`check_gerber_connectivity.py`（ガーバーとドリルから銅箔の接続を求め、ネットの断線・ショート、J1〜J3 のパッド順を検査する。`python3 scripts/check_gerber_connectivity.py`）がある。回路図と基板は手書きではなくスクリプトから生成している。KiCad で編集した場合、スクリプトを再実行すると上書きされる。
 
 ## rev A の既知の不具合（2026-10-12、実機で確認）
 
@@ -52,9 +52,20 @@ Grove の pin1 = 黄、pin2 = 白、pin3 = 赤、pin4 = 黒。基板は 38 × 28
 
 **LTE-M・実機ファームでの確認（2026-10-12）:** 逆結線の専用ケーブルで、Shield・U128 につなぎ、ブートモードの送信 2/5〜5/5（LTE-M の接続、MQTT）が、途中でリセットされずに完了した。OFF のときの `VLTE` は、UART が動いている間は約 0.76V（旧リレー方式と同程度）、Deep Sleep では、20〜30 秒で 0V になった。回路の変更は、要らない見込み。電圧降下、突入電流の波形、Deep Sleep の待機電流は、未確認（[docs/88-load-switch-design.md](../../docs/88-load-switch-design.md) §8）。
 
-## rev B の方針（案）
+## rev B（2026-10-12 作成、未発注）
 
-**回路図（論理）は変えない。** フットプリントの pad 番号を逆にし（1↔4、2↔3）、コネクタまわりの配線を引き直す。U1 まわり（LTE_EN・QOD・CT、C1・C2・R1）は変えない。
+rev A の鏡像の不具合を直した版。**回路図（論理）は rev A と同じ**で、変えたのは、フットプリントと配線と印字。
+
+**変更点**
+- コネクタ（HY2.0-4P-WT）のフットプリントの pad 番号を逆にした（1↔4、2↔3。rev A の実測で、実物の pin1 = 黄線は、+X 側）。
+- コネクタまわりの配線を引き直した（V3V3_IN、VLTE、LTE_EN、SIG1、SIG2、GND のビア）。SIG1・SIG2 は、裏面の入れ子の U 字（交差なし）。TP2 は、VLTE の線の上に移した。U1・C1・C2・R1・R2・C3 と、J1〜J3 の位置・向きは、rev A と同じ（JLCPCB の CPL も同じ）。
+- 三角（▼・▲・▶）の位置は、物理的に同じ。そこは GND（黒）のパッドになった。各コネクタの横に、「tri=GND(black)」と注記し、裏面に、全ピンの対応表を印字した。
+- テストポイント（丸いパッド）は、rev A のまま。
+
+**確認したこと（2026-10-12）**
+- KiCad の DRC: 違反 0 件、未配線 0 件、回路図との不整合 0 件。ERC: 違反 0 件。
+- `scripts/check_gerber_connectivity.py`: 製造用ガーバーから銅箔の接続を求め、10 ネットすべてが 1 つの塊で、ショートなし。J1〜J3 の物理的なパッド順が、実物の Grove ケーブルの順（三角から 黒・赤・白・黄）と一致する。**rev A のデータでは、同じチェックが、J1〜J3 で失敗する**（鏡像を検出できる）。
+- 未確認: 実際に製造した基板での確認（rev A と同じ手順）。
 
 **物理的なパッド順（▼・▲・▶のパッドから順）と、印字**
 
@@ -65,7 +76,7 @@ Grove の pin1 = 黄、pin2 = 白、pin3 = 赤、pin4 = 黒。基板は 38 × 28
 | 3 | TX-6（白） | RX（白。モジュールの RX） | NC（白。D1 は未接続） |
 | 4 | RX-7（黄） | TX（黄。モジュールの TX） | LTE_EN / D0（黄） |
 
-- 三角は、**GND 側の端**に付ける（Shield の Grove ポートは、GND が端、その隣が 3V3）。「pin1」とは呼ばない。各パッドの横に、機能名とケーブルの色を印字する。
+- 三角は、**GND 側の端**（Shield の Grove ポートは、GND が端、その隣が 3V3）。
 - J1 と J2 の信号線は、ケーブルがまっすぐなので、同じ位置にある。J1 は XIAO から見た名前（TX-6・RX-7）、J2 はモジュールから見た名前。
 - **J3 の白（D1）は、NC のままにする。** Shield の右上ポート（D0・D1）の白線は、右下ポート（ポテンショメーター、D1・D2）の黄線と、同じ D1 の線。つなぐと、ポテンショメーターの信号に干渉する。赤（3V3）も、誤挿入しても何も入らないよう、未接続のまま。
 
@@ -80,8 +91,8 @@ Grove の pin1 = 黄、pin2 = 白、pin3 = 赤、pin4 = 黒。基板は 38 × 28
 
 - 左下の「RX」「TX」は、写真では頭文字が切れていて、ファームの定義（D7 = RX、D6 = TX）からの推定。
 
-## 発注前に確認すること（rev A 発注時の項目。rev B でも使う）
+## 発注前に確認すること（rev A 発注時の項目。rev B の発注前にも、確認する）
 
-1. **JLCPCB の注文画面の部品プレビューで、U1 と J1〜J3 の向きを確認する。** `fabrication/lte-power-switch-cpl.csv` の回転角は KiCad の値そのまま（補正なし）。フットプリントは LCSC/EasyEDA の公開ライブラリ由来なので補正が不要の可能性が高いが、自動では確認できていない。ずれていれば、注文画面で回転を直す。
-2. **HY2.0-4P-WT が手元の Grove ケーブルと嵌合し、pin1 が黄線になるか。（rev A では、未確認のまま発注し、鏡像だった。rev B では、実物のコネクタにケーブルを挿して確認してから発注する。）** データシートに pin1 の位置の記載はなく、フットプリントの pin1（嵌合口を手前にして左端）は EasyEDA の定義による。最初の 1 枚で、ケーブルを J1 に挿し、反対側の黄線と基板の pin1 パッド（三角マーク側）の導通を確認する。
+1. **JLCPCB の注文画面（PCBA Viewer）で、U1 と J1〜J3 の向きを確認する。** rev A では、JLCPCB のエンジニアが、U1 の 1 点だけを修正した（修正の中身は不明。修正後の実装で、実機は正常に動作した）。rev B の CPL は、U1 と J1〜J3 の位置・向きが rev A と同じなので、同様に確認する。`fabrication/lte-power-switch-cpl.csv` の回転角は KiCad の値そのまま（補正なし）。フットプリントは LCSC/EasyEDA の公開ライブラリ由来なので補正が不要の可能性が高いが、自動では確認できていない。ずれていれば、注文画面で回転を直す。
+2. **HY2.0-4P-WT が手元の Grove ケーブルと嵌合し、pin1 が黄線になるか。（rev A では、未確認のまま発注し、鏡像だった。rev B は、rev A の実物で確認した並びに合わせてあり、`check_gerber_connectivity.py` で検査できる。）** データシートに pin1 の位置の記載はなく、フットプリントの pin1（嵌合口を手前にして左端）は EasyEDA の定義による。最初の 1 枚で、ケーブルを J1 に挿し、反対側の黄線と基板の pin1 パッド（三角マーク側）の導通を確認する。
 3. パッドの寸法は LCSC のライブラリ由来で、データシート（外形の図のみ）では検証できていない。

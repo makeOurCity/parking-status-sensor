@@ -3,7 +3,7 @@
 	(generator "pcbnew")
 	(generator_version "10.0")
 	(layer "F.Cu")
-	(descr "CAX HY2.0-4P-WT (LCSC C722729) 2.0mm pitch 4P SMD right-angle (Grove-compatible receptacle). Pad geometry from the LCSC/EasyEDA library (easyeda2kicad). Body 12.0 x 7.9mm (datasheet), mating face toward +Y, contact tails toward -Y, pin 1 at -X at rotation 0.")
+	(descr "CAX HY2.0-4P-WT (LCSC C722729) 2.0mm pitch 4P SMD right-angle (Grove-compatible receptacle). Pad geometry from the LCSC/EasyEDA library (easyeda2kicad). Body 12.0 x 7.9mm (datasheet), mating face toward +Y, contact tails toward -Y, pin 1 at +X at rotation 0 (rev B: pad numbers reversed vs rev A; the Grove cable yellow wire = pin 1 lands on the +X pad).")
 	(tags "HY2.0 Grove JST-PH 2.0mm SMD right angle C722729")
 	(property "Reference" "REF**"
 		(at 0 0 0)
@@ -147,25 +147,25 @@
 		(uuid "d5020dbc-4012-41c1-a4d3-167fefce47a2")
 	)
 	(pad "1" smd rect
-		(at -3 -3.9)
+		(at 3 -3.9)
 		(size 1 3.4)
 		(layers "F.Cu" "F.Mask" "F.Paste")
 		(uuid "659ff8c6-3e98-43f5-875d-3a77ceaceb54")
 	)
 	(pad "2" smd rect
-		(at -1 -3.9)
+		(at 1 -3.9)
 		(size 1 3.4)
 		(layers "F.Cu" "F.Mask" "F.Paste")
 		(uuid "b06a9862-fa32-42ff-b033-e15ec9cce819")
 	)
 	(pad "3" smd rect
-		(at 1 -3.9)
+		(at -1 -3.9)
 		(size 1 3.4)
 		(layers "F.Cu" "F.Mask" "F.Paste")
 		(uuid "d860c492-4b0a-494c-8908-4ea50aafbaac")
 	)
 	(pad "4" smd rect
-		(at 3 -3.9)
+		(at -3 -3.9)
 		(size 1 3.4)
 		(layers "F.Cu" "F.Mask" "F.Paste")
 		(uuid "f02a4b3a-4260-462e-887a-8a2a62463e49")
