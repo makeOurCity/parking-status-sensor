@@ -272,14 +272,17 @@ static_assert(!PSS_LORAWAN_TEST_MODE || PSS_LORAWAN_ENABLED,
 #endif
 
 // 1エントリ16バイト(timestamp+status+flags+bootCountLo8+raw4ch)。
-// 候補値。実機のnvs_get_stats()検証(§9.3)を経てから確定する前提の暫定値。
+// #123: 672件(14セグメント)から480件(10セグメント、約1.7日分)に減らした。
+// 実機のNVSは使えるのが504エントリで、セグメント1個が26〜29エントリを占める。
+// 14セグメントでは、firmwareが作らないnamespaceの残り(約78エントリ)がある機体で
+// 空きが足りなくなり、履歴ログが途中で止まる(docs/47 §11)。
 #ifndef PSS_HISTORY_LOG_CAPACITY
-#define PSS_HISTORY_LOG_CAPACITY 672
+#define PSS_HISTORY_LOG_CAPACITY 480
 #endif
 
 // capacity はこの値で割り切れる必要がある(static_assertで保証)。
 #ifndef PSS_HISTORY_LOG_SEGMENTS
-#define PSS_HISTORY_LOG_SEGMENTS 14
+#define PSS_HISTORY_LOG_SEGMENTS 10
 #endif
 
 // 起動時ダンプの最大表示件数。0 = 無制限(全件)。
