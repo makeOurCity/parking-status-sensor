@@ -245,24 +245,32 @@ void historyLogRecordCycle(ParkingStatus status, const RawSample& sample,
   const uint16_t offset =
       static_cast<uint16_t>(gTotal % kEntriesPerSegment);
 
+  Preferences prefs;
+  if (!prefs.begin(kNamespace, false)) {
+    Serial.println("hlog: NVS open failed, skipping record");
+    return;
+  }
+
   // #123: do not even start a segment write unless NVS can hold it. A write
   // that fails halfway leaves an uncommitted blob that eats the free entries
   // until the next boot cleans it up, starving every other NVS user.
+  // Creating a segment grows the log, so it must also leave the headroom for the
+  // other users. Rewriting an existing one is net zero (the old copy is freed once
+  // the new one commits) and needs only the transient worst case; requiring the
+  // headroom there would freeze the ring for good once free space dips below it.
+  char segKey[16];
+  segmentKeyFor(segIndex, segKey, sizeof(segKey));
+  const int neededEntries =
+      prefs.isKey(segKey) ? kSegmentWorstEntries : kMinFreeEntriesToWrite;
   const int freeEntries = nvsUsableFreeEntries();
-  if (freeEntries < kMinFreeEntriesToWrite) {
+  if (freeEntries < neededEntries) {
     if (gSkippedLowSpace < UINT32_MAX) {
       gSkippedLowSpace++;
     }
     Serial.printf(
         "hlog: NVS free too low (%d < %d), skipping record (skipped=%lu)\n",
-        freeEntries, kMinFreeEntriesToWrite,
-        static_cast<unsigned long>(gSkippedLowSpace));
-    return;
-  }
-
-  Preferences prefs;
-  if (!prefs.begin(kNamespace, false)) {
-    Serial.println("hlog: NVS open failed, skipping record");
+        freeEntries, neededEntries, static_cast<unsigned long>(gSkippedLowSpace));
+    prefs.end();
     return;
   }
 
@@ -277,8 +285,15 @@ void historyLogRecordCycle(ParkingStatus status, const RawSample& sample,
     return;
   }
 
+  // The segment now holds the entry; only advance the position once `total` is
+  // stored too. If this write fails, the next cycle reuses the same slot (one
+  // entry is lost) rather than leaving RAM and NVS disagreeing about the position.
+  if (prefs.putUInt(kKeyTotal, gTotal + 1) != sizeof(uint32_t)) {
+    Serial.println("hlog: total write failed, ring position kept");
+    prefs.end();
+    return;
+  }
   gTotal++;
-  prefs.putUInt(kKeyTotal, gTotal);
   prefs.end();
 }
 
