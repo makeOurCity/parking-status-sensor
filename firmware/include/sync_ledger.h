@@ -40,8 +40,9 @@ struct SyncLedger {
 
   // #46: change-only送信時のheartbeat判定用。confirmedで0にリセットし、
   // skipped（mustPublish==false）のたびに+1する。
-  // #123: NVSにはバックアップしない。電源断で0に戻るが、電源投入時は
-  // ブートモードで必ず送信するので問題ない。
+  // #123: 主な保存先はRTC。NVSにもバックアップする。ブラウンアウトは
+  // RTCが消え、ブートモードも走らない（docs/74）ため、RTCだけだと、
+  // ブラウンアウトが続くたびにカウントが0に戻り、heartbeatが出なくなる。
   uint32_t skippedSinceConfirmed = 0;
 };
 

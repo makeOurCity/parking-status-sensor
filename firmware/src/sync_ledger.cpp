@@ -20,6 +20,7 @@ constexpr char kKeyPrevOutcome[] = "pout";
 constexpr char kKeyPrevAttempts[] = "patt";
 constexpr char kKeyPrevMqttErr[] = "perr";
 constexpr char kKeyPrevActiveMs[] = "pms";
+constexpr char kKeySkippedSince[] = "skipn";
 
 SyncLedger ledger;
 
@@ -30,10 +31,12 @@ SyncLedger ledger;
 // when NVS ran out of space (the history log's blob writes starved it) the
 // heartbeat counter stopped advancing and the device went silent for 11 days.
 //
-// RTC memory survives Deep Sleep but is lost on power loss. On the next boot the
-// ledger is then restored from the NVS backup; if that is missing or stale the
-// worst case is an extra send (the safe direction). `skippedSinceConfirmed` is
-// deliberately not backed up to NVS: a power-on boot already sends (boot mode).
+// RTC memory survives Deep Sleep but is lost on power loss and on brownout
+// (docs/74: bootCount goes back to 1, and boot mode runs only for power-on). On
+// the next boot the ledger is then restored from the NVS backup; if that is
+// missing or stale the worst case is an extra send (the safe direction).
+// `skippedSinceConfirmed` is backed up too: a brownout loop must not reset the
+// heartbeat count every cycle, which it would if the count lived only in RTC.
 constexpr uint32_t kRtcMagic = 0x50535301;  // "PSS" + layout version 1
 
 struct RtcLedger {
@@ -145,6 +148,8 @@ bool nvsStore() {
   ok &= prefs.putUChar(kKeyPrevAttempts, ledger.prevAttempts) == sizeof(uint8_t);
   ok &= prefs.putShort(kKeyPrevMqttErr, ledger.prevMqttError) == sizeof(int16_t);
   ok &= prefs.putUInt(kKeyPrevActiveMs, ledger.prevActiveMs) == sizeof(uint32_t);
+  ok &= prefs.putUInt(kKeySkippedSince, ledger.skippedSinceConfirmed) ==
+        sizeof(uint32_t);
   prefs.end();
   return ok;
 }
@@ -198,7 +203,7 @@ void initSyncLedger() {
     ledger.prevAttempts = prefs.getUChar(kKeyPrevAttempts, 0);
     ledger.prevMqttError = prefs.getShort(kKeyPrevMqttErr, 0);
     ledger.prevActiveMs = prefs.getUInt(kKeyPrevActiveMs, 0);
-    ledger.skippedSinceConfirmed = 0;
+    ledger.skippedSinceConfirmed = prefs.getUInt(kKeySkippedSince, 0);
     prefs.end();
     rtcLedger = RtcLedger{};
     rtcStore();  // seed the RTC copy so later cycles do not touch NVS
