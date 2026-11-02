@@ -18,9 +18,13 @@
 // after initSyncLedger().
 void initHistoryLog();
 
-// Appends one entry unconditionally. Call once per cycle, right after
-// classifyStatus() produces a valid status — never from a path where the
-// sensor read failed (there is no observation to record).
+// Appends one entry. Call once per cycle, right after classifyStatus()
+// produces a valid status — never from a path where the sensor read failed
+// (there is no observation to record).
+//
+// #123: the record is skipped (logged on Serial, nothing written) while NVS has
+// too little free space or when the segment write fails. It is diagnostic only
+// and must never starve the other NVS users.
 void historyLogRecordCycle(ParkingStatus status, const RawSample& sample,
                             uint32_t bootCount);
 
