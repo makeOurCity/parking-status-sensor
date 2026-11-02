@@ -37,6 +37,47 @@ constexpr time_t kMinValidEpoch = 1700000000;
 uint32_t gTotal = 0;
 bool gInitialized = false;
 
+// #123: this log shares the NVS partition with the delivery ledger backup, the
+// pot value and the LTE modem TLS flag, and a full NVS starved all of them
+// (a half-written segment blob ate the last free entries every cycle). The log
+// is diagnostic only, so it writes only while NVS has room to spare.
+//
+// Usable NVS: 4 pages x 126 entries; the 5th page is the reserve NVS needs to
+// rewrite pages, and nvs_get_stats().free_entries counts it.
+constexpr int kNvsEntriesPerPage = 126;
+// One segment write at worst: the new blob (data entries + a header per chunk,
+// split over up to 4 pages) + its index entry. The old copy is erased only after
+// the new one is committed, so both exist at the same time.
+constexpr int kSegmentDataEntries = static_cast<int>((kSegmentBytes + 31) / 32);
+constexpr int kSegmentWorstEntries = kSegmentDataEntries + 5 + 1;
+// Kept free for the other NVS users (ledger backup, pot, TLS flag, `total`).
+constexpr int kOtherWritersHeadroom = 16;
+constexpr int kMinFreeEntriesToWrite = kSegmentWorstEntries + kOtherWritersHeadroom;
+
+// Cycles whose record was skipped for lack of NVS space (since power loss).
+// RTC memory keeps stale bytes across reflashes and non-power-on resets, so the
+// count is only trusted when the magic word is present.
+constexpr uint32_t kSkipCounterMagic = 0x484C4701;  // "HLG" + version 1
+struct RtcSkipCounter {
+  uint32_t magic;
+  uint32_t count;
+};
+RTC_DATA_ATTR RtcSkipCounter gSkipCounter = {};
+
+uint32_t skippedLowSpace() {
+  return gSkipCounter.magic == kSkipCounterMagic ? gSkipCounter.count : 0;
+}
+
+void noteSkippedLowSpace() {
+  if (gSkipCounter.magic != kSkipCounterMagic) {
+    gSkipCounter.magic = kSkipCounterMagic;
+    gSkipCounter.count = 0;
+  }
+  if (gSkipCounter.count < UINT32_MAX) {
+    gSkipCounter.count++;
+  }
+}
+
 void segmentKeyFor(uint16_t segIndex, char* out, size_t outSize) {
   snprintf(out, outSize, "seg%u", segIndex);
 }
@@ -108,10 +149,22 @@ void loadSegment(Preferences& prefs, uint16_t segIndex, uint8_t* buf) {
   }
 }
 
-void storeSegment(Preferences& prefs, uint16_t segIndex, const uint8_t* buf) {
+// Returns false if NVS refused the write (putBytes returns 0 on failure).
+bool storeSegment(Preferences& prefs, uint16_t segIndex, const uint8_t* buf) {
   char key[16];
   segmentKeyFor(segIndex, key, sizeof(key));
-  prefs.putBytes(key, buf, kSegmentBytes);
+  return prefs.putBytes(key, buf, kSegmentBytes) == kSegmentBytes;
+}
+
+// Entries NVS can still hand out, excluding the reserve page. -1 if the stats
+// cannot be read.
+int nvsUsableFreeEntries() {
+  nvs_stats_t stats{};
+  if (nvs_get_stats(nullptr, &stats) != ESP_OK) {
+    return -1;
+  }
+  const int usable = static_cast<int>(stats.free_entries) - kNvsEntriesPerPage;
+  return usable > 0 ? usable : 0;
 }
 
 void writeInitialValues(Preferences& prefs) {
@@ -142,6 +195,9 @@ void logNvsStats() {
       static_cast<int>(stats.used_entries), static_cast<int>(stats.free_entries),
       static_cast<int>(stats.total_entries),
       static_cast<int>(stats.namespace_count));
+  Serial.printf("hlog: usable_free=%d min_free_to_write=%d skipped_low_space=%lu\n",
+                nvsUsableFreeEntries(), kMinFreeEntriesToWrite,
+                static_cast<unsigned long>(skippedLowSpace()));
 }
 
 }  // namespace
@@ -211,15 +267,52 @@ void historyLogRecordCycle(ParkingStatus status, const RawSample& sample,
       static_cast<uint16_t>(gTotal % kEntriesPerSegment);
 
   Preferences prefs;
-  prefs.begin(kNamespace, false);
+  if (!prefs.begin(kNamespace, false)) {
+    Serial.println("hlog: NVS open failed, skipping record");
+    return;
+  }
+
+  // #123: do not even start a segment write unless NVS can hold it. A write
+  // that fails halfway leaves an uncommitted blob that eats the free entries
+  // until the next boot cleans it up, starving every other NVS user.
+  // Creating a segment grows the log, so it must also leave the headroom for the
+  // other users. Rewriting an existing one is net zero (the old copy is freed once
+  // the new one commits) and needs only the transient worst case; requiring the
+  // headroom there would freeze the ring for good once free space dips below it.
+  char segKey[16];
+  segmentKeyFor(segIndex, segKey, sizeof(segKey));
+  const int neededEntries =
+      prefs.isKey(segKey) ? kSegmentWorstEntries : kMinFreeEntriesToWrite;
+  const int freeEntries = nvsUsableFreeEntries();
+  if (freeEntries < neededEntries) {
+    noteSkippedLowSpace();
+    Serial.printf(
+        "hlog: NVS free too low (%d < %d), skipping record (skipped=%lu)\n",
+        freeEntries, neededEntries, static_cast<unsigned long>(skippedLowSpace()));
+    prefs.end();
+    return;
+  }
 
   uint8_t seg[kSegmentBytes];
   loadSegment(prefs, segIndex, seg);
   memcpy(seg + static_cast<size_t>(offset) * kEntrySize, entry, kEntrySize);
-  storeSegment(prefs, segIndex, seg);
+  if (!storeSegment(prefs, segIndex, seg)) {
+    // Keep `total` where it is so the ring position does not drift ahead of
+    // what was actually stored.
+    Serial.println("hlog: segment write failed, skipping record");
+    prefs.end();
+    return;
+  }
 
+  // The segment now holds the entry; only advance the position once `total` is
+  // stored too. If this write fails, the next cycle reuses the same slot (one
+  // entry is lost) rather than leaving RAM and NVS disagreeing about the position.
+  if (prefs.putUInt(kKeyTotal, gTotal + 1) != sizeof(uint32_t)) {
+    Serial.println("hlog: total write failed, ring position kept");
+    prefs.end();
+    return;
+  }
   gTotal++;
-  prefs.putUInt(kKeyTotal, gTotal);
   prefs.end();
 }
 
