@@ -55,7 +55,28 @@ constexpr int kOtherWritersHeadroom = 16;
 constexpr int kMinFreeEntriesToWrite = kSegmentWorstEntries + kOtherWritersHeadroom;
 
 // Cycles whose record was skipped for lack of NVS space (since power loss).
-RTC_DATA_ATTR uint32_t gSkippedLowSpace = 0;
+// RTC memory keeps stale bytes across reflashes and non-power-on resets, so the
+// count is only trusted when the magic word is present.
+constexpr uint32_t kSkipCounterMagic = 0x484C4701;  // "HLG" + version 1
+struct RtcSkipCounter {
+  uint32_t magic;
+  uint32_t count;
+};
+RTC_DATA_ATTR RtcSkipCounter gSkipCounter = {};
+
+uint32_t skippedLowSpace() {
+  return gSkipCounter.magic == kSkipCounterMagic ? gSkipCounter.count : 0;
+}
+
+void noteSkippedLowSpace() {
+  if (gSkipCounter.magic != kSkipCounterMagic) {
+    gSkipCounter.magic = kSkipCounterMagic;
+    gSkipCounter.count = 0;
+  }
+  if (gSkipCounter.count < UINT32_MAX) {
+    gSkipCounter.count++;
+  }
+}
 
 void segmentKeyFor(uint16_t segIndex, char* out, size_t outSize) {
   snprintf(out, outSize, "seg%u", segIndex);
@@ -176,7 +197,7 @@ void logNvsStats() {
       static_cast<int>(stats.namespace_count));
   Serial.printf("hlog: usable_free=%d min_free_to_write=%d skipped_low_space=%lu\n",
                 nvsUsableFreeEntries(), kMinFreeEntriesToWrite,
-                static_cast<unsigned long>(gSkippedLowSpace));
+                static_cast<unsigned long>(skippedLowSpace()));
 }
 
 }  // namespace
@@ -264,12 +285,10 @@ void historyLogRecordCycle(ParkingStatus status, const RawSample& sample,
       prefs.isKey(segKey) ? kSegmentWorstEntries : kMinFreeEntriesToWrite;
   const int freeEntries = nvsUsableFreeEntries();
   if (freeEntries < neededEntries) {
-    if (gSkippedLowSpace < UINT32_MAX) {
-      gSkippedLowSpace++;
-    }
+    noteSkippedLowSpace();
     Serial.printf(
         "hlog: NVS free too low (%d < %d), skipping record (skipped=%lu)\n",
-        freeEntries, neededEntries, static_cast<unsigned long>(gSkippedLowSpace));
+        freeEntries, neededEntries, static_cast<unsigned long>(skippedLowSpace()));
     prefs.end();
     return;
   }
