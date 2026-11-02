@@ -20,9 +20,40 @@ constexpr char kKeyPrevOutcome[] = "pout";
 constexpr char kKeyPrevAttempts[] = "patt";
 constexpr char kKeyPrevMqttErr[] = "perr";
 constexpr char kKeyPrevActiveMs[] = "pms";
-constexpr char kKeySkippedSince[] = "skipn";
 
 SyncLedger ledger;
+
+// #123: the ledger's primary store is RTC memory; NVS is a best-effort backup.
+//
+// The ledger drives whether to send (state change / pending retry / heartbeat),
+// so it must keep working when an NVS write fails. It used to live only in NVS;
+// when NVS ran out of space (the history log's blob writes starved it) the
+// heartbeat counter stopped advancing and the device went silent for 11 days.
+//
+// RTC memory survives Deep Sleep but is lost on power loss. On the next boot the
+// ledger is then restored from the NVS backup; if that is missing or stale the
+// worst case is an extra send (the safe direction). `skippedSinceConfirmed` is
+// deliberately not backed up to NVS: a power-on boot already sends (boot mode).
+constexpr uint32_t kRtcMagic = 0x50535301;  // "PSS" + layout version 1
+
+struct RtcLedger {
+  uint32_t magic;  // kRtcMagic when valid; 0 after a power-on reset
+  uint8_t lastConfirmedStatus;
+  uint8_t pendingValid;
+  uint8_t pendingStatus;
+  uint8_t prevOutcome;
+  uint8_t prevAttempts;
+  uint8_t reserved;
+  int16_t prevMqttError;
+  uint32_t lastConfirmedBoot;
+  uint32_t pendingBoot;
+  uint32_t prevActiveMs;
+  uint32_t skippedSinceConfirmed;
+  uint32_t nvsWriteFailures;  // saturating; diagnostic
+  uint32_t checksum;          // FNV-1a over every byte above
+};
+
+RTC_DATA_ATTR RtcLedger rtcLedger = {};
 
 uint8_t statusToU8(ParkingStatus status) {
   return static_cast<uint8_t>(status);
@@ -35,6 +66,55 @@ ParkingStatus u8ToStatus(uint8_t value) {
   return static_cast<ParkingStatus>(value);
 }
 
+uint32_t rtcChecksum(const RtcLedger& r) {
+  const uint8_t* p = reinterpret_cast<const uint8_t*>(&r);
+  const size_t n = sizeof(RtcLedger) - sizeof(uint32_t);
+  uint32_t h = 2166136261u;
+  for (size_t i = 0; i < n; ++i) {
+    h = (h ^ p[i]) * 16777619u;
+  }
+  return h;
+}
+
+bool rtcValid() {
+  return rtcLedger.magic == kRtcMagic &&
+         rtcLedger.checksum == rtcChecksum(rtcLedger);
+}
+
+void rtcSeal() {
+  rtcLedger.magic = kRtcMagic;
+  rtcLedger.checksum = rtcChecksum(rtcLedger);
+}
+
+// Copy the in-RAM ledger into the RTC copy (keeps nvsWriteFailures).
+void rtcStore() {
+  rtcLedger.lastConfirmedStatus = statusToU8(ledger.lastConfirmedStatus);
+  rtcLedger.pendingValid = ledger.pendingValid ? 1 : 0;
+  rtcLedger.pendingStatus = statusToU8(ledger.pendingStatus);
+  rtcLedger.prevOutcome = static_cast<uint8_t>(ledger.prevOutcome);
+  rtcLedger.prevAttempts = ledger.prevAttempts;
+  rtcLedger.reserved = 0;
+  rtcLedger.prevMqttError = ledger.prevMqttError;
+  rtcLedger.lastConfirmedBoot = ledger.lastConfirmedBoot;
+  rtcLedger.pendingBoot = ledger.pendingBoot;
+  rtcLedger.prevActiveMs = ledger.prevActiveMs;
+  rtcLedger.skippedSinceConfirmed = ledger.skippedSinceConfirmed;
+  rtcSeal();
+}
+
+void rtcLoad() {
+  ledger.lastConfirmedStatus = u8ToStatus(rtcLedger.lastConfirmedStatus);
+  ledger.lastConfirmedBoot = rtcLedger.lastConfirmedBoot;
+  ledger.pendingValid = rtcLedger.pendingValid != 0;
+  ledger.pendingBoot = rtcLedger.pendingBoot;
+  ledger.pendingStatus = u8ToStatus(rtcLedger.pendingStatus);
+  ledger.prevOutcome = static_cast<CycleOutcome>(rtcLedger.prevOutcome);
+  ledger.prevAttempts = rtcLedger.prevAttempts;
+  ledger.prevMqttError = rtcLedger.prevMqttError;
+  ledger.prevActiveMs = rtcLedger.prevActiveMs;
+  ledger.skippedSinceConfirmed = rtcLedger.skippedSinceConfirmed;
+}
+
 void wipeLegacyOutbox() {
   Preferences legacy;
   if (legacy.begin(kLegacyOutboxNamespace, false)) {
@@ -44,26 +124,61 @@ void wipeLegacyOutbox() {
   }
 }
 
-void persist() {
+// Best-effort NVS backup. Returns false if any write failed (e.g. NVS full).
+// Preferences::put* return the number of bytes written, 0 on failure.
+bool nvsStore() {
   Preferences prefs;
-  prefs.begin(kNamespace, false);
-  prefs.putUChar(kKeySchema, kSchemaVersion);
-  prefs.putUChar(kKeyLastStatus, statusToU8(ledger.lastConfirmedStatus));
-  prefs.putUInt(kKeyLastBoot, ledger.lastConfirmedBoot);
-  prefs.putBool(kKeyPendValid, ledger.pendingValid);
-  prefs.putUInt(kKeyPendBoot, ledger.pendingBoot);
-  prefs.putUChar(kKeyPendStatus, statusToU8(ledger.pendingStatus));
-  prefs.putUChar(kKeyPrevOutcome, static_cast<uint8_t>(ledger.prevOutcome));
-  prefs.putUChar(kKeyPrevAttempts, ledger.prevAttempts);
-  prefs.putShort(kKeyPrevMqttErr, ledger.prevMqttError);
-  prefs.putUInt(kKeyPrevActiveMs, ledger.prevActiveMs);
-  prefs.putUInt(kKeySkippedSince, ledger.skippedSinceConfirmed);
+  if (!prefs.begin(kNamespace, false)) {
+    return false;
+  }
+  bool ok = true;
+  ok &= prefs.putUChar(kKeySchema, kSchemaVersion) == sizeof(uint8_t);
+  ok &= prefs.putUChar(kKeyLastStatus, statusToU8(ledger.lastConfirmedStatus)) ==
+        sizeof(uint8_t);
+  ok &= prefs.putUInt(kKeyLastBoot, ledger.lastConfirmedBoot) == sizeof(uint32_t);
+  ok &= prefs.putBool(kKeyPendValid, ledger.pendingValid) == sizeof(uint8_t);
+  ok &= prefs.putUInt(kKeyPendBoot, ledger.pendingBoot) == sizeof(uint32_t);
+  ok &= prefs.putUChar(kKeyPendStatus, statusToU8(ledger.pendingStatus)) ==
+        sizeof(uint8_t);
+  ok &= prefs.putUChar(kKeyPrevOutcome,
+                       static_cast<uint8_t>(ledger.prevOutcome)) == sizeof(uint8_t);
+  ok &= prefs.putUChar(kKeyPrevAttempts, ledger.prevAttempts) == sizeof(uint8_t);
+  ok &= prefs.putShort(kKeyPrevMqttErr, ledger.prevMqttError) == sizeof(int16_t);
+  ok &= prefs.putUInt(kKeyPrevActiveMs, ledger.prevActiveMs) == sizeof(uint32_t);
   prefs.end();
+  return ok;
+}
+
+// RTC first (never fails), then the NVS backup. A failed backup is only counted
+// and logged; it never changes what the ledger says.
+void saveLedger() {
+  rtcStore();
+  if (!nvsStore()) {
+    if (rtcLedger.nvsWriteFailures < UINT32_MAX) {
+      rtcLedger.nvsWriteFailures++;
+    }
+    rtcSeal();
+    Serial.printf("sync: NVS backup write failed (count=%lu), ledger kept in RTC\n",
+                  static_cast<unsigned long>(rtcLedger.nvsWriteFailures));
+  }
 }
 
 }  // namespace
 
 void initSyncLedger() {
+  // Normal case (Deep Sleep wake, power still on): the RTC copy is current.
+  if (rtcValid()) {
+    rtcLoad();
+    Serial.printf(
+        "sync: loaded ledger lastStatus=%s pending=%d prevOutcome=%s "
+        "(source=rtc nvsFailures=%lu)\n",
+        statusToString(ledger.lastConfirmedStatus), ledger.pendingValid ? 1 : 0,
+        cycleOutcomeToString(ledger.prevOutcome),
+        static_cast<unsigned long>(rtcLedger.nvsWriteFailures));
+    return;
+  }
+
+  // Power-on (or damaged RTC): restore from the NVS backup.
   Preferences prefs;
   prefs.begin(kNamespace, true);
   const bool initialized = prefs.isKey(kKeySchema);
@@ -83,10 +198,13 @@ void initSyncLedger() {
     ledger.prevAttempts = prefs.getUChar(kKeyPrevAttempts, 0);
     ledger.prevMqttError = prefs.getShort(kKeyPrevMqttErr, 0);
     ledger.prevActiveMs = prefs.getUInt(kKeyPrevActiveMs, 0);
-    ledger.skippedSinceConfirmed = prefs.getUInt(kKeySkippedSince, 0);
+    ledger.skippedSinceConfirmed = 0;
     prefs.end();
+    rtcLedger = RtcLedger{};
+    rtcStore();  // seed the RTC copy so later cycles do not touch NVS
     Serial.printf(
-        "sync: loaded ledger lastStatus=%s pending=%d prevOutcome=%s\n",
+        "sync: loaded ledger lastStatus=%s pending=%d prevOutcome=%s "
+        "(source=nvs)\n",
         statusToString(ledger.lastConfirmedStatus), ledger.pendingValid ? 1 : 0,
         cycleOutcomeToString(ledger.prevOutcome));
     return;
@@ -98,8 +216,11 @@ void initSyncLedger() {
   Serial.println("sync: first run, initializing ledger (migrating from outbox)");
   wipeLegacyOutbox();
   ledger = SyncLedger{};
-  persist();
+  rtcLedger = RtcLedger{};
+  saveLedger();
 }
+
+uint32_t syncLedgerNvsFailures() { return rtcLedger.nvsWriteFailures; }
 
 const SyncLedger& syncLedger() { return ledger; }
 
@@ -114,7 +235,7 @@ void ledgerRecordConfirmed(ParkingStatus status, uint32_t bootCount,
   ledger.prevMqttError = mqttError;
   ledger.prevActiveMs = activeMs;
   ledger.skippedSinceConfirmed = 0;
-  persist();
+  saveLedger();
 }
 
 void ledgerRecordFailure(CycleOutcome outcome, ParkingStatus status,
@@ -138,7 +259,7 @@ void ledgerRecordFailure(CycleOutcome outcome, ParkingStatus status,
   if (outcome == CycleOutcome::kSkipped) {
     ledger.skippedSinceConfirmed++;
   }
-  persist();
+  saveLedger();
 }
 
 const char* cycleOutcomeToString(CycleOutcome outcome) {

@@ -16,9 +16,15 @@ enum class CycleOutcome : uint8_t {
   kSkipped,
 };
 
-// Delivery ledger persisted in NVS (namespace pss_sync). Replaces the old
-// FIFO outbox. Holds only the latest confirmed state, at most one pending
-// observation (diagnostic in PoC full-send mode), and the previous cycle result.
+// Delivery ledger. Replaces the old FIFO outbox. Holds only the latest
+// confirmed state, at most one pending observation (diagnostic in PoC full-send
+// mode), and the previous cycle result.
+//
+// #123: the primary store is RTC memory (survives Deep Sleep). NVS (namespace
+// pss_sync) is a best-effort backup used only to restore the ledger after a
+// power loss. A failed NVS write never changes what the ledger says, so the
+// send decision (state change / pending retry / heartbeat) cannot be starved by
+// NVS running out of space.
 struct SyncLedger {
   ParkingStatus lastConfirmedStatus = ParkingStatus::kUnknown;
   uint32_t lastConfirmedBoot = 0;
@@ -33,14 +39,21 @@ struct SyncLedger {
   uint32_t prevActiveMs = 0;
 
   // #46: change-only送信時のheartbeat判定用。confirmedで0にリセットし、
-  // skipped（mustPublish==false）のたびに+1する。電源断をまたいでも
-  // 途切れないようNVSに永続化する（RTCメモリのbootCountとは別管理）。
+  // skipped（mustPublish==false）のたびに+1する。
+  // #123: NVSにはバックアップしない。電源断で0に戻るが、電源投入時は
+  // ブートモードで必ず送信するので問題ない。
   uint32_t skippedSinceConfirmed = 0;
 };
 
-// Load the ledger into RAM. On first run (schemaVersion key absent) this also
-// wipes the legacy pss_outbox namespace and writes initial values.
+// Load the ledger into RAM: from the RTC copy when it is valid (Deep Sleep wake),
+// otherwise from the NVS backup (after a power loss). On first run
+// (schemaVersion key absent) this also wipes the legacy pss_outbox namespace and
+// writes initial values.
 void initSyncLedger();
+
+// Number of failed NVS backup writes since the last power loss (saturating).
+// Diagnostic only; the ledger itself is unaffected by these failures.
+uint32_t syncLedgerNvsFailures();
 
 // The in-RAM snapshot loaded at boot: reflects state up to the *previous* cycle,
 // which is what the outgoing payload should report.
