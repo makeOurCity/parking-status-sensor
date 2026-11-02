@@ -56,6 +56,14 @@ struct RtcLedger {
   uint32_t checksum;          // FNV-1a over every byte above
 };
 
+// The checksum covers the raw bytes, and rtcStore() fills the struct field by
+// field, so any padding would be uninitialised input to the checksum. Adding a
+// field that introduces padding must fail the build instead of silently making
+// the RTC copy look invalid on every wake.
+static_assert(sizeof(RtcLedger) == 36,
+              "RtcLedger must stay padding-free (4 + 6 + 2 + 6 * 4 bytes); "
+              "update kRtcMagic when the layout changes");
+
 RTC_DATA_ATTR RtcLedger rtcLedger = {};
 
 uint8_t statusToU8(ParkingStatus status) {
@@ -224,8 +232,6 @@ void initSyncLedger() {
   rtcLedger = RtcLedger{};
   saveLedger();
 }
-
-uint32_t syncLedgerNvsFailures() { return rtcLedger.nvsWriteFailures; }
 
 const SyncLedger& syncLedger() { return ledger; }
 

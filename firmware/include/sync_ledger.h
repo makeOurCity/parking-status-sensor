@@ -52,10 +52,6 @@ struct SyncLedger {
 // writes initial values.
 void initSyncLedger();
 
-// Number of failed NVS backup writes since the last power loss (saturating).
-// Diagnostic only; the ledger itself is unaffected by these failures.
-uint32_t syncLedgerNvsFailures();
-
 // The in-RAM snapshot loaded at boot: reflects state up to the *previous* cycle,
 // which is what the outgoing payload should report.
 const SyncLedger& syncLedger();
