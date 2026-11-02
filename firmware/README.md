@@ -110,6 +110,23 @@ pio device monitor -e xiao-s3-aws-lte-relay-pot
 
 Deep Sleep に入ると XIAO の USB シリアルは切れる。書き込めないときは、BOOT を押したまま RESET を押して書き込みモードにし、書き込み後に RESET を押す。
 
+### 現場に出す機体の初回書き込み: NVS を消去する（#123）
+
+**現場に出す機体は、初回の書き込みの前に、フラッシュを消去する。**
+
+```bash
+cd firmware
+pio run -e <env> -t erase    # フラッシュ全体（NVS を含む）を消去
+pio run -e <env> -t upload   # 続けて書き込む
+```
+
+理由: NVS（20KB、使えるのは 504 エントリ）には、出荷時のテスト用ファームや過去に書いた Wi-Fi 版が作った namespace（`phy`、`bt_config.conf` など、約 78 エントリ）が残っていることがある。この firmware は NVS を消さず、通常の書き込みでも消えない。残りがあると、履歴ログ（#47）が使える空きが減り、2号機では NVS が満杯になって、台帳の保存や heartbeat まで巻き込まれた（#122、#123、docs/47 §11）。
+
+- 消去すると、台帳・履歴ログ・ポテンショメーターの値が初期化される。ポテンショメーターの値は、次のブートモードで取り直す
+- LTE-M 版は、消去後の最初のサイクルで、モデムへ証明書を再アップロードする（数十秒かかる）
+- NVS 領域だけを消す場合: `esptool.py --port <ポート> erase_region 0x9000 0x5000`（アプリ本体は消えない）
+- 設置済みの機体の NVS の空きは、起動直後に `h` を送ったダンプの末尾（`hlog: nvs stats …`、`usable_free=…`）で確認できる
+
 ### AWS IoT Core
 
 証明書を `firmware/certs/`（`AmazonRootCA1.pem`、`device.pem.crt`、`private.pem.key`）に置き、`secrets.h` を AWS IoT Core 向けにする。
