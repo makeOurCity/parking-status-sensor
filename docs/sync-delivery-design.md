@@ -133,6 +133,9 @@ Outbox（JSON FIFO）を廃止し、NVS に **配送台帳** を 1 構造体で�
 | `prevAttempts` | u8 | 0 | 前サイクルの publish 試行回数 |
 | `prevMqttError` | i16 | 0 | 前サイクル最後の MQTT lastError |
 | `prevActiveMs` | u32 | 0 | 前サイクルの active 時間 |
+| `skipn` | u32 | 0 | heartbeat のカウンタ（`skippedSinceConfirmed`）のバックアップ（#123）。RTC が無効なときの復元でだけ読む。キー名は、保存時の `kKeySkippedSince`（`"skipn"`） |
+
+表の項目は、すべて**バックアップ**である。主な保存先は RTC メモリで、通常のサイクルは、この表を読まない（下記）。
 
 **台帳の主な保存先は RTC メモリで、NVS は電源断に備えたバックアップ**（#123）。
 
