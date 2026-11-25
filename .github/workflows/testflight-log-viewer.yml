@@ -1,0 +1,238 @@
+# iOS ログビューア（tools/log-viewer）を TestFlight にアップロードする。
+#
+# - main にマージされ、tools/log-viewer/ 配下（README を除く）が変わったときに自動で走る。
+# - 手動実行（Actions タブ → Run workflow）では、アップロードする／しない（IPA の書き出しまで）を選べる。
+#   初回は「しない」で署名まで通ることを確かめてから、「する」に切り替える。
+# - 必要な Secrets / Variables と準備の手順は tools/log-viewer/README.md の「TestFlight への自動配布」。
+#
+# このリポジトリは public。Secrets を使うので、起動は main への push と手動実行だけにする
+# （pull_request では動かさない）。
+
+name: TestFlight (log-viewer)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'tools/log-viewer/**'
+      - '!tools/log-viewer/README.md'
+  workflow_dispatch:
+    inputs:
+      upload:
+        description: 'TestFlight にアップロードする（オフなら IPA の書き出しまでで止める）'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# 同時に 2 本走らせない（ビルド番号の取り合い・アップロードの競合を避ける）。実行中のものは止めない。
+concurrency:
+  group: testflight-log-viewer
+  cancel-in-progress: false
+
+env:
+  BUNDLE_ID: org.code4japan.parkingsensor.logviewer
+  SCHEME: LogViewer
+  # push（= マージ）のときは常にアップロード。手動実行は入力に従う。
+  UPLOAD: ${{ github.event_name == 'push' || inputs.upload }}
+
+jobs:
+  testflight:
+    runs-on: macos-26
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: tools/log-viewer
+    env:
+      APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+      BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+      P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+      BUILD_PROVISION_PROFILE_BASE64: ${{ secrets.BUILD_PROVISION_PROFILE_BASE64 }}
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      ASC_KEY_BASE64: ${{ secrets.ASC_KEY_BASE64 }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check required secrets
+        run: |
+          required=(APPLE_TEAM_ID BUILD_CERTIFICATE_BASE64 P12_PASSWORD BUILD_PROVISION_PROFILE_BASE64)
+          if [ "$UPLOAD" = "true" ]; then
+            required+=(ASC_KEY_ID ASC_ISSUER_ID ASC_KEY_BASE64)
+          fi
+          missing=()
+          for name in "${required[@]}"; do
+            [ -n "${!name}" ] || missing+=("$name")
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::未設定の Secrets / Variables: ${missing[*]}（tools/log-viewer/README.md の「TestFlight への自動配布」を参照）"
+            exit 1
+          fi
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      # アップロードの前に、集計などのロジックの試験を通す。
+      - name: Test
+        run: |
+          UDID=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          devices = json.load(sys.stdin)["devices"]
+          def version(key):
+              return [int(p) for p in key.rsplit(".", 1)[-1].split("-")[1:] if p.isdigit()]
+          for runtime in sorted((k for k in devices if "iOS" in k), key=version, reverse=True):
+              for device in devices[runtime]:
+                  if "iPhone" in device["name"] and device.get("isAvailable", True):
+                      print(device["udid"])
+                      sys.exit(0)
+          sys.exit("iPhone のシミュレータが見つかりません")
+          ')
+          echo "Simulator: $UDID"
+          xcodebuild test \
+            -project LogViewer.xcodeproj \
+            -scheme "$SCHEME" \
+            -destination "platform=iOS Simulator,id=$UDID"
+
+      # TestFlight は同じビルド番号を再アップロードできない。UTC の日時（yyMMddHHmm）を使うと、
+      # 実行のたびに増え続け、リランしても被らない。
+      - name: Set build number
+        run: echo "BUILD_NUMBER=$(date -u +%y%m%d%H%M)" >> "$GITHUB_ENV"
+
+      - name: Install the signing certificate and provisioning profile
+        run: |
+          KEYCHAIN_PATH="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          CERT_PATH="$RUNNER_TEMP/certificate.p12"
+          PROFILE_PATH="$RUNNER_TEMP/profile.mobileprovision"
+
+          echo "$BUILD_CERTIFICATE_BASE64" | base64 --decode > "$CERT_PATH"
+          echo "$BUILD_PROVISION_PROFILE_BASE64" | base64 --decode > "$PROFILE_PATH"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH" > /dev/null
+          security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
+
+          # プロファイルを所定の場所に置き、名前と UUID を取り出す。
+          security cms -D -i "$PROFILE_PATH" > "$RUNNER_TEMP/profile.plist"
+          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c 'Print UUID' "$RUNNER_TEMP/profile.plist")
+          PROFILE_NAME=$(/usr/libexec/PlistBuddy -c 'Print Name' "$RUNNER_TEMP/profile.plist")
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          cp "$PROFILE_PATH" "$HOME/Library/MobileDevice/Provisioning Profiles/$PROFILE_UUID.mobileprovision"
+
+          # 取り込んだ証明書の名前（例: Apple Distribution: ... (TEAMID)）を後続の署名に渡す。
+          IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | grep -m1 'Apple Distribution' | sed -E 's/.*"(.*)".*/\1/')
+          if [ -z "$IDENTITY" ]; then
+            echo "::error::Apple Distribution の証明書が見つかりません（.p12 に配布用の証明書と秘密鍵を入れてください）"
+            exit 1
+          fi
+
+          {
+            echo "KEYCHAIN_PATH=$KEYCHAIN_PATH"
+            echo "PROFILE_NAME=$PROFILE_NAME"
+            echo "PROFILE_UUID=$PROFILE_UUID"
+            echo "SIGNING_IDENTITY=$IDENTITY"
+          } >> "$GITHUB_ENV"
+          echo "Profile: $PROFILE_NAME ($PROFILE_UUID)"
+          echo "Identity: $IDENTITY"
+
+      - name: Archive
+        run: |
+          xcodebuild archive \
+            -project LogViewer.xcodeproj \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/LogViewer.xcarchive" \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="$SIGNING_IDENTITY" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            PROVISIONING_PROFILE_SPECIFIER="$PROFILE_NAME" \
+            OTHER_CODE_SIGN_FLAGS="--keychain $KEYCHAIN_PATH" \
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER"
+
+      - name: Write ExportOptions.plist
+        run: |
+          DESTINATION=export
+          if [ "$UPLOAD" = "true" ]; then DESTINATION=upload; fi
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>app-store-connect</string>
+            <key>destination</key>
+            <string>$DESTINATION</string>
+            <key>teamID</key>
+            <string>$APPLE_TEAM_ID</string>
+            <key>signingStyle</key>
+            <string>manual</string>
+            <key>signingCertificate</key>
+            <string>$SIGNING_IDENTITY</string>
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>$BUNDLE_ID</key>
+              <string>$PROFILE_NAME</string>
+            </dict>
+            <key>uploadSymbols</key>
+            <true/>
+            <key>manageAppVersionAndBuildNumber</key>
+            <false/>
+          </dict>
+          </plist>
+          EOF
+          echo "destination: $DESTINATION"
+
+      # PATH 上の Homebrew の rsync が優先されると、IPA の作成が Copy failed で失敗する（#129）。
+      # システムの rsync を先に見つけさせる。
+      - name: Export (and upload to TestFlight when UPLOAD is true)
+        run: |
+          args=(
+            -exportArchive
+            -archivePath "$RUNNER_TEMP/LogViewer.xcarchive"
+            -exportPath "$RUNNER_TEMP/export"
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist"
+          )
+          if [ "$UPLOAD" = "true" ]; then
+            mkdir -p "$RUNNER_TEMP/asc"
+            ASC_KEY_PATH="$RUNNER_TEMP/asc/AuthKey_$ASC_KEY_ID.p8"
+            echo "$ASC_KEY_BASE64" | base64 --decode > "$ASC_KEY_PATH"
+            chmod 600 "$ASC_KEY_PATH"
+            args+=(
+              -authenticationKeyPath "$ASC_KEY_PATH"
+              -authenticationKeyID "$ASC_KEY_ID"
+              -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+            )
+          fi
+          PATH="/usr/bin:/bin:/usr/sbin:/sbin:$PATH" xcodebuild "${args[@]}"
+
+      # アップロードしない手動実行のときは、IPA ができたことだけ確認する。
+      # （public リポジトリなので、署名済みの IPA は成果物として公開しない。）
+      - name: Check the exported IPA
+        if: env.UPLOAD != 'true'
+        run: |
+          ls -l "$RUNNER_TEMP/export"
+          test -n "$(ls "$RUNNER_TEMP"/export/*.ipa)"
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### TestFlight (log-viewer)"
+            echo "- ビルド番号: \`${BUILD_NUMBER:-未設定}\`"
+            echo "- アップロード: \`$UPLOAD\`"
+            echo "- コミット: \`${GITHUB_SHA::7}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # 署名に使ったものを、ジョブの最後に必ず消す。
+      - name: Clean up the keychain, profile and keys
+        if: always()
+        run: |
+          if [ -n "${KEYCHAIN_PATH:-}" ]; then security delete-keychain "$KEYCHAIN_PATH" || true; fi
+          if [ -n "${PROFILE_UUID:-}" ]; then rm -f "$HOME/Library/MobileDevice/Provisioning Profiles/$PROFILE_UUID.mobileprovision"; fi
+          rm -rf "$RUNNER_TEMP/asc" "$RUNNER_TEMP/certificate.p12" "$RUNNER_TEMP/profile.mobileprovision" "$RUNNER_TEMP/profile.plist"

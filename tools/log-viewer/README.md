@@ -13,7 +13,7 @@ CloudWatch Logs（Lambda `parking-status-bridge`）をサクッと確認でき�
 | 認証 | Cognito User Pool（`USER_PASSWORD_AUTH` で初回サインインのみ、以降は `REFRESH_TOKEN_AUTH` で自動更新）+ Identity Pool。外部 SDK（AWS SDK for Swift / Amplify）には依存せず、`URLSession` と自前の SigV4 署名で実装 |
 | データ取得 | CloudWatch Logs Insights（`StartQuery` / `GetQueryResults`）を都度クエリ。Lambda がまだスタブ（#7 未実装）のため、これが唯一のデータソース |
 | 駐車場名 | デバイスマスターの DynamoDB テーブル（`parking-status-device-master`）を `Scan` で読み、`deviceId` → 駐車場名の対応表を 5 分キャッシュする（#108）。同じ Cognito 認証情報と SigV4 署名を使う。読めない・未登録のデバイスは、`deviceId` を表示する |
-| 配布 | 開発者本人は Xcode から直接実行。佐賀市職員への配布は TestFlight（#129） |
+| 配布 | 開発者本人は Xcode から直接実行。佐賀市職員への配布は TestFlight（#129）。`main` へのマージで GitHub Actions が自動アップロードする（下記「TestFlight への自動配布」） |
 | テスト | XCTest（`LogViewerTests/`）。集計の純粋関数など、画面から切り離したロジックを試験する（#132）。実行は下記「ビルド・実行」のコマンド |
 
 ## ビルド・実行
@@ -61,6 +61,57 @@ xcodebuild test -project LogViewer.xcodeproj -scheme LogViewer \
 5. 同じ秒の重複は 1 件にする（ms の遅い方を残す）。
 6. 欠落率 = データなしのマス ÷ 数えるマス。そのデバイスの最初の受信より前は数えず、描かない。
 7. 現在時刻より先のマス（中央 > 現在）は数えず、描かない。
+
+## TestFlight への自動配布
+
+`main` にマージされ、`tools/log-viewer/` 配下（この README を除く）が変わると、GitHub Actions（[`.github/workflows/testflight-log-viewer.yml`](../../.github/workflows/testflight-log-viewer.yml)）が **テスト → アーカイブ → TestFlight へアップロード** を行う。手動実行（Actions タブ → Run workflow）では、アップロードする／しない（IPA の書き出しまで）を選べる。
+
+- ビルド番号（`CFBundleVersion`）は実行時の UTC 日時（`yyMMddHHmm`、例 `2611251300`）。TestFlight は同じ番号を再アップロードできないため、実行のたびに増える値にしている。バージョン（`CFBundleShortVersionString`）は `project.yml` の `MARKETING_VERSION`。
+- 署名は**手動署名**（配布証明書とプロビジョニングプロファイルを Secrets に置く）。アップロードは App Store Connect API キーで行う。
+- 起動は `main` への push と手動実行だけ。リポジトリが public なので、Secrets を使うこのワークフローは `pull_request` では動かさない。
+- アップロード後、TestFlight 側でビルドが処理されるまで数分〜数十分かかる。外部テスターに配るには、App Store Connect の外部テストグループで「ビルドの自動配布」をオンにするか、ビルドを手動でグループに追加する。
+
+### 準備（初回のみ）
+
+Apple Developer / App Store Connect のアカウント管理者（CIVICTECH.TV, LLC）が用意する。**値は Secrets にだけ置き、リポジトリやチャットには書かない。**
+
+| 種別 | 名前 | 内容 |
+|---|---|---|
+| Variable | `APPLE_TEAM_ID` | Apple Developer のチーム ID（10 桁） |
+| Secret | `BUILD_CERTIFICATE_BASE64` | **Apple Distribution** 証明書と秘密鍵を書き出した `.p12` を base64 にしたもの |
+| Secret | `P12_PASSWORD` | 上の `.p12` を書き出すときに決めたパスワード |
+| Secret | `BUILD_PROVISION_PROFILE_BASE64` | バンドル ID `org.code4japan.parkingsensor.logviewer` の **App Store** 用プロビジョニングプロファイルを base64 にしたもの |
+| Secret | `ASC_KEY_ID` | App Store Connect API キーのキー ID |
+| Secret | `ASC_ISSUER_ID` | 同じく Issuer ID |
+| Secret | `ASC_KEY_BASE64` | API キーの `.p8` ファイルを base64 にしたもの（権限は App Manager 以上） |
+
+1. **証明書**: Apple Developer で Apple Distribution 証明書を作り、キーチェーンアクセスで秘密鍵ごと `.p12` に書き出す。
+2. **プロファイル**: Apple Developer の Profiles で、種類「App Store Connect」、App ID `org.code4japan.parkingsensor.logviewer`、上の証明書を選んで作成し、`.mobileprovision` をダウンロードする。
+3. **API キー**: App Store Connect の「ユーザーとアクセス → 統合 → App Store Connect API」でキーを作り、`.p8` をダウンロードする（ダウンロードは一度だけ）。
+4. **base64 化と登録**（クリップボードに入れて、そのまま Secrets に貼る）:
+
+```bash
+base64 -i certificate.p12 | pbcopy
+```
+
+```bash
+gh secret set BUILD_CERTIFICATE_BASE64 --repo makeOurCity/parking-status-sensor
+```
+
+   `gh secret set` は値を対話入力する（コマンドラインに値を書かない）。ほかの Secret も同じ要領で登録し、`APPLE_TEAM_ID` は `gh variable set APPLE_TEAM_ID` で登録する。
+
+### 初回の確かめ方
+
+1. Actions タブから「TestFlight (log-viewer)」を **アップロードをオフ**で手動実行する。署名とアーカイブ、IPA の書き出しまで通れば、証明書・プロファイル・チーム ID は正しい。
+2. 次に **アップロードをオン**で手動実行し、App Store Connect の TestFlight にビルドが現れることを確かめる。
+3. 以降は `main` へのマージで自動で走る。
+
+### よくある失敗
+
+- `未設定の Secrets / Variables: ...`: 上の表のうち、不足しているものを登録する（アップロードをオフにした手動実行では、`ASC_*` は不要）。
+- `Apple Distribution の証明書が見つかりません`: `.p12` に配布用の証明書と秘密鍵が入っていない。書き出し直す。
+- 署名の失敗（プロファイルと証明書が合わない）: プロファイルを作ったときの証明書と、`.p12` の証明書が同じか確認する。証明書やプロファイルの期限（通常 1 年）が切れたときも同じ失敗になるので、更新して Secrets を差し替える。
+- アップロードの失敗（重複したビルド番号など）: 同じ分にもう一度実行すると番号が被る。1 分以上あけて再実行する。
 
 ## オフライン判定
 
