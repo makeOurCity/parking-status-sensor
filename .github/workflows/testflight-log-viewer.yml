@@ -3,6 +3,8 @@
 # - main にマージされ、tools/log-viewer/ 配下（README を除く）が変わったときに自動で走る。
 # - 手動実行（Actions タブ → Run workflow）では、アップロードする／しない（IPA の書き出しまで）を選べる。
 #   初回は「しない」で署名まで通ることを確かめてから、「する」に切り替える。
+# - 署名は App Store Connect API キーによるクラウド署名（xcodebuild -allowProvisioningUpdates）。
+#   証明書とプロファイルは Apple が管理するので、リポジトリにも Secrets にも置かない。
 # - 必要な Secrets / Variables と準備の手順は tools/log-viewer/README.md の「TestFlight への自動配布」。
 #
 # このリポジトリは public。Secrets を使うので、起動は main への push と手動実行だけにする
@@ -32,7 +34,6 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  BUNDLE_ID: org.code4japan.parkingsensor.logviewer
   SCHEME: LogViewer
   # push（= マージ）のときは常にアップロード。手動実行は入力に従う。
   UPLOAD: ${{ github.event_name == 'push' || inputs.upload }}
@@ -46,9 +47,6 @@ jobs:
         working-directory: tools/log-viewer
     env:
       APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
-      BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
-      P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
-      BUILD_PROVISION_PROFILE_BASE64: ${{ secrets.BUILD_PROVISION_PROFILE_BASE64 }}
       ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
       ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
       ASC_KEY_BASE64: ${{ secrets.ASC_KEY_BASE64 }}
@@ -58,12 +56,8 @@ jobs:
 
       - name: Check required secrets
         run: |
-          required=(APPLE_TEAM_ID BUILD_CERTIFICATE_BASE64 P12_PASSWORD BUILD_PROVISION_PROFILE_BASE64)
-          if [ "$UPLOAD" = "true" ]; then
-            required+=(ASC_KEY_ID ASC_ISSUER_ID ASC_KEY_BASE64)
-          fi
           missing=()
-          for name in "${required[@]}"; do
+          for name in APPLE_TEAM_ID ASC_KEY_ID ASC_ISSUER_ID ASC_KEY_BASE64; do
             [ -n "${!name}" ] || missing+=("$name")
           done
           if [ ${#missing[@]} -gt 0 ]; then
@@ -100,46 +94,16 @@ jobs:
       - name: Set build number
         run: echo "BUILD_NUMBER=$(date -u +%y%m%d%H%M)" >> "$GITHUB_ENV"
 
-      - name: Install the signing certificate and provisioning profile
+      # クラウド署名に使う App Store Connect API キー（.p8）をファイルに書く。後で必ず消す。
+      - name: Write the App Store Connect API key
         run: |
-          KEYCHAIN_PATH="$RUNNER_TEMP/signing.keychain-db"
-          KEYCHAIN_PASSWORD="$(uuidgen)"
-          CERT_PATH="$RUNNER_TEMP/certificate.p12"
-          PROFILE_PATH="$RUNNER_TEMP/profile.mobileprovision"
+          mkdir -p "$RUNNER_TEMP/asc"
+          ASC_KEY_PATH="$RUNNER_TEMP/asc/AuthKey_$ASC_KEY_ID.p8"
+          echo "$ASC_KEY_BASE64" | base64 --decode > "$ASC_KEY_PATH"
+          chmod 600 "$ASC_KEY_PATH"
+          echo "ASC_KEY_PATH=$ASC_KEY_PATH" >> "$GITHUB_ENV"
 
-          echo "$BUILD_CERTIFICATE_BASE64" | base64 --decode > "$CERT_PATH"
-          echo "$BUILD_PROVISION_PROFILE_BASE64" | base64 --decode > "$PROFILE_PATH"
-
-          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security import "$CERT_PATH" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
-          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH" > /dev/null
-          security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
-
-          # プロファイルを所定の場所に置き、名前と UUID を取り出す。
-          security cms -D -i "$PROFILE_PATH" > "$RUNNER_TEMP/profile.plist"
-          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c 'Print UUID' "$RUNNER_TEMP/profile.plist")
-          PROFILE_NAME=$(/usr/libexec/PlistBuddy -c 'Print Name' "$RUNNER_TEMP/profile.plist")
-          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
-          cp "$PROFILE_PATH" "$HOME/Library/MobileDevice/Provisioning Profiles/$PROFILE_UUID.mobileprovision"
-
-          # 取り込んだ証明書の名前（例: Apple Distribution: ... (TEAMID)）を後続の署名に渡す。
-          IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | grep -m1 'Apple Distribution' | sed -E 's/.*"(.*)".*/\1/')
-          if [ -z "$IDENTITY" ]; then
-            echo "::error::Apple Distribution の証明書が見つかりません（.p12 に配布用の証明書と秘密鍵を入れてください）"
-            exit 1
-          fi
-
-          {
-            echo "KEYCHAIN_PATH=$KEYCHAIN_PATH"
-            echo "PROFILE_NAME=$PROFILE_NAME"
-            echo "PROFILE_UUID=$PROFILE_UUID"
-            echo "SIGNING_IDENTITY=$IDENTITY"
-          } >> "$GITHUB_ENV"
-          echo "Profile: $PROFILE_NAME ($PROFILE_UUID)"
-          echo "Identity: $IDENTITY"
-
+      # 自動署名 + API キー。証明書・プロファイルは Apple 側で作成・更新される（クラウド署名）。
       - name: Archive
         run: |
           xcodebuild archive \
@@ -148,11 +112,12 @@ jobs:
             -configuration Release \
             -destination 'generic/platform=iOS' \
             -archivePath "$RUNNER_TEMP/LogViewer.xcarchive" \
-            CODE_SIGN_STYLE=Manual \
-            CODE_SIGN_IDENTITY="$SIGNING_IDENTITY" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$ASC_KEY_PATH" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            CODE_SIGN_STYLE=Automatic \
             DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
-            PROVISIONING_PROFILE_SPECIFIER="$PROFILE_NAME" \
-            OTHER_CODE_SIGN_FLAGS="--keychain $KEYCHAIN_PATH" \
             CURRENT_PROJECT_VERSION="$BUILD_NUMBER"
 
       - name: Write ExportOptions.plist
@@ -171,14 +136,7 @@ jobs:
             <key>teamID</key>
             <string>$APPLE_TEAM_ID</string>
             <key>signingStyle</key>
-            <string>manual</string>
-            <key>signingCertificate</key>
-            <string>$SIGNING_IDENTITY</string>
-            <key>provisioningProfiles</key>
-            <dict>
-              <key>$BUNDLE_ID</key>
-              <string>$PROFILE_NAME</string>
-            </dict>
+            <string>automatic</string>
             <key>uploadSymbols</key>
             <true/>
             <key>manageAppVersionAndBuildNumber</key>
@@ -192,24 +150,14 @@ jobs:
       # システムの rsync を先に見つけさせる。
       - name: Export (and upload to TestFlight when UPLOAD is true)
         run: |
-          args=(
-            -exportArchive
-            -archivePath "$RUNNER_TEMP/LogViewer.xcarchive"
-            -exportPath "$RUNNER_TEMP/export"
-            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist"
-          )
-          if [ "$UPLOAD" = "true" ]; then
-            mkdir -p "$RUNNER_TEMP/asc"
-            ASC_KEY_PATH="$RUNNER_TEMP/asc/AuthKey_$ASC_KEY_ID.p8"
-            echo "$ASC_KEY_BASE64" | base64 --decode > "$ASC_KEY_PATH"
-            chmod 600 "$ASC_KEY_PATH"
-            args+=(
-              -authenticationKeyPath "$ASC_KEY_PATH"
-              -authenticationKeyID "$ASC_KEY_ID"
-              -authenticationKeyIssuerID "$ASC_ISSUER_ID"
-            )
-          fi
-          PATH="/usr/bin:/bin:/usr/sbin:/sbin:$PATH" xcodebuild "${args[@]}"
+          PATH="/usr/bin:/bin:/usr/sbin:/sbin:$PATH" xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/LogViewer.xcarchive" \
+            -exportPath "$RUNNER_TEMP/export" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$ASC_KEY_PATH" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID"
 
       # アップロードしない手動実行のときは、IPA ができたことだけ確認する。
       # （public リポジトリなので、署名済みの IPA は成果物として公開しない。）
@@ -229,10 +177,7 @@ jobs:
             echo "- コミット: \`${GITHUB_SHA::7}\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # 署名に使ったものを、ジョブの最後に必ず消す。
-      - name: Clean up the keychain, profile and keys
+      # API キーを、ジョブの最後に必ず消す。
+      - name: Clean up the API key
         if: always()
-        run: |
-          if [ -n "${KEYCHAIN_PATH:-}" ]; then security delete-keychain "$KEYCHAIN_PATH" || true; fi
-          if [ -n "${PROFILE_UUID:-}" ]; then rm -f "$HOME/Library/MobileDevice/Provisioning Profiles/$PROFILE_UUID.mobileprovision"; fi
-          rm -rf "$RUNNER_TEMP/asc" "$RUNNER_TEMP/certificate.p12" "$RUNNER_TEMP/profile.mobileprovision" "$RUNNER_TEMP/profile.plist"
+        run: rm -rf "$RUNNER_TEMP/asc"

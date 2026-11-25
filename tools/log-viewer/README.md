@@ -67,7 +67,7 @@ xcodebuild test -project LogViewer.xcodeproj -scheme LogViewer \
 `main` にマージされ、`tools/log-viewer/` 配下（この README を除く）が変わると、GitHub Actions（[`.github/workflows/testflight-log-viewer.yml`](../../.github/workflows/testflight-log-viewer.yml)）が **テスト → アーカイブ → TestFlight へアップロード** を行う。手動実行（Actions タブ → Run workflow）では、アップロードする／しない（IPA の書き出しまで）を選べる。
 
 - ビルド番号（`CFBundleVersion`）は実行時の UTC 日時（`yyMMddHHmm`、例 `2611251300`）。TestFlight は同じ番号を再アップロードできないため、実行のたびに増える値にしている。バージョン（`CFBundleShortVersionString`）は `project.yml` の `MARKETING_VERSION`。
-- 署名は**手動署名**（配布証明書とプロビジョニングプロファイルを Secrets に置く）。アップロードは App Store Connect API キーで行う。
+- 署名は **App Store Connect API キーによるクラウド署名**（`xcodebuild -allowProvisioningUpdates`）。証明書とプロファイルは Apple 側で作成・更新されるので、リポジトリにも Secrets にも置かない。
 - 起動は `main` への push と手動実行だけ。リポジトリが public なので、Secrets を使うこのワークフローは `pull_request` では動かさない。
 - アップロード後、TestFlight 側でビルドが処理されるまで数分〜数十分かかる。外部テスターに配るには、App Store Connect の外部テストグループで「ビルドの自動配布」をオンにするか、ビルドを手動でグループに追加する。
 
@@ -77,41 +77,45 @@ Apple Developer / App Store Connect のアカウント管理者（CIVICTECH.TV, 
 
 | 種別 | 名前 | 内容 |
 |---|---|---|
-| Variable | `APPLE_TEAM_ID` | Apple Developer のチーム ID（10 桁） |
-| Secret | `BUILD_CERTIFICATE_BASE64` | **Apple Distribution** 証明書と秘密鍵を書き出した `.p12` を base64 にしたもの |
-| Secret | `P12_PASSWORD` | 上の `.p12` を書き出すときに決めたパスワード |
-| Secret | `BUILD_PROVISION_PROFILE_BASE64` | バンドル ID `org.code4japan.parkingsensor.logviewer` の **App Store** 用プロビジョニングプロファイルを base64 にしたもの |
+| Variable | `APPLE_TEAM_ID` | Apple Developer のチーム ID（10 桁。Membership 画面で確認できる） |
 | Secret | `ASC_KEY_ID` | App Store Connect API キーのキー ID |
 | Secret | `ASC_ISSUER_ID` | 同じく Issuer ID |
-| Secret | `ASC_KEY_BASE64` | API キーの `.p8` ファイルを base64 にしたもの（権限は App Manager 以上） |
+| Secret | `ASC_KEY_BASE64` | API キーの `.p8` ファイルを base64 にしたもの |
 
-1. **証明書**: Apple Developer で Apple Distribution 証明書を作り、キーチェーンアクセスで秘密鍵ごと `.p12` に書き出す。
-2. **プロファイル**: Apple Developer の Profiles で、種類「App Store Connect」、App ID `org.code4japan.parkingsensor.logviewer`、上の証明書を選んで作成し、`.mobileprovision` をダウンロードする。
-3. **API キー**: App Store Connect の「ユーザーとアクセス → 統合 → App Store Connect API」でキーを作り、`.p8` をダウンロードする（ダウンロードは一度だけ）。
-4. **base64 化と登録**（クリップボードに入れて、そのまま Secrets に貼る）:
+1. **API キー**: App Store Connect の「ユーザーとアクセス → 統合 → App Store Connect API」でキーを作り、`.p8` をダウンロードする（ダウンロードは一度だけ）。クラウド署名には証明書の作成権限が要るので、**アクセス権は Admin**（管理者）で作る。キー ID と Issuer ID は同じ画面に出る。
+2. **登録**（`.p8` は base64 にして、パイプで直接登録する。クリップボードにも残らない）:
 
 ```bash
-base64 -i certificate.p12 | pbcopy
+base64 -i AuthKey_XXXXXXXXXX.p8 | gh secret set ASC_KEY_BASE64 --repo makeOurCity/parking-status-sensor
 ```
 
 ```bash
-gh secret set BUILD_CERTIFICATE_BASE64 --repo makeOurCity/parking-status-sensor
+gh secret set ASC_KEY_ID --repo makeOurCity/parking-status-sensor
 ```
 
-   `gh secret set` は値を対話入力する（コマンドラインに値を書かない）。ほかの Secret も同じ要領で登録し、`APPLE_TEAM_ID` は `gh variable set APPLE_TEAM_ID` で登録する。
+```bash
+gh secret set ASC_ISSUER_ID --repo makeOurCity/parking-status-sensor
+```
+
+```bash
+gh variable set APPLE_TEAM_ID --repo makeOurCity/parking-status-sensor
+```
+
+   `gh secret set` / `gh variable set` は値を対話入力する（コマンドラインに値を書かない）。
 
 ### 初回の確かめ方
 
-1. Actions タブから「TestFlight (log-viewer)」を **アップロードをオフ**で手動実行する。署名とアーカイブ、IPA の書き出しまで通れば、証明書・プロファイル・チーム ID は正しい。
+1. Actions タブから「TestFlight (log-viewer)」を **アップロードをオフ**で手動実行する。クラウド署名とアーカイブ、IPA の書き出しまで通れば、API キーとチーム ID は正しい。
 2. 次に **アップロードをオン**で手動実行し、App Store Connect の TestFlight にビルドが現れることを確かめる。
 3. 以降は `main` へのマージで自動で走る。
 
 ### よくある失敗
 
-- `未設定の Secrets / Variables: ...`: 上の表のうち、不足しているものを登録する（アップロードをオフにした手動実行では、`ASC_*` は不要）。
-- `Apple Distribution の証明書が見つかりません`: `.p12` に配布用の証明書と秘密鍵が入っていない。書き出し直す。
-- 署名の失敗（プロファイルと証明書が合わない）: プロファイルを作ったときの証明書と、`.p12` の証明書が同じか確認する。証明書やプロファイルの期限（通常 1 年）が切れたときも同じ失敗になるので、更新して Secrets を差し替える。
+- `未設定の Secrets / Variables: ...`: 上の表のうち、不足しているものを登録する。
+- 署名の失敗（`Cloud signing permission error`、`No signing certificate`、`No profiles for ... were found` など）: API キーのアクセス権が Admin か確認する。クラウド署名は、Apple 側に管理用の配布証明書（Cloud Managed）を作る。証明書の発行数には上限があり、既にいっぱいだと新しく作れない。Apple Developer の Certificates で、不要な配布証明書を失効させてから再実行する。
+- 開発用プロファイルの作成で失敗する（`no devices` など）: 自動署名がアーカイブ時に開発用プロファイルを作ろうとするため、チームに登録済みのデバイスが 1 台も無いと失敗する。Apple Developer の Devices に、確認用の iPhone / iPad を登録する。
 - アップロードの失敗（重複したビルド番号など）: 同じ分にもう一度実行すると番号が被る。1 分以上あけて再実行する。
+- クラウド署名がどうしても通らないときは、配布証明書（`.p12`）とプロファイルを Secrets に置く手動署名の方式に切り替えられる（その版はブランチの履歴 `a8274f4` にある）。
 
 ## オフライン判定
 
