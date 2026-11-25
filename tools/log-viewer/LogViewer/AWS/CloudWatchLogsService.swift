@@ -122,11 +122,60 @@ struct CloudWatchLogsService {
         return rows.compactMap(LogEntry.init(row:))
     }
 
+    /// Every telemetry receipt in `[start, end]` (oldest first) — just the receive
+    /// time, deviceId and status, for the timeline screen (#132).
+    ///
+    /// Logs Insights returns at most 10,000 rows per query. If a query comes back
+    /// full, this continues from the last row's second until a page comes back
+    /// short; rows repeated at the seam are harmless (the aggregation drops
+    /// same-second duplicates). Nothing is returned until every page succeeded.
+    func fetchReceivedEvents(from start: Date, to end: Date) async throws -> [ReceivedEvent] {
+        // StartQuery's startTime/endTime are whole epoch seconds, both inclusive.
+        let queryEnd = Date(timeIntervalSince1970: ceil(end.timeIntervalSince1970))
+        var cursor = Date(timeIntervalSince1970: floor(start.timeIntervalSince1970))
+        var events: [ReceivedEvent] = []
+
+        for _ in 0..<Self.maxReceivedEventPages {
+            let rows = try await runQuery(Self.receivedEventsQuery, start: cursor, end: queryEnd)
+            events += rows.compactMap(ReceivedEvent.init(row:))
+            guard rows.count >= Self.insightsRowLimit else { return events }
+
+            guard let lastRow = rows.last,
+                  let lastTimestamp = lastRow["@timestamp"].flatMap(LogEntry.timestampFormatter.date(from:))
+            else { throw CloudWatchLogsError.malformedResponse }
+            let next = Date(timeIntervalSince1970: floor(lastTimestamp.timeIntervalSince1970))
+            // A full page that all sits in one second can't be continued.
+            guard next > cursor else {
+                throw CloudWatchLogsError.apiError("同じ秒に \(Self.insightsRowLimit) 件以上のログがあり、続きを取得できません。")
+            }
+            cursor = next
+        }
+        throw CloudWatchLogsError.apiError("ログの件数が多すぎて取得を打ち切りました。")
+    }
+
     // MARK: - Logs Insights plumbing
+
+    /// Insights' default and per-page result cap (the `limit` command's own default
+    /// is also 10,000, so stating it just makes the page size explicit).
+    private static let insightsRowLimit = 10_000
+    private static let maxReceivedEventPages = 20
+
+    private static let receivedEventsQuery = """
+    fields @timestamp, @message
+    | filter @message like /\(logRecordFilter)/
+    | \(deviceIdParse)
+    | \(statusParse)
+    | sort @timestamp asc
+    | limit \(insightsRowLimit)
+    | display @timestamp, deviceId, status
+    """
 
     private func runQuery(_ queryString: String, lookback: TimeInterval) async throws -> [[String: String]] {
         let end = Date()
-        let start = end.addingTimeInterval(-lookback)
+        return try await runQuery(queryString, start: end.addingTimeInterval(-lookback), end: end)
+    }
+
+    private func runQuery(_ queryString: String, start: Date, end: Date) async throws -> [[String: String]] {
         let credentials = try await auth.credentialsForCloudWatch()
 
         let queryId = try await startQuery(queryString: queryString, start: start, end: end, credentials: credentials)

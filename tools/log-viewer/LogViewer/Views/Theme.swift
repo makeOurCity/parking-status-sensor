@@ -9,6 +9,12 @@ enum Theme {
     static let unknown = Color(red: 0.62, green: 0.65, blue: 0.71) // slate
     static let warning = Color(red: 0.96, green: 0.62, blue: 0.13) // amber
 
+    /// 満空タイムライン（#132）の「データなし」。灰色の実色である `unknown` と区別できるよう、
+    /// 淡い地 + 斜線 + 枠で描く。意味はオフライン警告（`warning`）と同じ。
+    static let noDataFill = warning.opacity(0.14)
+    static let noDataHatch = warning.opacity(0.60)
+    static let noDataBorder = warning.opacity(0.70)
+
     static let cardCornerRadius: CGFloat = 18
 }
 
