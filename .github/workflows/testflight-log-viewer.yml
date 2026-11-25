@@ -1,0 +1,183 @@
+# iOS ログビューア（tools/log-viewer）を TestFlight にアップロードする。
+#
+# - main にマージされ、tools/log-viewer/ 配下（README を除く）が変わったときに自動で走る。
+# - 手動実行（Actions タブ → Run workflow）では、アップロードする／しない（IPA の書き出しまで）を選べる。
+#   初回は「しない」で署名まで通ることを確かめてから、「する」に切り替える。
+# - 署名は App Store Connect API キーによるクラウド署名（xcodebuild -allowProvisioningUpdates）。
+#   証明書とプロファイルは Apple が管理するので、リポジトリにも Secrets にも置かない。
+# - 必要な Secrets / Variables と準備の手順は tools/log-viewer/README.md の「TestFlight への自動配布」。
+#
+# このリポジトリは public。Secrets を使うので、起動は main への push と手動実行だけにする
+# （pull_request では動かさない）。
+
+name: TestFlight (log-viewer)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'tools/log-viewer/**'
+      - '!tools/log-viewer/README.md'
+  workflow_dispatch:
+    inputs:
+      upload:
+        description: 'TestFlight にアップロードする（オフなら IPA の書き出しまでで止める）'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# 同時に 2 本走らせない（ビルド番号の取り合い・アップロードの競合を避ける）。実行中のものは止めない。
+concurrency:
+  group: testflight-log-viewer
+  cancel-in-progress: false
+
+env:
+  SCHEME: LogViewer
+  # push（= マージ）のときは常にアップロード。手動実行は入力に従う。
+  UPLOAD: ${{ github.event_name == 'push' || inputs.upload }}
+
+jobs:
+  testflight:
+    runs-on: macos-26
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: tools/log-viewer
+    env:
+      APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      ASC_KEY_BASE64: ${{ secrets.ASC_KEY_BASE64 }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check required secrets
+        run: |
+          missing=()
+          for name in APPLE_TEAM_ID ASC_KEY_ID ASC_ISSUER_ID ASC_KEY_BASE64; do
+            [ -n "${!name}" ] || missing+=("$name")
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::未設定の Secrets / Variables: ${missing[*]}（tools/log-viewer/README.md の「TestFlight への自動配布」を参照）"
+            exit 1
+          fi
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      # アップロードの前に、集計などのロジックの試験を通す。
+      - name: Test
+        run: |
+          UDID=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          devices = json.load(sys.stdin)["devices"]
+          def version(key):
+              return [int(p) for p in key.rsplit(".", 1)[-1].split("-")[1:] if p.isdigit()]
+          for runtime in sorted((k for k in devices if "iOS" in k), key=version, reverse=True):
+              for device in devices[runtime]:
+                  if "iPhone" in device["name"] and device.get("isAvailable", True):
+                      print(device["udid"])
+                      sys.exit(0)
+          sys.exit("iPhone のシミュレータが見つかりません")
+          ')
+          echo "Simulator: $UDID"
+          xcodebuild test \
+            -project LogViewer.xcodeproj \
+            -scheme "$SCHEME" \
+            -destination "platform=iOS Simulator,id=$UDID"
+
+      # TestFlight は同じビルド番号を再アップロードできない。UTC の日時（yyMMddHHmm）を使うと、
+      # 実行のたびに増え続け、リランしても被らない。
+      - name: Set build number
+        run: echo "BUILD_NUMBER=$(date -u +%y%m%d%H%M)" >> "$GITHUB_ENV"
+
+      # クラウド署名に使う App Store Connect API キー（.p8）をファイルに書く。後で必ず消す。
+      - name: Write the App Store Connect API key
+        run: |
+          mkdir -p "$RUNNER_TEMP/asc"
+          ASC_KEY_PATH="$RUNNER_TEMP/asc/AuthKey_$ASC_KEY_ID.p8"
+          echo "$ASC_KEY_BASE64" | base64 --decode > "$ASC_KEY_PATH"
+          chmod 600 "$ASC_KEY_PATH"
+          echo "ASC_KEY_PATH=$ASC_KEY_PATH" >> "$GITHUB_ENV"
+
+      # 自動署名 + API キー。証明書・プロファイルは Apple 側で作成・更新される（クラウド署名）。
+      - name: Archive
+        run: |
+          xcodebuild archive \
+            -project LogViewer.xcodeproj \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/LogViewer.xcarchive" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$ASC_KEY_PATH" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            CODE_SIGN_STYLE=Automatic \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER"
+
+      - name: Write ExportOptions.plist
+        run: |
+          DESTINATION=export
+          if [ "$UPLOAD" = "true" ]; then DESTINATION=upload; fi
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>app-store-connect</string>
+            <key>destination</key>
+            <string>$DESTINATION</string>
+            <key>teamID</key>
+            <string>$APPLE_TEAM_ID</string>
+            <key>signingStyle</key>
+            <string>automatic</string>
+            <key>uploadSymbols</key>
+            <true/>
+            <key>manageAppVersionAndBuildNumber</key>
+            <false/>
+          </dict>
+          </plist>
+          EOF
+          echo "destination: $DESTINATION"
+
+      # PATH 上の Homebrew の rsync が優先されると、IPA の作成が Copy failed で失敗する（#129）。
+      # システムの rsync を先に見つけさせる。
+      - name: Export (and upload to TestFlight when UPLOAD is true)
+        run: |
+          PATH="/usr/bin:/bin:/usr/sbin:/sbin:$PATH" xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/LogViewer.xcarchive" \
+            -exportPath "$RUNNER_TEMP/export" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$ASC_KEY_PATH" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+
+      # アップロードしない手動実行のときは、IPA ができたことだけ確認する。
+      # （public リポジトリなので、署名済みの IPA は成果物として公開しない。）
+      - name: Check the exported IPA
+        if: env.UPLOAD != 'true'
+        run: |
+          ls -l "$RUNNER_TEMP/export"
+          test -n "$(ls "$RUNNER_TEMP"/export/*.ipa)"
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### TestFlight (log-viewer)"
+            echo "- ビルド番号: \`${BUILD_NUMBER:-未設定}\`"
+            echo "- アップロード: \`$UPLOAD\`"
+            echo "- コミット: \`${GITHUB_SHA::7}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # API キーを、ジョブの最後に必ず消す。
+      - name: Clean up the API key
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/asc"
