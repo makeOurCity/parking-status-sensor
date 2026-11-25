@@ -5,13 +5,16 @@ struct RootView: View {
 
     var body: some View {
         Group {
-            if auth.isBootstrapping {
-                ProgressView("読み込み中…")
-            } else if auth.isSignedIn {
-                DashboardView(auth: auth)
+            #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("-timelineDemo") {
+                // 認証なしで満空タイムラインの見た目を確認するための DEBUG 専用の入口。
+                TimelineDemoView()
             } else {
-                SignInView()
+                content
             }
+            #else
+            content
+            #endif
         }
         .task {
             await auth.bootstrap()
@@ -21,6 +24,17 @@ struct RootView: View {
                 NotificationSender.requestAuthorizationIfNeeded()
                 BackgroundRefreshScheduler.shared.scheduleNextRefresh()
             }
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if auth.isBootstrapping {
+            ProgressView("読み込み中…")
+        } else if auth.isSignedIn {
+            DashboardView(auth: auth)
+        } else {
+            SignInView()
         }
     }
 }

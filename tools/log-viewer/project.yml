@@ -37,3 +37,21 @@ targets:
         CODE_SIGN_STYLE: Automatic
         SWIFT_VERSION: "5.0"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    scheme:
+      testTargets:
+        - LogViewerTests
+  # 集計の純粋関数など、画面から切り離したロジックの試験（#132）。
+  LogViewerTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: LogViewerTests
+    dependencies:
+      - target: LogViewer
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.code4japan.parkingsensor.logviewer.tests
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: "5.0"
+        DEVELOPMENT_TEAM: ""
+        CODE_SIGN_STYLE: Automatic

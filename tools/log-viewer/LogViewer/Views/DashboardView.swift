@@ -3,11 +3,14 @@ import SwiftUI
 struct DashboardView: View {
     @ObservedObject private var auth: CognitoAuthService
     @StateObject private var viewModel: DashboardViewModel
+    /// タイムライン画面の取得済みデータを、画面を閉じても残すためにここで持つ（#132）。
+    @StateObject private var timelineViewModel: TimelineViewModel
     @Environment(\.scenePhase) private var scenePhase
 
     init(auth: CognitoAuthService) {
         self.auth = auth
         _viewModel = StateObject(wrappedValue: DashboardViewModel(auth: auth))
+        _timelineViewModel = StateObject(wrappedValue: TimelineViewModel(auth: auth))
     }
 
     private var onlineCount: Int { viewModel.devices.filter { !$0.isOffline }.count }
@@ -29,6 +32,11 @@ struct DashboardView: View {
                         StatTile(value: "\(onlineCount)", label: "稼働中", color: Theme.available, icon: "antenna.radiowaves.left.and.right")
                         StatTile(value: "\(offlineCount)", label: "オフライン", color: offlineCount > 0 ? Theme.warning : Theme.unknown, icon: "wifi.slash")
                     }
+
+                    NavigationLink(value: TimelineRoute()) {
+                        TimelineEntryCard()
+                    }
+                    .buttonStyle(.plain)
 
                     SectionHeader(title: "デバイス")
                     if viewModel.devices.isEmpty && !viewModel.isLoading {
@@ -53,6 +61,13 @@ struct DashboardView: View {
             .navigationTitle("ダッシュボード")
             .navigationDestination(for: String.self) { deviceId in
                 DeviceDetailView(deviceId: deviceId, name: viewModel.deviceNames.name(for: deviceId), auth: auth)
+            }
+            .navigationDestination(for: TimelineRoute.self) { _ in
+                TimelineView(
+                    viewModel: timelineViewModel,
+                    names: viewModel.deviceNames,
+                    activeIds: viewModel.devices.map(\.deviceId)
+                )
             }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
