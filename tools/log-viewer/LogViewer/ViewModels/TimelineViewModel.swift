@@ -35,6 +35,7 @@ final class TimelineViewModel: ObservableObject {
     private var cache = ReceivedEventCache()
     private var masterIds: Set<String> = []
     private var activeIds: [String] = []
+    private var inFlight: Task<Void, Never>?
 
     init(auth: CognitoAuthService) {
         self.service = CloudWatchLogsService(auth: auth)
@@ -61,8 +62,24 @@ final class TimelineViewModel: ObservableObject {
         self.activeIds = activeIds
     }
 
+    /// 取得中に呼ばれたら、実行中の取得の完了を待つ（黙って捨てない）。待った取得が失敗していたときだけ、
+    /// 続けてもう 1 回取りに行く。取得は呼び出し元の Task とは独立に走らせるので、画面を離れても
+    /// 完了して取得済みデータに入り、開き直したときにそのまま使える。
     private func fetch() async {
-        guard !isLoading else { return }
+        if let running = inFlight {
+            await running.value
+            if errorMessage == nil { return }
+        }
+        guard inFlight == nil else { return }
+        let task = Task { [weak self] in
+            await self?.performFetch()
+            self?.inFlight = nil
+        }
+        inFlight = task
+        await task.value
+    }
+
+    private func performFetch() async {
         isLoading = true
         errorMessage = nil
         let now = Date()

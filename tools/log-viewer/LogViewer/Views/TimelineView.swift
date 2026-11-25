@@ -84,6 +84,15 @@ struct TimelineScreen: View {
         self._selection = State(initialValue: initialSelection)
     }
 
+    /// 1 台ずつの切り替えで表示する機体。選んだ機体が更新後の一覧に無ければ先頭に戻す
+    /// （ピッカーの選択と、実際に表示する機体を一致させる）。
+    private var effectivePickedId: String? {
+        if let pickedDeviceId, timelines.contains(where: { $0.deviceId == pickedDeviceId }) {
+            return pickedDeviceId
+        }
+        return timelines.first?.deviceId
+    }
+
     private static let chartBottomID = "timeline-chart-bottom"
 
     private func title(of deviceId: String) -> String { names.name(for: deviceId) ?? deviceId }
@@ -160,7 +169,7 @@ struct TimelineScreen: View {
 
     private func shownTimelines(layout: TimelineChartLayout) -> [DeviceTimeline] {
         guard layout.isPaged else { return timelines }
-        let picked = timelines.first { $0.deviceId == pickedDeviceId } ?? timelines.first
+        let picked = timelines.first { $0.deviceId == effectivePickedId }
         return picked.map { [$0] } ?? []
     }
 
@@ -185,7 +194,7 @@ struct TimelineScreen: View {
 
     private var devicePicker: some View {
         Picker("デバイス", selection: Binding(
-            get: { pickedDeviceId ?? timelines.first?.deviceId ?? "" },
+            get: { effectivePickedId ?? "" },
             set: { pickedDeviceId = $0; selection = nil }
         )) {
             ForEach(timelines) { timeline in
