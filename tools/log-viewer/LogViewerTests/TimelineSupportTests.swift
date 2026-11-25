@@ -138,3 +138,29 @@ final class ContinuousSpanTests: XCTestCase {
         XCTAssertEqual(timeline.continuousSpan(of: open, onDay: day11.day)?.start, jst("2026-11-11 00:30:00"))
     }
 }
+
+@MainActor
+final class DataHorizonTests: XCTestCase {
+    func testHorizonIsCappedAtFetchedThrough() {
+        // 10:00 に取得した後、12:00 に再計算しても、10:00 より先のマスは数えない。
+        let horizon = TimelineViewModel.dataHorizon(now: jst("2026-11-10 12:00:00"), fetchedThrough: jst("2026-11-10 10:00:00"))
+        XCTAssertEqual(horizon, jst("2026-11-10 10:00:00"))
+
+        let day = TimelineAggregator.build(
+            deviceId: "dev",
+            events: [event("2026-11-10 09:55:00", .open)],
+            firstDay: jstDay("2026-11-10"),
+            dayCount: 1,
+            now: horizon
+        ).days[0]
+        // bin 59（9:50〜10:00、中央 9:55）まで。10:00 より後を「データなし」にしない。
+        XCTAssertEqual(day.runs, [seg(59, 60, .open)])
+        XCTAssertEqual(day.noDataBins, 0)
+    }
+
+    func testHorizonIsNowWhenFetchIsNewerOrMissing() {
+        let now = jst("2026-11-10 12:00:00")
+        XCTAssertEqual(TimelineViewModel.dataHorizon(now: now, fetchedThrough: nil), now)
+        XCTAssertEqual(TimelineViewModel.dataHorizon(now: now, fetchedThrough: jst("2026-11-10 12:00:01")), now)
+    }
+}

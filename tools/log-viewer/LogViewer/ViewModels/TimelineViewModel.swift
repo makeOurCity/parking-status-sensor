@@ -96,8 +96,16 @@ final class TimelineViewModel: ObservableObject {
             deviceIds: deviceIds,
             firstDay: today.adding(days: -(period.rawValue - 1)),
             dayCount: period.rawValue,
-            now: now
+            now: Self.dataHorizon(now: now, fetchedThrough: cache.fetchedThrough)
         )
+    }
+
+    /// 集計に使う「現在時刻」。取得済みのデータは `fetchedThrough` までなので、それより先の
+    /// マスを描くと、受信があっても「データなし」になってしまう（取得後に画面を開いたまま
+    /// 期間を切り替えたときなど）。取得後の時間帯は、次の更新まで描かない。
+    static func dataHorizon(now: Date, fetchedThrough: Date?) -> Date {
+        guard let fetchedThrough else { return now }
+        return min(now, fetchedThrough)
     }
 
     /// 取得の開始時刻: 最大期間の最初の日の 0:00（JST）の `offlineThreshold` 前。
